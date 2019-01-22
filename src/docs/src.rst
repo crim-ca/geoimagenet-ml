@@ -11,26 +11,26 @@ Subpackages
 Submodules
 ----------
 
-src.api_except module
+geoimagenet_ml.api_except module
 ---------------------
 
-.. automodule:: src.api_except
+.. automodule:: geoimagenet_ml.api_except
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.api_requests module
+geoimagenet_ml.api_requests module
 -----------------------
 
-.. automodule:: src.api_requests
+.. automodule:: geoimagenet_ml.api_requests
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.api_rest_schemas module
+geoimagenet_ml.api_rest_schemas module
 ---------------------------
 
-.. automodule:: src.api_rest_schemas
+.. automodule:: geoimagenet_ml.api_rest_schemas
     :members:
     :undoc-members:
     :show-inheritance:

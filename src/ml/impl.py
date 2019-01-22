@@ -1,4 +1,4 @@
-from ccfb.api.definitions.typing_definitions import (
+from src.api.definitions.typing_definitions import (
     Any, AnyStr, Tuple, Union, OptionDict, JsonDict, SettingDict, TYPE_CHECKING
 )
 from six.moves.urllib.parse import urlparse
@@ -12,7 +12,7 @@ import os
 import thelper
 
 if TYPE_CHECKING:
-    from ccfb.api.store.datatypes import Job, Model, Dataset
+    from src.store.datatypes import Job, Model, Dataset
 
 
 def load_model(model_file):
@@ -113,7 +113,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     # note:
     #   job worker process must be non-daemonic to allow data loader workers spawning
     # see:
-    #   ``src.api.rest_api.processes.utils.process_ml_job_runner`` for worker setup
+    #   ``src.api.routes.processes.utils.process_ml_job_runner`` for worker setup
     loaders["workers"] = int(settings.get('src.ml.data_loader_workers', 0))
 
     # override metrics to retrieve only raw predictions

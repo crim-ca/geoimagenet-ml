@@ -2,9 +2,9 @@
 # coding: utf-8
 
 """
-CCFB API
+GeoImageNet ML API
 """
-from ccfb.api.store.factories import migrate_database_when_ready
+from src.store.factories import migrate_database_when_ready
 from pyramid.config import Configurator
 from pyramid.exceptions import ConfigurationError
 from pyramid.security import NO_PERMISSION_REQUIRED
@@ -22,10 +22,10 @@ def main(global_config=None, **settings):
     # migrate db as required and check if database is ready
     migrate_database_when_ready(settings)
 
-    protocol = os.getenv('CCFB_API_PROTOCOL', 'http')
-    hostname = os.getenv('CCFB_API_HOSTNAME') or os.getenv('HOSTNAME')
-    port = os.getenv('CCFB_API_PORT', '')
-    url = os.getenv('CCFB_API_URL')
+    protocol = os.getenv('GEOIMAGENET_ML_API_PROTOCOL', 'http')
+    hostname = os.getenv('GEOIMAGENET_ML_API_HOSTNAME') or os.getenv('HOSTNAME')
+    port = os.getenv('GEOIMAGENET_ML_API_PORT', '')
+    url = os.getenv('GEOIMAGENET_ML_API_URL')
     if url:
         settings['src.api.url'] = url
     elif hostname:
@@ -35,8 +35,8 @@ def main(global_config=None, **settings):
         if port is None:
             port = settings['src.api.port']
         port = '{sep}{port}'.format(port=port, sep=':' if port else '')
-        ccfb_api_url_template = '{protocol}://{hostname}{port}'
-        settings['src.api.url'] = ccfb_api_url_template.format(protocol=protocol, hostname=hostname, port=port)
+        GEOIMAGENET_ML_api_url_template = '{protocol}://{hostname}{port}'
+        settings['src.api.url'] = GEOIMAGENET_ML_api_url_template.format(protocol=protocol, hostname=hostname, port=port)
 
     config = Configurator(settings=settings)
     config.include('src.api')

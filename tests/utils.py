@@ -11,10 +11,10 @@ from distutils.version import *
 from webtest import TestApp
 # noinspection PyPackageRequirements
 from webtest.response import TestResponse
-from geoimagenet_ml.api import __meta__
-from geoimagenet_ml.api.utils import settings_from_ini
-from geoimagenet_ml.api.definitions.typing_definitions import Any, AnyStr, Union, Optional, SettingDict
-from geoimagenet_ml.api.store.databases.types import MONGODB_TYPE
+from src.api import __meta__
+from src.api.utils import settings_from_ini
+from src.api.definitions.typing_definitions import Any, AnyStr, Union, Optional, SettingDict
+from src.store.databases.types import MONGODB_TYPE
 
 
 json_headers = [('Content-Type', 'application/json')]

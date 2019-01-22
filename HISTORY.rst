@@ -3,6 +3,11 @@
 History
 =======
 
+0.5.x
+---------------------
+
+* More refactoring and fixes for functional ML on server.
+
 0.4.x
 ---------------------
 

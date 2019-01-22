@@ -68,7 +68,7 @@ setup(
     # -- script entry points -----------------------------------------------
     entry_points="""\
           [paste.app_factory]
-          main = geoimagenet_ml.api.main:main
+          main = src.api.main:main
           [console_scripts]
           """,
 )

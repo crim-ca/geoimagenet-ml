@@ -1,26 +1,6 @@
 from pyramid.config import Configurator
 from pyramid.authentication import AuthTktAuthenticationPolicy
 from pyramid.authorization import ACLAuthorizationPolicy
-from pyramid.httpexceptions import (
-    HTTPOk,
-    HTTPCreated,
-    HTTPFound,
-    HTTPBadRequest,
-    HTTPUnauthorized,
-    HTTPForbidden,
-    HTTPNotFound,
-    HTTPMethodNotAllowed,
-    HTTPNotAcceptable,
-    HTTPConflict,
-    HTTPUnprocessableEntity,
-    HTTPInternalServerError,
-    HTTPNotImplemented,
-    HTTPServerError,
-    HTTPError,
-    HTTPException,
-    HTTPSuccessful,
-    HTTPRedirection,
-)
 from pyramid.interfaces import IAuthenticationPolicy
 from pyramid.registry import Registry
 from pyramid.request import Request

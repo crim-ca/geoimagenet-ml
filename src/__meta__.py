@@ -2,16 +2,16 @@
 General meta information on the GeoImageNet Machine Learning package.
 """
 
-__version__ = '0.4.3'
-__package__ = 'geoimagenet_ml'
+__version__ = '0.5.0'
+__package__ = 'src'
 __title__ = "GeoImageNet Machine Learning"
 __author__ = "Francis Charette-Migneault"
 __email__ = 'francis.charette-migneault@crim.ca'
-__url__ = "https://www.crim.ca/stash/projects/GEO/repos/geoimagenet_ml"
+__url__ = "https://www.crim.ca/stash/projects/GEO/repos/src"
 __description__ = \
-    "API to interact with GeoImageNet project machine learning operations for exploration of Deep Learning " \
-    "algorithms for classification, recognition and annotation of objects and scenes based on very high resolution " \
-    "satellite imagery."
+    "GeoImageNet project machine learning operations for exploration of Deep Learning algorithms for classification, " \
+    "recognition and annotation of objects and scenes based on very high resolution satellite imagery. Provides the " \
+    "ML evaluation process runners and an API to interact with them."
 __keywords__ = [
     'GeoImageNet',
     'ML',

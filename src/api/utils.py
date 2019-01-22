@@ -1,5 +1,5 @@
-from ccfb.api.definitions.typing_definitions import Any, AnyStr, Dict, Optional, Union
-from ccfb.api.processes.status import map_status
+from src.api.definitions.typing_definitions import Any, AnyStr, Dict, Optional, Union
+from src.api.processes.status import map_status
 from six.moves.configparser import ConfigParser
 from datetime import datetime
 # noinspection PyPackageRequirements
