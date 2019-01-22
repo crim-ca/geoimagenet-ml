@@ -1,0 +1,238 @@
+define BROWSER_PYSCRIPT
+import os, webbrowser, sys
+try:
+	from urllib import pathname2url
+except:
+	from urllib.request import pathname2url
+
+webbrowser.open("file://" + pathname2url(os.path.abspath(sys.argv[1])))
+endef
+export BROWSER_PYSCRIPT
+BROWSER := python -c "$$BROWSER_PYSCRIPT"
+
+CUR_DIR := $(abspath $(lastword $(MAKEFILE_LIST))/..)
+APP_ROOT := $(CURDIR)
+APP_NAME := geoimagenet-ml
+SRC_DIR := $(CURDIR)/src
+
+# Anaconda
+ANACONDA_HOME ?= $(HOME)/anaconda
+CONDA_ENV ?= $(APP_NAME)
+CONDA_ENVS_DIR ?= $(HOME)/.conda/envs
+CONDA_ENV_PATH := $(CONDA_ENVS_DIR)/$(CONDA_ENV)
+DOWNLOAD_CACHE := $(APP_ROOT)/downloads
+PYTHON_VERSION := 3.6
+
+# thelper
+THELPER_BRANCH ?= master
+
+# choose anaconda installer depending on your OS
+ANACONDA_URL = https://repo.continuum.io/miniconda
+OS_NAME := $(shell uname -s 2>/dev/null || echo "unknown")
+ifeq "$(OS_NAME)" "Linux"
+FN := Miniconda3-latest-Linux-x86_64.sh
+else ifeq "$(OS_NAME)" "Darwin"
+FN := Miniconda3-latest-MacOSX-x86_64.sh
+else
+FN := unknown
+endif
+
+
+.DEFAULT_GOAL := help
+
+.PHONY: all
+all: help
+
+.PHONY: help
+help:
+	@echo "clean            remove all build, test, coverage and Python artifacts"
+	@echo "clean-build      remove build artifacts"
+	@echo "clean-env        remove package environment"
+	@echo "clean-pyc        remove Python file artifacts"
+	@echo "clean-test       remove test and coverage artifacts"
+	@echo "clean-ml         remove ML module build artifacts"
+	@echo "docker-build     build the CCFB API docker image"
+	@echo "docker-push      push the CCFB API docker image"
+	@echo "lint             check style with flake8"
+	@echo "test             run tests quickly with the default Python"
+	@echo "test-all         run tests on every Python version with tox"
+	@echo "coverage         check code coverage quickly with the default Python"
+	@echo "docs             generate Sphinx HTML documentation, including API docs"
+	@echo "release          package and upload a release"
+	@echo "dist             package"
+	@echo "install          install the package to the active Python's site-packages"
+	@echo "install-api      install API related components"
+	@echo "install-ml       install ML related components"
+	@echo "update           same as 'install' but without conda packages installation"
+	@echo "update-thelper 	retrieve latest version of thelper"
+	@echo "start            start the installed application"
+
+.PHONY: clean
+clean: clean-build clean-pyc clean-test clean-ml
+
+.PHONY: clean-build
+clean-build:
+	@-rm -fr $(CUR_DIR)/build/
+	@-rm -fr $(CUR_DIR)/dist/
+	@-rm -fr $(CUR_DIR)/.eggs/
+	@-find . -type f -name '*.egg-info' -exec rm -fr {} +
+	@-find . -type f -name '*.egg' -exec rm -f {} +
+
+.PHONY: clean-env
+clean-env:
+	@-test -d $(CONDA_ENV_PATH) && "$(ANACONDA_HOME)/bin/conda" remove -n $(CONDA_ENV) --yes --all
+
+.PHONY: clean-pyc
+clean-pyc:
+	@-find . -type f -name '*.pyc' -exec rm -f {} +
+	@-find . -type f -name '*.pyo' -exec rm -f {} +
+	@-find . -type f -name '*~' -exec rm -f {} +
+	@-find . -type f -name '__pycache__' -exec rm -fr {} +
+
+.PHONY: clean-test
+clean-test:
+	@-rm -fr $(CUR_DIR)/.tox/
+	@-rm -f $(CUR_DIR)/.coverage
+	@-rm -fr $(CUR_DIR)/coverage/
+
+.PHONY: clean-ml
+clean-ml:
+	# clean thelper sources left over from build
+	@-rm -fr $(CUR_DIR)/src || true
+
+.PHONY: docker-build
+docker-build: update-thelper
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(CUR_DIR)/../ccfb02-compose.sh build ccfb_api"
+
+.PHONY: docker-psuh
+docker-push: update-thelper
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(CUR_DIR)/../ccfb02-compose.sh push ccfb_api"
+
+.PHONY: lint
+lint:
+	flake8 api tests
+
+.PHONY: test
+test:
+	python $(CUR_DIR)/setup.py test
+
+.PHONY: test-all
+test-all:
+	tox
+
+.PHONY: coverage
+coverage:
+	coverage run --source api setup.py test
+	coverage report -m
+	coverage html -d coverage
+	$(BROWSER) coverage/index.html
+
+.PHONY: migrate
+migrate:
+	alembic upgrade head
+
+.PHONY: docs
+docs:
+	@-rm -f $(CUR_DIR)/docs/api.rst
+	@-rm -f $(CUR_DIR)/docs/modules.rst
+	sphinx-apidoc -o $(CUR_DIR)/docs/ $(CUR_DIR)/src
+	$(MAKE) -C $(CUR_DIR)/docs clean
+	$(MAKE) -C $(CUR_DIR)/docs html
+	$(BROWSER) $(CUR_DIR)/docs/_build/html/index.html
+
+.PHONY: servedocs
+servedocs: docs
+	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
+
+.PHONY: release
+release: clean
+	python $(CUR_DIR)/setup.py sdist upload
+	python $(CUR_DIR)/setup.py bdist_wheel upload
+
+.PHONY: dist
+dist: clean
+	python $(CUR_DIR)/setup.py sdist
+	python $(CUR_DIR)/setup.py bdist_wheel
+	ls -l dist
+
+.PHONY: update-thelper
+update-thelper:
+	@echo "Retrieving thelper on '$(THELPER_BRANCH)' branch"
+	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
+	@bash -c "cd $(CUR_DIR)/thelper && git fetch && git checkout -f $(THELPER_BRANCH) && git pull -f && cd $(CUR_DIR)"
+
+.PHONY: install
+install: install-ml install-api
+
+.PHONY: install-api
+install-api: clean conda_env
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements.txt"
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); python $(CUR_DIR)/setup.py install"
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
+
+.PHONY: install-ml
+install-ml: clean conda_env
+	@echo "Installing ML packages ..."
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/thelper"
+	@echo "Installing packages that fail with pip using conda instead"
+	@bash -c "$(ANACONDA_HOME)/bin/conda install -y -n $(CONDA_ENV) --file $(CUR_DIR)/requirements-gdal.txt -c conda-forge"
+	#@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-gdal.txt"
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-ml.txt"
+	# @echo "Enforcing pip install using cloned repo"
+	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
+	$(MAKE) clean-ml
+
+.PHONY: update
+update: clean
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
+
+## Supervisor targets
+
+.PHONY: start
+start:
+	@echo "Starting supervisor service ..."
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord start"
+
+.PHONY: stop
+stop:
+	@echo "Stopping supervisor service ..."
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord stop"
+
+.PHONY: restart
+restart:
+	@echo "Restarting supervisor service ..."
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord restart"
+
+.PHONY: status
+status:
+	@echo "Supervisor status ..."
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord status"
+
+## Anaconda targets
+
+.PHONY: anaconda
+anaconda:
+	@echo "Installing Anaconda ..."
+	@test -d $(ANACONDA_HOME) || curl $(ANACONDA_URL)/$(FN) --silent --insecure --output "$(DOWNLOAD_CACHE)/$(FN)"
+	@test -d $(ANACONDA_HOME) || bash "$(DOWNLOAD_CACHE)/$(FN)" -b -p $(ANACONDA_HOME)
+	@echo "Add '$(ANACONDA_HOME)/bin' to your PATH variable in '.bashrc'."
+
+.PHONY: conda_config
+conda_config: anaconda
+	@echo "Update ~/.condarc"
+	@"$(ANACONDA_HOME)/bin/conda" config --add envs_dirs $(CONDA_ENVS_DIR)
+	@"$(ANACONDA_HOME)/bin/conda" config --set ssl_verify true
+	@"$(ANACONDA_HOME)/bin/conda" config --set use_pip true
+	@"$(ANACONDA_HOME)/bin/conda" config --set channel_priority true
+	@"$(ANACONDA_HOME)/bin/conda" config --set auto_update_conda false
+	# cannot mix 'conda-forge' and 'defaults', causes errors for gdal/osgeo related bin packages
+	# @"$(ANACONDA_HOME)/bin/conda" config --add channels defaults
+	@"$(ANACONDA_HOME)/bin/conda" config --append channels birdhouse
+	@"$(ANACONDA_HOME)/bin/conda" config --append channels conda-forge
+
+.PHONY: conda_env
+conda_env: anaconda conda_config
+	@echo "Update conda environment $(CONDA_ENV) using $(ANACONDA_HOME) ..."
+	@test -d $(CONDA_ENV_PATH) || "$(ANACONDA_HOME)/bin/conda" create -y -n $(CONDA_ENV) python=$(PYTHON_VERSION)
+	"$(ANACONDA_HOME)/bin/conda" install -y -n $(CONDA_ENV) setuptools=$(SETUPTOOLS_VERSION)
+	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install --upgrade pip"

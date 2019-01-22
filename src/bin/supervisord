@@ -1,0 +1,126 @@
+#!/bin/bash
+#
+# Handles starting and stopping supervisord.
+#
+# Tested on OpenSUSE 12.1, SLES 11 SP2
+# Author: Gary Monson gary.monson@gmail.com
+#
+# Provides:          supervisord
+# Required-Start:    $local_fs $remote_fs $network
+# Required-Stop:     $local_fs $remote_fs $network
+# Default-Start:     3 5
+# Default-Stop:      0 1 2 6
+# Description:       Provides supervisord service
+
+# supervisor requires python 2
+PYTHONPATH="/usr/bin/python2"
+SUPERVISORD="/usr/bin/supervisord"
+SUPERVISORCTL="/usr/bin/supervisorctl"
+LOGFILE="/var/log/src/supervisor/supervisord.log"
+PIDFILE="/var/run/src/supervisor/supervisord.pid"
+CONFIGFILE="src/config/supervisor/supervisord.conf"
+DAEMON_OPTS="--configuration $CONFIGFILE ${DAEMON_OPTS}"
+
+# fix gdal unresolved symbols
+# set here to avoid segfault on supervisord import
+LD_PRELOAD="${CONDA_ENVS_DIR}/ccfb02/lib/libgdal.so"
+
+# Exit if the package is not installed
+[[ -x "${SUPERVISORD}" ]] || exit 0
+
+
+check_service() {
+    if [[ -f ${PIDFILE} ]]; then
+        PID=`cat ${PIDFILE}`
+        ps -p ${PID} >/dev/null 2>&1
+        if [[ "$?" = 0 ]]; then
+            echo "supervisord running: ${PID}"
+            return 0
+        else
+            echo "pidfile exists (${PID}), but supervisord not running."
+            return 2
+        fi
+    else
+        echo "supervisord not running"
+        return 1
+    fi
+}
+
+start() {
+    echo "Starting supervisord:"
+    mkdir -p `dirname ${PIDFILE}` && chmod 755 `dirname ${PIDFILE}`
+    mkdir -p `dirname ${LOGFILE}` && chmod 755 `dirname ${LOGFILE}`
+
+    check_service >/dev/null
+    if [[ "$?" = 2 ]]; then
+        echo "Removing stale pidfile ${PIDFILE}."
+        rm ${PIDFILE}
+    fi
+
+    if [[ -f ${PIDFILE} ]]; then
+        PID=`cat ${PIDFILE}`
+        echo supervisord already running: ${PID}
+        exit 2;
+    else
+        ${SUPERVISORD} --pidfile ${PIDFILE} ${DAEMON_OPTS}
+        RETVAL=$?
+        return ${RETVAL}
+    fi
+}
+
+stop() {
+    echo "Shutting down supervisord:"
+    ${SUPERVISORCTL} --configuration ${CONFIGFILE} shutdown
+    echo "Waiting roughly 60 seconds for ${PIDFILE} to be removed after child processes exit"
+    total_sleep=0
+    for sleep in  2 2 2 2 4 4 4 4 8 8 8 8 last; do
+        if [[ ! -e ${PIDFILE} ]] ; then
+            echo "Supervisord exited as expected in under $total_sleep seconds"
+            break
+        else
+            check_service >/dev/null
+            if [[ "$?" = 2 ]]; then
+                echo "Supervisord not running. Removing pidfile ${PIDFILE}."
+                rm ${PIDFILE}
+                return 2
+            elif [[ ${sleep} -eq "last" ]] ; then
+                echo "Supervisord still working on shutting down. We've waited roughly 60 seconds, we'll let it do its thing from here"
+                return 1
+            else
+                sleep ${sleep}
+                total_sleep=$(( $total_sleep + ${sleep} ))
+            fi
+
+        fi
+    done
+
+    return 0
+}
+
+status() {
+    check_service
+	${SUPERVISORCTL} --configuration ${CONFIGFILE} status
+    exit $?
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    status)
+        status
+        ;;
+    *)
+        echo "Usage:  {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?

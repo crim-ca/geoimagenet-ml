@@ -1,0 +1,7 @@
+# test
+pytest
+mock
+WebTest
+wsgiproxy
+flake8
+coverage
