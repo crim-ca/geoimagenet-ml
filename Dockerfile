@@ -22,12 +22,12 @@ RUN apt-get update && apt-get install -y \
 	zlib1g-dev \
 	python-pip
 
-ENV CCFB_PROJECT_ROOT /opt/local/src/ccfb02
-COPY ./ ${CCFB_PROJECT_ROOT}/
-WORKDIR ${CCFB_PROJECT_ROOT}
+ENV GEOIMAGENET_ML_PROJECT_ROOT /opt/local/src/ccfb02
+COPY ./ ${GEOIMAGENET_ML_PROJECT_ROOT}/
+WORKDIR ${GEOIMAGENET_ML_PROJECT_ROOT}
 
 # install packages
-RUN make install -f ${CCFB_PROJECT_ROOT}/Makefile
+RUN make install -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile
 
 ENV DAEMON_OPTS --nodaemon
 

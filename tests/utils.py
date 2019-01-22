@@ -11,10 +11,10 @@ from distutils.version import *
 from webtest import TestApp
 # noinspection PyPackageRequirements
 from webtest.response import TestResponse
-from ccfb.api import __meta__
-from ccfb.api.utils import settings_from_ini
-from ccfb.api.definitions.typing_definitions import Any, AnyStr, Union, Optional, SettingDict
-from ccfb.api.store.databases.types import MONGODB_TYPE
+from geoimagenet_ml.api import __meta__
+from geoimagenet_ml.api.utils import settings_from_ini
+from geoimagenet_ml.api.definitions.typing_definitions import Any, AnyStr, Union, Optional, SettingDict
+from geoimagenet_ml.api.store.databases.types import MONGODB_TYPE
 
 
 json_headers = [('Content-Type', 'application/json')]
@@ -32,12 +32,12 @@ def setup_test_app(settings=None, config=None):
 
 def setup_config_from_settings(settings=None, config=None):
     # type: (Optional[SettingDict], Optional[Configurator]) -> Configurator
-    ccfb_api_ini_path = os.getenv('CCFB_PROJECT_CONFIG_API_INI_PATH')
-    if not isinstance(ccfb_api_ini_path, six.string_types):
-        raise ValueError("API configuration file required for testing, please set 'CCFB_PROJECT_CONFIG_API_INI_PATH'.")
-    if not os.path.isfile(ccfb_api_ini_path):
-        raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(ccfb_api_ini_path))
-    settings_ini = settings_from_ini(ccfb_api_ini_path, 'app:ccfb_app')
+    geoimagenet_ml_api_ini_path = os.getenv('GEOIMAGENET_ML_PROJECT_CONFIG_API_INI_PATH')
+    if not isinstance(geoimagenet_ml_api_ini_path, six.string_types):
+        raise ValueError("API configuration file required for testing, please set 'GEOIMAGENET_ML_PROJECT_CONFIG_API_INI_PATH'.")
+    if not os.path.isfile(geoimagenet_ml_api_ini_path):
+        raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(geoimagenet_ml_api_ini_path))
+    settings_ini = settings_from_ini(geoimagenet_ml_api_ini_path, 'app:geoimagenet_ml_app')
     if settings:
         settings_ini.update(settings)
     if config:

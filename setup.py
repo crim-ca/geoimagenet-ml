@@ -10,7 +10,7 @@ except ImportError:
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-from ccfb.api import __meta__    # noqa
+from src import __meta__    # noqa
 
 CUR_DIR = os.path.dirname(__file__)
 
@@ -56,19 +56,19 @@ setup(
 
     # -- Package structure -------------------------------------------------
     packages=find_packages(),
-    package_dir={'src': 'src'},
+    package_dir={__meta__.__package__: 'src'},
     include_package_data=True,
     install_requires=REQUIREMENTS,
     zip_safe=False,
 
     # -- self - tests --------------------------------------------------------
-    test_suite='src',
+    test_suite='tests',
     tests_require=TEST_REQUIREMENTS,
 
     # -- script entry points -----------------------------------------------
     entry_points="""\
           [paste.app_factory]
-          main = src.api.main:main
+          main = geoimagenet_ml.api.main:main
           [console_scripts]
           """,
 )

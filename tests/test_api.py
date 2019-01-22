@@ -16,15 +16,15 @@ import unittest
 import pyramid.testing
 import warnings
 from geoimagenet_ml.api import __meta__
-from ccfb.api.rest_api import schemas
-from ccfb.api.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
-from ccfb.api.store.datatypes import Model
-from ccfb.api.store.factories import database_factory
-from ccfb.tests import utils
+from geoimagenet_ml.api.rest_api import schemas
+from geoimagenet_ml.api.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
+from geoimagenet_ml.api.store.datatypes import Model
+from geoimagenet_ml.api.store.factories import database_factory
+from tests import utils
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ccfb.api.store.databases.mongodb import MongoDatabase
+    from geoimagenet_ml.api.store.databases.mongodb import MongoDatabase
 
 
 class TestApi(unittest.TestCase):

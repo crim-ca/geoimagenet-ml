@@ -1,0 +1,14 @@
+custom.ini
+
+.git
+
+# Unit test / Coverage reports
+.cache
+.pytest_cache
+
+# PyCharm
+.idea
+
+# Byte-compiled / optimized / DLL files
+**/__pycache__
+**/*.py[cod]

@@ -25,6 +25,7 @@ PYTHON_VERSION := 3.6
 
 # thelper
 THELPER_BRANCH ?= master
+DOCKER_REPO ?= docker-registry.crim.ca/geoimagenet/ml
 
 # choose anaconda installer depending on your OS
 ANACONDA_URL = https://repo.continuum.io/miniconda
@@ -66,6 +67,7 @@ help:
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "update-thelper 	retrieve latest version of thelper"
 	@echo "start            start the installed application"
+	@echo "version          retrive the application version"
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test clean-ml
@@ -98,15 +100,22 @@ clean-test:
 .PHONY: clean-ml
 clean-ml:
 	# clean thelper sources left over from build
-	@-rm -fr $(CUR_DIR)/src || true
+	@-rm -fr $(CUR_DIR)/geoimagenet_ml || true
+
+.PHONY: version
+version:
+	@echo "GeoImageNet ML version: $(APP_VERSION)"
+	@python -c 'from src.__meta__ import __version__; print(__version__)'
 
 .PHONY: docker-build
 docker-build: update-thelper
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(CUR_DIR)/../ccfb02-compose.sh build ccfb_api"
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
-.PHONY: docker-psuh
-docker-push: update-thelper
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(CUR_DIR)/../ccfb02-compose.sh push ccfb_api"
+.PHONY: docker-push
+docker-push:
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		docker push $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: lint
 lint:
