@@ -1,20 +1,20 @@
-from geoimagenet_ml.api.rest_api.models.utils import create_model, get_model
-from geoimagenet_ml.api.rest_api import exceptions as ex, schemas as s
+from geoimagenet_ml.api.routes.models.utils import create_model, get_model
+from geoimagenet_ml.api import exceptions as ex, schemas as s
 from geoimagenet_ml.store.factories import database_factory
-from geoimagenet_ml.api.definitions import pyramid_definitions as p
 from pyramid.response import FileResponse
+from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInternalServerError
 
 
 @s.ModelsAPI.get(tags=[s.ModelsTag], response_schemas=s.Models_GET_responses)
 def get_models_view(request):
     """Get registered models."""
     models_list = ex.evaluate_call(lambda: database_factory(request.registry).models_store.list_models(),
-                                   fallback=lambda: request.db.rollback(), httpError=p.HTTPForbidden, request=request,
+                                   fallback=lambda: request.db.rollback(), httpError=HTTPForbidden, request=request,
                                    msgOnFail=s.Models_GET_ForbiddenResponseSchema.description)
     models_json = ex.evaluate_call(lambda: [m.summary() for m in models_list],
-                                   fallback=lambda: request.db.rollback(), httpError=p.HTTPInternalServerError,
+                                   fallback=lambda: request.db.rollback(), httpError=HTTPInternalServerError,
                                    request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
-    return ex.valid_http(httpSuccess=p.HTTPOk, content={u'models': models_json},
+    return ex.valid_http(httpSuccess=HTTPOk, content={u'models': models_json},
                          detail=s.Models_GET_OkResponseSchema.description, request=request)
 
 
@@ -22,7 +22,7 @@ def get_models_view(request):
 def post_models_view(request):
     """Register a new model."""
     model = create_model(request)
-    return ex.valid_http(httpSuccess=p.HTTPCreated, content={u'model': model.json()},
+    return ex.valid_http(httpSuccess=HTTPCreated, content={u'model': model.json()},
                          detail=s.Models_POST_CreatedResponseSchema.description, request=request)
 
 
@@ -31,7 +31,7 @@ def post_models_view(request):
 def get_model_view(request):
     """Get registered model information."""
     model = get_model(request)
-    return ex.valid_http(httpSuccess=p.HTTPOk, content={u'model': model.json()},
+    return ex.valid_http(httpSuccess=HTTPOk, content={u'model': model.json()},
                          detail=s.Models_GET_OkResponseSchema.description, request=request)
 
 

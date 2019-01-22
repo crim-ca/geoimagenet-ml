@@ -4,8 +4,8 @@
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job
-    from geoimagenet_ml.api.definitions.pyramid_definitions import Request
     from geoimagenet_ml.typedefs import *
+    from pyramid.request import Request
     from io import BufferedIOBase
 
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.store.datatypes import Dataset
-from geoimagenet_ml.api.rest_api import exceptions as ex, requests as r, schemas as s
+from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
-from geoimagenet_ml.api.definitions.pyramid_definitions import *
+from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict
 import six
 
 

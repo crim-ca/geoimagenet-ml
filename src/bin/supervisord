@@ -23,7 +23,7 @@ DAEMON_OPTS="--configuration $CONFIGFILE ${DAEMON_OPTS}"
 
 # fix gdal unresolved symbols
 # set here to avoid segfault on supervisord import
-LD_PRELOAD="${CONDA_ENVS_DIR}/ccfb02/lib/libgdal.so"
+LD_PRELOAD="${CONDA_ENVS_DIR}/geoimagenet-ml/lib/libgdal.so"
 
 # Exit if the package is not installed
 [[ -x "${SUPERVISORD}" ]] || exit 0

@@ -16,7 +16,7 @@ import unittest
 import pyramid.testing
 import warnings
 from geoimagenet_ml.api import __meta__
-from geoimagenet_ml.api.rest_api import schemas
+from geoimagenet_ml.api import schemas
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model
 from geoimagenet_ml.store.factories import database_factory

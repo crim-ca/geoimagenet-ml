@@ -1,20 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.store.datatypes import Process, Job
-from geoimagenet_ml.api.rest_api import exceptions as ex, requests as r, schemas as s
+from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
-from geoimagenet_ml.api.definitions.pyramid_definitions import *
 from geoimagenet_ml.typedefs import AnyStr, Number, List, Union, Optional, UUID, TYPE_CHECKING
 from geoimagenet_ml.processes.types import process_categories, PROCESS_ML
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
 )
 from geoimagenet_ml.processes.utils import get_base_url
-from ccfb.ml.impl import get_test_data_runner
+from geoimagenet_ml.ml.impl import get_test_data_runner
+from pyramid.request import Request
+from pyramid.httpexceptions import (
+    HTTPCreated,
+    HTTPBadRequest,
+    HTTPForbidden,
+    HTTPNotFound,
+    HTTPConflict,
+    HTTPUnprocessableEntity,
+    HTTPNotImplemented,
+)
 from pyramid_celery import celery_app as app
 from celery.utils.log import get_task_logger
-import os
 import numpy
 import logging
 import multiprocessing
@@ -171,8 +179,8 @@ def process_ml_job_runner(self, job_uuid):
     job.status_location = '{base_url}{job_path}'.format(
         base_url=get_base_url(registry.settings),
         job_path=s.ProcessJobAPI.path
-            .replace(s.ProcessVariableUUID, job.process_uuid)
-            .replace(s.JobVariableUUID, job.uuid)
+                  .replace(s.ProcessVariableUUID, job.process_uuid)
+                  .replace(s.JobVariableUUID, job.uuid)
     )
     job = jobs_store.update_job(job, request=request)
 

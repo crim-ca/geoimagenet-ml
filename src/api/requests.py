@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
-from geoimagenet_ml.api.rest_api import exceptions as ex
-from geoimagenet_ml.api.definitions.pyramid_definitions import HTTPUnprocessableEntity, HTTPInternalServerError
+from geoimagenet_ml.api import exceptions as ex
+from pyramid.httpexceptions import HTTPUnprocessableEntity, HTTPInternalServerError
 
 
 def get_request_method_content(request):
