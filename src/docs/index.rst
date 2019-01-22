@@ -1,4 +1,4 @@
-CCFB API documentation
+GeoImageNet ML documentation
 ======================================
 
 .. include:: ../README.rst

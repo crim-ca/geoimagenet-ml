@@ -111,14 +111,17 @@ env.local
 .mypy_cache/
 
 ### project api, model checkpoints & data
+/docs/
 /geoimagenet_ml.egg-info/
 /build/
 /dist/
 /docs/_build/
-/env
-/thelper
+/env/
+/thelper/
 /data/
 /models/
 /output/
 /saved/
+/src/docs/_build/
+/src/docs/src*.rst
 /docker-compose.override.yml

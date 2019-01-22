@@ -4,11 +4,16 @@
 Send contents to server.
 """
 
-from geoimagenet_ml.api.__meta__ import __version__
 from subprocess import check_call
 from six.moves.urllib.parse import urljoin
 from shlex import split
 import argparse
+import sys
+import os
+SRC_ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, SRC_ROOT)
+import __meta__    # noqa
+
 
 DOC_DESTINATION = None  # TODO: Edit this
 
@@ -28,7 +33,7 @@ def send_static(destination=DOC_DESTINATION):
     Send static site on server.
     """
     cmd = split("rsync -av _build/html/")
-    cmd += [urljoin(destination, __version__)]
+    cmd += [urljoin(destination, __meta__.__version__)]
     check_call(cmd)
 
 

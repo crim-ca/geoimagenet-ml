@@ -2,6 +2,6 @@
 Usage
 ========
 
-To use CCFB API in a project::
+To use GeoImageNet API in a project::
 
     import api

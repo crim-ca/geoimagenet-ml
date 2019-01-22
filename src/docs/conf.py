@@ -15,9 +15,9 @@
 
 import sys
 import os
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
-from geoimagenet_ml.api import __meta__
+SRC_ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, SRC_ROOT)
+import __meta__    # noqa
 
 # -- General configuration ---------------------------------------------
 

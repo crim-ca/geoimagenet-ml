@@ -142,12 +142,12 @@ migrate:
 
 .PHONY: docs
 docs:
-	@-rm -f $(CUR_DIR)/docs/api.rst
-	@-rm -f $(CUR_DIR)/docs/modules.rst
-	sphinx-apidoc -o $(CUR_DIR)/docs/ $(CUR_DIR)/src
-	$(MAKE) -C $(CUR_DIR)/docs clean
-	$(MAKE) -C $(CUR_DIR)/docs html
-	$(BROWSER) $(CUR_DIR)/docs/_build/html/index.html
+	@-rm -f $(CUR_DIR)/src/docs/api.rst
+	@-rm -f $(CUR_DIR)/src/docs/modules.rst
+	sphinx-apidoc -o $(CUR_DIR)/src/docs/ $(CUR_DIR)/src
+	$(MAKE) -C $(CUR_DIR)/src/docs clean
+	$(MAKE) -C $(CUR_DIR)/src/docs html
+	$(BROWSER) $(CUR_DIR)/src/docs/_build/html/index.html
 
 .PHONY: servedocs
 servedocs: docs
