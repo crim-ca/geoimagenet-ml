@@ -48,14 +48,12 @@ setup(
         'License :: OSI Approved :: ISC License (ISCL)',
         'Natural Language :: English',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
 
     # -- Package structure -------------------------------------------------
-    packages=find_packages(),
+    packages=[__meta__.__package__],    # find_packages(),
     package_dir={__meta__.__package__: 'src'},
     include_package_data=True,
     install_requires=REQUIREMENTS,
@@ -66,9 +64,9 @@ setup(
     tests_require=TEST_REQUIREMENTS,
 
     # -- script entry points -----------------------------------------------
-    entry_points="""\
-          [paste.app_factory]
-          main = src.api.main:main
-          [console_scripts]
-          """,
+    entry_points="{section}\n{main}\n{after}".format(
+        section="[paste.app_factory]",
+        main=f"main = {__meta__.__package__}.api.main:main",
+        after="[console_scripts]",
+    )
 )

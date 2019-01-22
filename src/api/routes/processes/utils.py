@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.store.datatypes import Process, Job
-from src.api.rest_api import exceptions as ex, requests as r, schemas as s
-from src.store.factories import database_factory
-from src.store import exceptions as exc
-from src.api.definitions.pyramid_definitions import *
-from src.api.definitions.typing_definitions import AnyStr, Number, List, Union, Optional, UUID, TYPE_CHECKING
-from src.api.processes.types import process_categories, PROCESS_ML
-from src.api.processes.status import (
+from geoimagenet_ml.store.datatypes import Process, Job
+from geoimagenet_ml.api.rest_api import exceptions as ex, requests as r, schemas as s
+from geoimagenet_ml.store.factories import database_factory
+from geoimagenet_ml.store import exceptions as exc
+from geoimagenet_ml.api.definitions.pyramid_definitions import *
+from geoimagenet_ml.typedefs import AnyStr, Number, List, Union, Optional, UUID, TYPE_CHECKING
+from geoimagenet_ml.processes.types import process_categories, PROCESS_ML
+from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
 )
-from src.api.processes.utils import get_base_url
+from geoimagenet_ml.processes.utils import get_base_url
 from ccfb.ml.impl import get_test_data_runner
 from pyramid_celery import celery_app as app
 from celery.utils.log import get_task_logger
@@ -180,8 +180,8 @@ def process_ml_job_runner(self, job_uuid):
     #   if dataset loader uses multiple worker sub-processes to load batch samples, the process needs to be non-daemon
     #   to allow pool spawning of child processes since this task is already a child worker of the main celery app
     # see:
-    #   ``src.ml.impl.test_loader_from_configs`` for corresponding override
-    worker_count = registry.settings.get('src.ml.data_loader_workers', 0)
+    #   ``geoimagenet_ml.ml.impl.test_loader_from_configs`` for corresponding override
+    worker_count = registry.settings.get('geoimagenet_ml.ml.data_loader_workers', 0)
     worker_process = multiprocessing.current_process()
     # noinspection PyProtectedMember, PyUnresolvedReferences
     worker_process._config['daemon'] = not bool(worker_count)

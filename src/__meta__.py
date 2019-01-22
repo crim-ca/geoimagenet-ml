@@ -3,7 +3,7 @@ General meta information on the GeoImageNet Machine Learning package.
 """
 
 __version__ = '0.5.0'
-__package__ = 'src'
+__package__ = 'geoimagenet_ml'
 __title__ = "GeoImageNet Machine Learning"
 __author__ = "Francis Charette-Migneault"
 __email__ = 'francis.charette-migneault@crim.ca'

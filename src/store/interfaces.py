@@ -3,9 +3,9 @@
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from src.store.datatypes import Dataset, Process, Model, Job
-    from src.api.definitions.pyramid_definitions import Request
-    from src.api.definitions.typing_definitions import *
+    from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job
+    from geoimagenet_ml.api.definitions.pyramid_definitions import Request
+    from geoimagenet_ml.typedefs import *
     from io import BufferedIOBase
 
 

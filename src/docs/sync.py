@@ -4,7 +4,7 @@
 Send contents to server.
 """
 
-from src.api.__meta__ import __version__
+from geoimagenet_ml.api.__meta__ import __version__
 from subprocess import check_call
 from six.moves.urllib.parse import urljoin
 from shlex import split

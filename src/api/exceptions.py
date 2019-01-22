@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api.utils import islambda, isclass
-from src.typedef import JsonDict
+from geoimagenet_ml.api.utils import islambda, isclass
+from geoimagenet_ml.typedefs import JsonDict
 from pyramid.httpexceptions import (
     HTTPError,
     HTTPException,

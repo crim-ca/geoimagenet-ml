@@ -2,10 +2,10 @@
 Store adapters to read/write data to from/to mongodb using pymongo.
 """
 
-from src.store import exceptions as ex
-from src.store.datatypes import Dataset, Model, Process, Job
-from src.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
-from src.api.utils import islambda, get_sane_name
+from geoimagenet_ml.store import exceptions as ex
+from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job
+from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
+from geoimagenet_ml.api.utils import islambda, get_sane_name
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
 import pymongo
@@ -88,9 +88,9 @@ class MongodbModelStore(ModelStore, MongodbStore):
     # noinspection PyUnusedLocal
     def __init__(self, collection, settings):
         super(MongodbModelStore, self).__init__(collection=collection)
-        if not isinstance(settings, dict) or 'src.api.models_path' not in settings:
-            raise LookupError("Settings with 'src.api.models_path' is mandatory.")
-        self.models_path = settings.get('src.api.models_path')
+        if not isinstance(settings, dict) or 'geoimagenet_ml.api.models_path' not in settings:
+            raise LookupError("Settings with 'geoimagenet_ml.api.models_path' is mandatory.")
+        self.models_path = settings.get('geoimagenet_ml.api.models_path')
         os.makedirs(self.models_path, exist_ok=True)
 
     def save_model(self, model, data=None, request=None):
@@ -167,9 +167,9 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
     """
 
     def __init__(self, collection, settings, default_processes=None):
-        from src.api.rest_api.schemas import ProcessJobsAPI
+        from geoimagenet_ml.api.rest_api.schemas import ProcessJobsAPI
         super(MongodbProcessStore, self).__init__(collection=collection)
-        self.default_host = settings.get('src.api.url')
+        self.default_host = settings.get('geoimagenet_ml.api.url')
         self.default_wps_endpoint_template = '{host}{path}'.format(host=self.default_host, path=ProcessJobsAPI.path)
         if default_processes:
             registered_processes = [process.identifier for process in self.list_processes()]

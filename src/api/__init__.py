@@ -26,4 +26,4 @@ def includeme(config):
     config.include('cornice_swagger')
     config.include('pyramid_chameleon')
     config.include('pyramid_mako')
-    config.include('src.api.routes')
+    config.include('geoimagenet_ml.api.routes')

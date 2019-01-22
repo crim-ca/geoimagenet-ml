@@ -1,18 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src.store.exceptions import ProcessInstanceError
-from src.api.processes.types import process_mapping, PROCESS_WPS
-from src.api.definitions.typing_definitions import (
+from geoimagenet_ml.typedefs import (
     Any, AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict, TYPE_CHECKING
 )
-from src.api.utils import (
-    now, localize_datetime, stringify_datetime, get_log_fmt, get_log_datefmt, get_job_log_msg, get_error_fmt,
+from geoimagenet_ml.api.utils import (
+    now, localize_datetime,
+    stringify_datetime,
+    get_log_fmt,
+    get_log_datefmt,
+    get_job_log_msg,
+    get_error_fmt,
     fully_qualified_name
 )
-from src.api.processes.status import job_status_values, job_status_categories, STATUS_CATEGORY_FINISHED, STATUS_UNKNOWN
-from src.store.exceptions import ModelLoadingError
-from ccfb.ml.impl import load_model
+from geoimagenet_ml.processes.status import (
+    job_status_values,
+    job_status_categories,
+    STATUS_CATEGORY_FINISHED,
+    STATUS_UNKNOWN,
+)
+from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
+from geoimagenet_ml.store.exceptions import ModelLoadingError
+from geoimagenet_ml.store.exceptions import ProcessInstanceError
+from geoimagenet_ml.ml.impl import load_model
 from pywps import Process as ProcessWPS
 # noinspection PyPackageRequirements
 from dateutil.parser import parse

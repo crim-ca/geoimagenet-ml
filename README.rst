@@ -1,5 +1,5 @@
 ======================================
-CCFB REST API
+GeoImageNet ML
 ======================================
 
 `GeoImageNet ML documentation`_

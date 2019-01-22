@@ -1,6 +1,6 @@
-from src.typedefs import AnyStr, SettingDict
+from geoimagenet_ml.typedefs import AnyStr, SettingDict
 
 
 def get_base_url(settings):
     # type: (SettingDict) -> AnyStr
-    return settings.get('src.api.url').rstrip('/').strip()
+    return settings.get('geoimagenet_ml.api.url').rstrip('/').strip()

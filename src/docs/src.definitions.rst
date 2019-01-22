@@ -1,37 +1,37 @@
-src.definitions package
+geoimagenet_ml.definitions package
 =======================
 
 Submodules
 ----------
 
-src.definitions.alembic_definitions module
+geoimagenet_ml.definitions.alembic_definitions module
 ------------------------------------------
 
-.. automodule:: src.definitions.alembic_definitions
+.. automodule:: geoimagenet_ml.definitions.alembic_definitions
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.definitions.cornice_definitions module
+geoimagenet_ml.definitions.cornice_definitions module
 ------------------------------------------
 
-.. automodule:: src.definitions.cornice_definitions
+.. automodule:: geoimagenet_ml.definitions.cornice_definitions
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.definitions.pyramid module
+geoimagenet_ml.definitions.pyramid module
 ------------------------------------------
 
-.. automodule:: src.definitions.pyramid
+.. automodule:: geoimagenet_ml.definitions.pyramid
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.definitions.sqlalchemy_definitions module
+geoimagenet_ml.definitions.sqlalchemy_definitions module
 ---------------------------------------------
 
-.. automodule:: src.definitions.sqlalchemy_definitions
+.. automodule:: geoimagenet_ml.definitions.sqlalchemy_definitions
     :members:
     :undoc-members:
     :show-inheritance:
@@ -40,7 +40,7 @@ src.definitions.sqlalchemy_definitions module
 Module contents
 ---------------
 
-.. automodule:: src.definitions
+.. automodule:: geoimagenet_ml.definitions
     :members:
     :undoc-members:
     :show-inheritance:

@@ -1,5 +1,5 @@
-from src.api.definitions.typing_definitions import Any, AnyStr, Dict, Optional, Union
-from src.api.processes.status import map_status
+from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union
+from geoimagenet_ml.processes.status import map_status
 from six.moves.configparser import ConfigParser
 from datetime import datetime
 # noinspection PyPackageRequirements

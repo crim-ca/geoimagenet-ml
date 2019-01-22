@@ -11,10 +11,10 @@ from distutils.version import *
 from webtest import TestApp
 # noinspection PyPackageRequirements
 from webtest.response import TestResponse
-from src.api import __meta__
-from src.api.utils import settings_from_ini
-from src.api.definitions.typing_definitions import Any, AnyStr, Union, Optional, SettingDict
-from src.store.databases.types import MONGODB_TYPE
+from geoimagenet_ml.api import __meta__
+from geoimagenet_ml.api.utils import settings_from_ini
+from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
+from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 
 
 json_headers = [('Content-Type', 'application/json')]
@@ -24,7 +24,7 @@ def setup_test_app(settings=None, config=None):
     # type: (Optional[SettingDict], Optional[Configurator]) -> TestApp
     config = setup_config_from_settings(settings=settings, config=config)
     # scan dependencies
-    config.include('src.api')
+    config.include('geoimagenet_ml.api')
     # create the test application
     app = TestApp(config.make_wsgi_app())
     return app
@@ -52,8 +52,8 @@ def setup_config_with_mongodb(settings=None, config=None):
         'mongodb.host': '127.0.0.1',
         'mongodb.port': '27027',
         'mongodb.db_name': 'src-test',
-        'src.api.db_factory': MONGODB_TYPE,
-        'src.api.models_path': '/tmp'  # place models somewhere they will be deleted periodically
+        'geoimagenet_ml.api.db_factory': MONGODB_TYPE,
+        'geoimagenet_ml.api.models_path': '/tmp'  # place models somewhere they will be deleted periodically
     }
     if settings:
         settings_db.update(settings)

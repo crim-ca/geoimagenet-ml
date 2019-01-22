@@ -17,7 +17,7 @@ import sys
 import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
-from src.api import __meta__
+from geoimagenet_ml.api import __meta__
 
 # -- General configuration ---------------------------------------------
 

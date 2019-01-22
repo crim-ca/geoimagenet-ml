@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from src import __meta__
-from src.api.processes.status import job_status_values
+from geoimagenet_ml.processes.status import job_status_values
 from cornice.service import Service
 from pyramid.httpexceptions import (
     HTTPOk,
@@ -19,7 +19,7 @@ import six
 import colander
 
 
-TitleAPI = "CCFB REST API"
+TitleAPI = "GeoImageNet ML REST API"
 InfoAPI = {
     "description": __meta__.__description__,
     "contact": {"name": __meta__.__author__, "email": __meta__.__email__, "url": __meta__.__url__}
@@ -758,7 +758,7 @@ class Base_GET_DataResponseSchema(colander.MappingSchema):
     docs = colander.SchemaNode(colander.String(), description="Information about API documentation.")
     title = colander.SchemaNode(colander.String(), description="API package title.")
     description = colander.SchemaNode(colander.String(), description="API package description.")
-    version = colander.SchemaNode(colander.String(), description="CCFB API version string")
+    version = colander.SchemaNode(colander.String(), description="API version string")
     url = colander.SchemaNode(colander.String(), description="API package source code url.")
     author = colander.SchemaNode(colander.String(), description="API package author.")
     email = colander.SchemaNode(colander.String(), description="API package email.")

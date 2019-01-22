@@ -1,4 +1,4 @@
-from src.store.databases.postgres import get_postgresdb_url
+from geoimagenet_ml.store.databases.postgres import get_postgresdb_url
 from alembic import context
 from sqlalchemy import create_engine
 from sqlalchemy.schema import MetaData

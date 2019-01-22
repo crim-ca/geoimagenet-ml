@@ -111,7 +111,7 @@ env.local
 .mypy_cache/
 
 ### project api, model checkpoints & data
-/src.egg-info/
+/geoimagenet_ml.egg-info/
 /build/
 /dist/
 /docs/_build/

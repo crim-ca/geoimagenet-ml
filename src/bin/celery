@@ -9,7 +9,7 @@ CONFIG_DIR = os.path.join(SRC_DIR, 'config')
 sys.path.insert(0, SRC_DIR)         # help finding tasks defined in 'src' package
 sys.path.insert(0, CONFIG_DIR)      # help finding 'celeryconfig.py' for pyramid_celery
 sys.path.insert(0, PROJECT_DIR)     # help finding tasks defined in 'src' package
-os.environ['CELERY_CONFIG_MODULE'] = 'src.config.celeryconfig'
+os.environ['CELERY_CONFIG_MODULE'] = 'geoimagenet_ml.config.celeryconfig'
 
 
 if __name__ == '__main__':

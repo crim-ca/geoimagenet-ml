@@ -1,8 +1,8 @@
 
 
-from src.store.interfaces import ProcessStore
-from src.store.databases import models
-from src.store import exceptions as ex
+from geoimagenet_ml.store.interfaces import ProcessStore
+from geoimagenet_ml.store.databases import models
+from geoimagenet_ml.store import exceptions as ex
 
 # TODO: postgres store implementations...
 

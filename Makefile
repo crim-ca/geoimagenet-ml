@@ -52,8 +52,8 @@ help:
 	@echo "clean-pyc        remove Python file artifacts"
 	@echo "clean-test       remove test and coverage artifacts"
 	@echo "clean-ml         remove ML module build artifacts"
-	@echo "docker-build     build the CCFB API docker image"
-	@echo "docker-push      push the CCFB API docker image"
+	@echo "docker-build     build the docker image"
+	@echo "docker-push      push the docker image"
 	@echo "lint             check style with flake8"
 	@echo "test             run tests quickly with the default Python"
 	@echo "test-all         run tests on every Python version with tox"
@@ -105,17 +105,17 @@ clean-ml:
 .PHONY: version
 version:
 	@echo "GeoImageNet ML version: $(APP_VERSION)"
-	@python -c 'from src.__meta__ import __version__; print(__version__)'
+	@python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'
 
 .PHONY: docker-build
 docker-build: update-thelper
 	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+		docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: docker-push
 docker-push:
 	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		docker push $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+		docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: lint
 lint:

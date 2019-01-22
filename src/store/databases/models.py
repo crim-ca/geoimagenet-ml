@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api.definitions.sqlalchemy_definitions import *
+#
+# TODO: add sqlalchemy to requirements if using postgres
+# noinspection PyPackageRequirements
+from sqlalchemy.ext.declarative import declarative_base
+# noinspection PyPackageRequirements
+import sqlalchemy as sa
+# noinspection PyPackageRequirements
+import sqlalchemy.orm
 
 
 Base = declarative_base()
@@ -42,10 +49,10 @@ class BaseModel(object):
 
     def get_appstruct(self):
         """Return list of tuples keys and values corresponding to this model's data"""
-        l = []
+        data = []
         for k in self._get_keys():
-            l.append((k, getattr(self, k),))
-        return l
+            data.append((k, getattr(self, k),))
+        return data
 
     def populate_obj(self, appstruct, exclude_keys=None, include_keys=None):
         """

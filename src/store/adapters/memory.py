@@ -5,8 +5,8 @@ Though not very valuable in a production setup, these store adapters are great
 for testing purposes.
 """
 
-from src.store.interfaces import ProcessStore
-from src.api.utils import get_sane_name
+from geoimagenet_ml.store.interfaces import ProcessStore
+from geoimagenet_ml.api.utils import get_sane_name
 
 
 class MemoryProcessStore(ProcessStore):

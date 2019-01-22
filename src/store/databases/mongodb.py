@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src.store.interfaces import DatabaseInterface
-from src.store.databases.types import MONGODB_TYPE
-from src.store.adapters.mongodb import MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore
+from geoimagenet_ml.store.interfaces import DatabaseInterface
+from geoimagenet_ml.store.databases.types import MONGODB_TYPE
+from geoimagenet_ml.store.adapters.mongodb import MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore
 import pymongo
 import os
 
@@ -50,7 +50,7 @@ class MongoDatabase(DatabaseInterface):
 
     def run_migration(self):
         if self._database.version.count_documents({}) < 1:
-            self._database.version.insert_one({'version_num': "2"}, upsert=True)
+            self._database.version.insert_one({'version_num': "2"})
         else:
             # TODO: do migration according to found version
             pass

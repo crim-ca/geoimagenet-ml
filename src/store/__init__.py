@@ -11,8 +11,8 @@ def includeme(config):
     # use pyramid_tm to hook the transaction lifecycle to the request
     config.include('pyramid_tm')
 
-    from src.store.factories import database_factory
-    from src.store.interfaces import DatabaseInterface
+    from geoimagenet_ml.store.factories import database_factory
+    from geoimagenet_ml.store.interfaces import DatabaseInterface
     config.registry.db = database_factory(config.registry)  # type: DatabaseInterface
 
     # make `request.db` available for use in Pyramid

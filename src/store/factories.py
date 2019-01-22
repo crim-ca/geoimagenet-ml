@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src.store.databases.memory import MemoryDatabase
-from src.store.databases.mongodb import MongoDatabase
-from src.store.databases.postgres import PostgresDatabase
-from src.store.databases.types import MEMORY_TYPE, MONGODB_TYPE, POSTGRES_TYPE
-from src.api.definitions.pyramid_definitions import Registry
-from src.api.definitions.sqlalchemy_definitions import Session
-from src.api.definitions.typing_definitions import *
+from geoimagenet_ml.store.databases.memory import MemoryDatabase
+from geoimagenet_ml.store.databases.mongodb import MongoDatabase
+from geoimagenet_ml.store.databases.postgres import PostgresDatabase
+from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE, POSTGRES_TYPE
+from geoimagenet_ml.typedefs import *
+from sqlalchemy.orm.session import Session
+from pyramid.registry import Registry
 import pymongo
 import os
 import time
@@ -15,13 +15,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from src.store.interfaces import DatabaseInterface
+    from geoimagenet_ml.store.interfaces import DatabaseInterface
 
 
 def get_database_type(specification):
     # type: (Union[Session, Registry, SettingDict]) -> AnyStr
     """
-    Return the db type string from a given specification or environment variable 'GEOIMAGENET_ML_API_DB_FACTORY' if defined.
+    Return the db type string from a given specification or environment variable
+    'GEOIMAGENET_ML_API_DB_FACTORY' if defined.
     :param specification: any of active `db_session`, pyramid registry or settings dictionary.
     :return: db type
     """
@@ -34,9 +35,9 @@ def get_database_type(specification):
     elif isinstance(specification, Session):
         return POSTGRES_TYPE
     elif isinstance(specification, Registry):
-        return specification.settings.get('src.api.db_factory')
+        return specification.settings.get('geoimagenet_ml.api.db_factory')
     elif isinstance(specification, dict):
-        return specification.get('src.api.db_factory')
+        return specification.get('geoimagenet_ml.api.db_factory')
     raise NotImplementedError("Unknown type `{}` to retrieve database type.".format(type(specification)))
 
 

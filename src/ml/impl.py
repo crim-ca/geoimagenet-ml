@@ -1,4 +1,4 @@
-from src.api.definitions.typing_definitions import (
+from geoimagenet_ml.typedefs import (
     Any, AnyStr, Tuple, Union, OptionDict, JsonDict, SettingDict, TYPE_CHECKING
 )
 from six.moves.urllib.parse import urlparse
@@ -12,7 +12,7 @@ import os
 import thelper
 
 if TYPE_CHECKING:
-    from src.store.datatypes import Job, Model, Dataset
+    from geoimagenet_ml.store.datatypes import Job, Model, Dataset
 
 
 def load_model(model_file):
@@ -49,14 +49,14 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get('src.api.models_path'), model.uuid)
+    save_dir = os.path.join(settings.get('geoimagenet_ml.api.models_path'), model.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])   # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
     loaders = None, None, test_loader
 
-    # session name as Job UUID will write data under '<src.api.models_path>/<model-UUID>/output/<job-UUID>/'
+    # session name as Job UUID will write data under '<geoimagenet_ml.api.models_path>/<model-UUID>/output/<job-UUID>/'
     trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
     return trainer
 
@@ -113,8 +113,8 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     # note:
     #   job worker process must be non-daemonic to allow data loader workers spawning
     # see:
-    #   ``src.api.routes.processes.utils.process_ml_job_runner`` for worker setup
-    loaders["workers"] = int(settings.get('src.ml.data_loader_workers', 0))
+    #   ``geoimagenet_ml.api.routes.processes.utils.process_ml_job_runner`` for worker setup
+    loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
 
     # override metrics to retrieve only raw predictions
     trainer["metrics"] = {

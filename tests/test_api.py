@@ -15,16 +15,16 @@ import pytest
 import unittest
 import pyramid.testing
 import warnings
-from src.api import __meta__
-from src.api.rest_api import schemas
-from src.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
-from src.store.datatypes import Model
-from src.store.factories import database_factory
+from geoimagenet_ml.api import __meta__
+from geoimagenet_ml.api.rest_api import schemas
+from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
+from geoimagenet_ml.store.datatypes import Model
+from geoimagenet_ml.store.factories import database_factory
 from tests import utils
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from src.store.databases.mongodb import MongoDatabase
+    from geoimagenet_ml.store.databases.mongodb import MongoDatabase
 
 
 class TestApi(unittest.TestCase):
@@ -38,7 +38,7 @@ class TestApi(unittest.TestCase):
         cls.app = utils.setup_test_app(config=cls.conf)
         cls.json_headers = [('Content-Type', schemas.ContentTypeJSON), ('Accept', schemas.ContentTypeJSON)]
         cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
-        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get('src.api.models_path')
+        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get('geoimagenet_ml.api.models_path')
 
         # url to existing remote model file definition
         cls.TEST_MODEL_URL = os.getenv('TEST_MODEL_URL')

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api.rest_api.processes.utils import create_process, get_process, get_job, create_process_job
-from src.api.utils import get_any_id, get_any_value, has_raw_value
-from src.api.routes import exceptions as ex, schemas as s
-from src.store.factories import database_factory
+from geoimagenet_ml.api.rest_api.processes.utils import create_process, get_process, get_job, create_process_job
+from geoimagenet_ml.api.utils import get_any_id, get_any_value, has_raw_value
+from geoimagenet_ml.api.routes import exceptions as ex, schemas as s
+from geoimagenet_ml.store.factories import database_factory
 from pyramid.httpexceptions import (
     HTTPOk,
     HTTPCreated,

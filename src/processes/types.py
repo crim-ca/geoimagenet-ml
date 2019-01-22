@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src.processes.wps_test import HelloWPS
+from geoimagenet_ml.processes.wps_test import HelloWPS
 
 PROCESS_WPS = 'wps'
 PROCESS_ML = 'ml'

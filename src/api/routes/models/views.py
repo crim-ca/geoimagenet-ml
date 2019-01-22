@@ -1,7 +1,7 @@
-from src.api.rest_api.models.utils import create_model, get_model
-from src.api.rest_api import exceptions as ex, schemas as s
-from src.store.factories import database_factory
-from src.api.definitions import pyramid_definitions as p
+from geoimagenet_ml.api.rest_api.models.utils import create_model, get_model
+from geoimagenet_ml.api.rest_api import exceptions as ex, schemas as s
+from geoimagenet_ml.store.factories import database_factory
+from geoimagenet_ml.api.definitions import pyramid_definitions as p
 from pyramid.response import FileResponse
 
 

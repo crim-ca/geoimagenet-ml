@@ -6,7 +6,7 @@ LOGGER = logging.getLogger(__name__)
 
 def _workdir(request):
     settings = request.registry.settings
-    workdir = settings.get('src.workdir')
+    workdir = settings.get('geoimagenet_ml.workdir')
     workdir = workdir or tempfile.gettempdir()
     if not os.path.exists(workdir):
         os.makedirs(workdir)
@@ -16,7 +16,7 @@ def _workdir(request):
 
 def _prefix(request):
     settings = request.registry.settings
-    prefix = settings.get('src.prefix')
+    prefix = settings.get('geoimagenet_ml.prefix')
     prefix = prefix or 'GEOIMAGENET_ML_'
     return prefix
 

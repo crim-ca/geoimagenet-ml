@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 	zlib1g-dev \
 	python-pip
 
-ENV GEOIMAGENET_ML_PROJECT_ROOT /opt/local/src/ccfb02
+ENV GEOIMAGENET_ML_PROJECT_ROOT /opt/local/src/geoimagenet_ml
 COPY ./ ${GEOIMAGENET_ML_PROJECT_ROOT}/
 WORKDIR ${GEOIMAGENET_ML_PROJECT_ROOT}
 

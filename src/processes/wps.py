@@ -2,9 +2,9 @@
 pywps 4.x wrapper
 """
 
-from src.typedefs import AnyStr, Union, Optional, SettingDict
-from src.processes.types import PROCESS_WPS
-from src.processes.utils import get_base_url
+from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict
+from geoimagenet_ml.processes.types import PROCESS_WPS
+from geoimagenet_ml.processes.utils import get_base_url
 from pyramid.wsgi import wsgiapp2
 from pyramid.threadlocal import get_current_request
 from pyramid.registry import Registry
@@ -49,18 +49,18 @@ def _get_settings_or_wps_config(
 def get_wps_cfg_path(settings):
     # type: (SettingDict) -> AnyStr
     """
-    Retrieves the WPS configuration file (`wps.cfg` by default or `src.wps_cfg` if specified).
+    Retrieves the WPS configuration file (`wps.cfg` by default or `geoimagenet_ml.wps_cfg` if specified).
     """
-    return settings.get('src.wps_cfg', DEFAULT_PYWPS_CFG)
+    return settings.get('geoimagenet_ml.wps_cfg', DEFAULT_PYWPS_CFG)
 
 
 def get_wps_path(settings):
     # type: (SettingDict) -> AnyStr
     """
     Retrieves the WPS path (without hostname).
-    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.
+    Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
     """
-    wps_path = _get_settings_or_wps_config(settings, 'src.wps_path', 'server', 'url', '/wps', 'WPS path')
+    wps_path = _get_settings_or_wps_config(settings, 'geoimagenet_ml.wps_path', 'server', 'url', '/wps', 'WPS path')
     GEOIMAGENET_ML_url = get_base_url(settings)
     if wps_path.startswith(GEOIMAGENET_ML_url):
         return wps_path.replace(GEOIMAGENET_ML_url, '')
@@ -71,7 +71,7 @@ def get_wps_url(settings):
     # type: (SettingDict) -> AnyStr
     """
     Retrieves the full WPS URL (hostname + WPS path).
-    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.
+    Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
     """
     return get_base_url(settings) + get_wps_path(settings)
 
@@ -80,21 +80,21 @@ def get_wps_output_path(settings):
     # type: (SettingDict) -> AnyStr
     """
     Retrieves the WPS output path directory where to write XML and result files.
-    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.
+    Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
     """
     return _get_settings_or_wps_config(
-        settings, 'src.wps_output_path', 'server', 'outputpath', '/tmp', 'WPS output path')
+        settings, 'geoimagenet_ml.wps_output_path', 'server', 'outputpath', '/tmp', 'WPS output path')
 
 
 def get_wps_output_url(settings):
     # type: (SettingDict) -> AnyStr
     """
     Retrieves the WPS output URL that maps to WPS output path directory.
-    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.
+    Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
     """
     wps_output_default = get_base_url(settings) + '/wpsoutputs'
     return _get_settings_or_wps_config(
-        settings, 'src.wps_output_url', 'server', 'outputurl', wps_output_default, 'WPS output url')
+        settings, 'geoimagenet_ml.wps_output_url', 'server', 'outputurl', wps_output_default, 'WPS output url')
 
 
 def load_pywps_cfg(registry, config=None):
@@ -116,16 +116,16 @@ def load_pywps_cfg(registry, config=None):
         if isinstance(registry.settings.get('PYWPS_CFG'), dict):
             del registry.settings['PYWPS_CFG']
 
-    if 'src.wps_output_path' not in registry.settings:
+    if 'geoimagenet_ml.wps_output_path' not in registry.settings:
         # ensure the output dir exists if specified
         out_dir_path = PYWPS_CFG.get_config_value('server', 'outputpath')
         if not os.path.isdir(out_dir_path):
             os.makedirs(out_dir_path)
-        registry.settings['src.wps_output_path'] = out_dir_path
+        registry.settings['geoimagenet_ml.wps_output_path'] = out_dir_path
 
-    if 'src.wps_output_url' not in registry.settings:
+    if 'geoimagenet_ml.wps_output_url' not in registry.settings:
         output_url = PYWPS_CFG.get_config_value('server', 'outputurl')
-        registry.settings['src.wps_output_url'] = output_url
+        registry.settings['geoimagenet_ml.wps_output_url'] = output_url
 
 
 # @app.task(bind=True)
@@ -143,7 +143,7 @@ def pywps_view(environ, start_response):
         load_pywps_cfg(registry, config=pywps_cfg)
 
         # call pywps application with processes filtered according to the adapter's definition
-        from src.store.factories import database_factory
+        from geoimagenet_ml.store.factories import database_factory
         process_store = database_factory(registry).processes_store
         processes_wps = [process.wps() for process in
                          process_store.list_processes(request=get_current_request())
@@ -156,7 +156,7 @@ def pywps_view(environ, start_response):
 
 
 def includeme(config):
-    LOGGER.info("CCFB WPS enabled.")
+    LOGGER.info("WPS enabled.")
     wps_path = get_wps_path(config.registry.settings)
     config.add_route('wps', wps_path)
     config.add_view(pywps_view, route_name='wps')

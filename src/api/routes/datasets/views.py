@@ -1,7 +1,7 @@
-from src.api.rest_api import exceptions as ex, schemas as s
-from src.api.rest_api.datasets.utils import create_dataset, get_dataset
-from src.store.factories import database_factory
-from src.api.definitions.pyramid_definitions import *
+from geoimagenet_ml.api.rest_api import exceptions as ex, schemas as s
+from geoimagenet_ml.api.rest_api.datasets.utils import create_dataset, get_dataset
+from geoimagenet_ml.store.factories import database_factory
+from geoimagenet_ml.api.definitions.pyramid_definitions import *
 
 
 @s.DatasetsAPI.get(tags=[s.DatasetsTag], response_schemas=s.Datasets_GET_responses)

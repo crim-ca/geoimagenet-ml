@@ -6,7 +6,7 @@ Subpackages
 
 .. toctree::
 
-    src.definitions
+    geoimagenet_ml.definitions
 
 Submodules
 ----------
@@ -35,18 +35,18 @@ geoimagenet_ml.api_rest_schemas module
     :undoc-members:
     :show-inheritance:
 
-src.db module
+geoimagenet_ml.db module
 -------------
 
-.. automodule:: src.db
+.. automodule:: geoimagenet_ml.db
     :members:
     :undoc-members:
     :show-inheritance:
 
-src.main module
+geoimagenet_ml.main module
 ---------------
 
-.. automodule:: src.main
+.. automodule:: geoimagenet_ml.main
     :members:
     :undoc-members:
     :show-inheritance:

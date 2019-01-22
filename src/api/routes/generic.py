@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api import exceptions as ex, schemas as s
-from src.store.factories import database_factory
+from geoimagenet_ml.api import exceptions as ex, schemas as s
+from geoimagenet_ml.store.factories import database_factory
 from src import ml, __meta__
 from pyramid.httpexceptions import (
     HTTPOk,
@@ -37,7 +37,7 @@ def get_api_base_view(request):
                'url': __meta__.__url__,
                'author': __meta__.__author__,
                'email': __meta__.__email__,
-               'docs': 'CCFB REST API documentation available under `{}`.'.format(s.SwaggerAPI.path)}
+               'docs': 'GeoImageNet ML API documentation available under `{}`.'.format(s.SwaggerAPI.path)}
     return ex.valid_http(httpSuccess=HTTPOk, content=content, detail=s.Base_GET_OkResponseSchema.description,
                          contentType='application/json', request=request)
 
@@ -64,7 +64,7 @@ def api_swagger_json_view(request):
     swagger.summary_docstrings = True
     swagger.default_security = s.get_security
     swagger.swagger = s.SecurityDefinitionAPI
-    base_path = request.registry.settings.get('src.api.url') or s.BaseAPI.path
+    base_path = request.registry.settings.get('geoimagenet_ml.api.url') or s.BaseAPI.path
     return swagger.generate(title=s.TitleAPI, version=__meta__.__version__, base_path=base_path)
 
 

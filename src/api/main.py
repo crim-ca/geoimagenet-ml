@@ -4,7 +4,7 @@
 """
 GeoImageNet ML API
 """
-from src.store.factories import migrate_database_when_ready
+from geoimagenet_ml.store.factories import migrate_database_when_ready
 from pyramid.config import Configurator
 from pyramid.exceptions import ConfigurationError
 from pyramid.security import NO_PERMISSION_REQUIRED
@@ -27,19 +27,19 @@ def main(global_config=None, **settings):
     port = os.getenv('GEOIMAGENET_ML_API_PORT', '')
     url = os.getenv('GEOIMAGENET_ML_API_URL')
     if url:
-        settings['src.api.url'] = url
+        settings['geoimagenet_ml.api.url'] = url
     elif hostname:
         # update variables from ini settings if not overridden in environment
         if protocol is None:
-            protocol = settings['src.api.protocol']
+            protocol = settings['geoimagenet_ml.api.protocol']
         if port is None:
-            port = settings['src.api.port']
+            port = settings['geoimagenet_ml.api.port']
         port = '{sep}{port}'.format(port=port, sep=':' if port else '')
         GEOIMAGENET_ML_api_url_template = '{protocol}://{hostname}{port}'
-        settings['src.api.url'] = GEOIMAGENET_ML_api_url_template.format(protocol=protocol, hostname=hostname, port=port)
+        settings['geoimagenet_ml.api.url'] = GEOIMAGENET_ML_api_url_template.format(protocol=protocol, hostname=hostname, port=port)
 
     config = Configurator(settings=settings)
-    config.include('src.api')
+    config.include('geoimagenet_ml.api')
     config.set_default_permission(NO_PERMISSION_REQUIRED)
 
     wsgi_app = config.make_wsgi_app()

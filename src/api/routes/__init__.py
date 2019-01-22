@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api import schemas as s, generic as g
+from geoimagenet_ml.api import schemas as s
+from geoimagenet_ml.api.routes import generic as g
 import logging
 logger = logging.getLogger(__name__)
 
 
 def includeme(config):
     logger.info('Adding API routes ...')
-    config.include('src.api.routes.datasets')
-    config.include('src.api.routes.models')
-    config.include('src.api.routes.processes')
+    config.include('geoimagenet_ml.api.routes.datasets')
+    config.include('geoimagenet_ml.api.routes.models')
+    config.include('geoimagenet_ml.api.routes.processes')
 
     config.add_route(**s.service_api_route_info(s.BaseAPI))
     config.add_route(**s.service_api_route_info(s.SwaggerJSON))

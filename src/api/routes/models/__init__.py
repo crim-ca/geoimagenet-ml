@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
-from src.api.rest_api import schemas as s
-from src.api.rest_api.models import views as v
+from geoimagenet_ml.api.rest_api import schemas as s
+from geoimagenet_ml.api.rest_api.models import views as v
 import logging
 logger = logging.getLogger(__name__)
 

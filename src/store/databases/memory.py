@@ -2,7 +2,7 @@
 # coding: utf-8
 
 
-from src.store.interfaces import DatabaseInterface
+from geoimagenet_ml.store.interfaces import DatabaseInterface
 
 
 class MemoryDatabase(DatabaseInterface):

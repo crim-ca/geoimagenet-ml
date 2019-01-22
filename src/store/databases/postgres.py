@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src.api import GEOIMAGENET_ML_API_DIR
-from src.store.databases import models
-from src.store.databases.types import POSTGRES_TYPE
-from src.store.interfaces import DatabaseInterface
+from geoimagenet_ml.api import GEOIMAGENET_ML_API_DIR
+from geoimagenet_ml.store.databases import models
+from geoimagenet_ml.store.databases.types import POSTGRES_TYPE
+from geoimagenet_ml.store.interfaces import DatabaseInterface
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm import sessionmaker, configure_mappers
 from sqlalchemy import engine_from_config
@@ -117,7 +117,7 @@ def get_alembic_ini_path():
 
 def run_database_migration(settings):
     import alembic
-    if settings.get('src.api.db_factory') == POSTGRES_TYPE:
+    if settings.get('geoimagenet_ml.api.db_factory') == POSTGRES_TYPE:
         alembic_args = ['-c', get_alembic_ini_path(), 'upgrade', 'heads']
         alembic.config.main(argv=alembic_args)  # noqa: F401
 
