@@ -5,7 +5,7 @@
 test_api
 ----------------------------------
 
-Tests for `CCFB API` module.
+Tests for `GeoImageNet ML API` module.
 """
 
 import os
@@ -15,7 +15,7 @@ import pytest
 import unittest
 import pyramid.testing
 import warnings
-from ccfb.api import __meta__
+from geoimagenet_ml.api import __meta__
 from ccfb.api.rest_api import schemas
 from ccfb.api.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from ccfb.api.store.datatypes import Model
