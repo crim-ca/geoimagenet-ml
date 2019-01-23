@@ -1,7 +1,7 @@
 # noinspection PyPackageRequirements
 from thelper import __version__ as thelper_version
 import logging
-logger = logging.getLogger("src")
+logger = logging.getLogger("geoimagenet-ml")
 
 
 __type__ = "thelper"

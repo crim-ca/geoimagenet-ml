@@ -18,8 +18,14 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'env | sort'
-                sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make docker-build'
+                withCredentials([usernamePassword(
+                    credentialsId: 'f6c3d8c2-ac53-45bd-971e-1a3a02da3b19',
+                    passwordVariable: 'STASH_PASSWORD', usernameVariable: 'STASH_USERNAME')
+                ]) {
+                    sh 'env | sort'
+                    sh 'test -d thelper || git clone https://${STASH_USERNAME}:${STASH_PASSWORD}@www.crim.ca/stash/scm/VISI/thelper.git'
+                    sh 'docker build -t $LOCAL_IMAGE_NAME .'
+                }
             }
         }
 
@@ -28,10 +34,10 @@ pipeline {
                 script {
                     docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*"') { c ->
                         sh """
-                        docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb $LOCAL_IMAGE_NAME /bin/sh -c \" \
-                        pip install -r requirements-dev.txt && \
-                        pytest -v\"
+                        docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb -e MONGODB_PORT=27017 $LOCAL_IMAGE_NAME /bin/sh -c \" \
+                        TEST_MODEL_URL="https://ogc-ems.crim.ca/twitcher/wpsoutputs/test_model_ckpt.pth" make test-all"
                         """
+                        // todo: replace above temporary URL, using EMS server to get tests running
                     }
                 }
             }
@@ -47,16 +53,16 @@ pipeline {
                 sh 'docker tag $LOCAL_IMAGE_NAME $LATEST_IMAGE_NAME'
                 sh 'docker push $LATEST_IMAGE_NAME'
                 sh 'ssh ubuntu@geoimagenetdev.crim.ca "cd ~/compose && ./geoimagenet-compose.sh down && ./geoimagenet-compose.sh pull && ./geoimagenet-compose.sh up -d"'
-                slackSend channel: '#geoimagenet', color: 'good', message: "*GeoImageNet ML*:\nPushed docker image: `${env.TAGGED_IMAGE_NAME}`\nDeployed to: https://geoimagenetdev.crim.ca/ml"
+                slackSend channel: '#geoimagenet-dev', color: 'good', message: "*GeoImageNet ML*:\nPushed docker image: `${env.TAGGED_IMAGE_NAME}`\nDeployed to: https://geoimagenetdev.crim.ca/ml"
             }
         }
     }
     post {
        success {
-           slackSend channel: '#geoimagenet', color: 'good', message: "*GeoImageNet ML*: Build #${env.BUILD_NUMBER} *successful* on git branch `${env.GIT_LOCAL_BRANCH}` :tada: (<${env.BUILD_URL}|View>)"
+           slackSend channel: '#geoimagenet-dev', color: 'good', message: "*GeoImageNet ML*: Build #${env.BUILD_NUMBER} *successful* on git branch `${env.GIT_LOCAL_BRANCH}` :tada: (<${env.BUILD_URL}|View>)"
        }
        failure {
-           slackSend channel: '#geoimagenet', color: 'danger', message: "*GeoImageNet ML*: Build #${env.BUILD_NUMBER} *failed* on git branch `${env.GIT_LOCAL_BRANCH}` :sweat_smile: (<${env.BUILD_URL}|View>)"
+           slackSend channel: '#geoimagenet-dev', color: 'danger', message: "*GeoImageNet ML*: Build #${env.BUILD_NUMBER} *failed* on git branch `${env.GIT_LOCAL_BRANCH}` :sweat_smile: (<${env.BUILD_URL}|View>)"
        }
     }
 }

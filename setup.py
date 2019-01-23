@@ -10,6 +10,7 @@ except ImportError:
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# use 'src' on purpose because 'geoimagenet_ml' not yet installed
 from src import __meta__    # noqa
 
 CUR_DIR = os.path.dirname(__file__)

@@ -171,7 +171,7 @@ html_static_path = ['_static']
 # If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
 # html_show_sphinx = True
 
-# If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
+# If true, "(C) Copyright..." is shown in the HTML footer. Default is True.
 # html_show_copyright = True
 
 # If true, an OpenSearch description file will be output, and all pages will
@@ -183,7 +183,7 @@ html_static_path = ['_static']
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'src-routes-doc'
+htmlhelp_basename = 'geoimagenet-routes-doc'
 
 
 # -- Options for LaTeX output ------------------------------------------

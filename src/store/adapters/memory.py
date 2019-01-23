@@ -6,7 +6,7 @@ for testing purposes.
 """
 
 from geoimagenet_ml.store.interfaces import ProcessStore
-from geoimagenet_ml.api.utils import get_sane_name
+from geoimagenet_ml.utils import get_sane_name
 
 
 class MemoryProcessStore(ProcessStore):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-from geoimagenet_ml.api.utils import islambda, isclass
+from geoimagenet_ml.utils import islambda, isclass
 from geoimagenet_ml.typedefs import JsonDict  # noqa: F401
 from pyramid.httpexceptions import (
     HTTPError,

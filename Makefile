@@ -77,15 +77,15 @@ clean: clean-build clean-pyc clean-test clean-ml
 
 .PHONY: clean-build
 clean-build:
-	@-rm -fr $(CUR_DIR)/build/
-	@-rm -fr $(CUR_DIR)/dist/
-	@-rm -fr $(CUR_DIR)/.eggs/
+	@-rm -fr "$(CUR_DIR)/build/"
+	@-rm -fr "$(CUR_DIR)/dist/"
+	@-rm -fr "$(CUR_DIR)/.eggs/"
 	@-find . -type f -name '*.egg-info' -exec rm -fr {} +
 	@-find . -type f -name '*.egg' -exec rm -f {} +
 
 .PHONY: clean-env
 clean-env:
-	@-test -d $(CONDA_ENV_PATH) && "$(ANACONDA_HOME)/bin/conda" remove -n $(CONDA_ENV) --yes --all
+	@-test -d "$(CONDA_ENV_PATH)" && "$(ANACONDA_HOME)/bin/conda" remove -n "$(CONDA_ENV)" --yes --all
 
 .PHONY: clean-pyc
 clean-pyc:
@@ -96,41 +96,41 @@ clean-pyc:
 
 .PHONY: clean-test
 clean-test:
-	@-rm -fr $(CUR_DIR)/.tox/
-	@-rm -f $(CUR_DIR)/.coverage
-	@-rm -fr $(CUR_DIR)/coverage/
+	@-rm -fr "$(CUR_DIR)/.tox/"
+	@-rm -f "$(CUR_DIR)/.coverage"
+	@-rm -fr "$(CUR_DIR)/coverage/"
 
 .PHONY: clean-ml
 clean-ml:
 	# clean thelper sources left over from build
-	@-rm -fr $(CUR_DIR)/geoimagenet_ml || true
+	@-rm -fr "$(CUR_DIR)/geoimagenet_ml" || true
 
 .PHONY: pep8
 pep8:
-	@bash -c "flake8 src && echo 'All good!'"
+	@bash -c 'flake8 src && echo "All good!"'
 
 .PHONY: test
 test: install-test
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest -v -m 'not online'"
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" -v -m "not online"'
 
 .PHONY: test-all
 test-all: install-test
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest"
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest"'
 
 .PHONY: test-tox
 test-tox: install-test
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		tox"
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		tox'
 
 .PHONY: coverage
 coverage:
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		coverage run --source api setup.py test; \
 		coverage report -m; \
 		coverage html -d coverage; \
-		$(BROWSER) coverage/index.html; "
+		"$(BROWSER)" coverage/index.html;'
 
 .PHONY: migrate
 migrate:
@@ -138,26 +138,26 @@ migrate:
 
 .PHONY: docs
 docs:
-	@-rm -f $(CUR_DIR)/src/docs/api.rst
-	@-rm -f $(CUR_DIR)/src/docs/modules.rst
-	sphinx-apidoc -o $(CUR_DIR)/src/docs/ $(CUR_DIR)/src
-	$(MAKE) -C $(CUR_DIR)/src/docs clean
-	$(MAKE) -C $(CUR_DIR)/src/docs html
-	$(BROWSER) $(CUR_DIR)/src/docs/_build/html/index.html
+	@-rm -f "$(CUR_DIR)/src/docs/api.rst"
+	@-rm -f "$(CUR_DIR)/src/docs/modules.rst"
+	sphinx-apidoc -o "$(CUR_DIR)/src/docs/" "$(CUR_DIR)/src"
+	@"$(MAKE)" -C "$(CUR_DIR)/src/docs" clean
+	@"$(MAKE)" -C "$(CUR_DIR)/src/docs" html
+	@"$(BROWSER)" "$(CUR_DIR)/src/docs/_build/html/index.html"
 
 .PHONY: servedocs
 servedocs: docs
-	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
+	watchmedo shell-command -p '*.rst' -c '"$(MAKE)" -C docs html' -R -D .
 
 .PHONY: release
 release: clean
-	python $(CUR_DIR)/setup.py sdist upload
-	python $(CUR_DIR)/setup.py bdist_wheel upload
+	python "$(CUR_DIR)/setup.py" sdist upload
+	python "$(CUR_DIR)/setup.py" bdist_wheel upload
 
 .PHONY: dist
 dist: clean
-	python $(CUR_DIR)/setup.py sdist
-	python $(CUR_DIR)/setup.py bdist_wheel
+	python "$(CUR_DIR)/setup.py" sdist
+	python "$(CUR_DIR)/setup.py" bdist_wheel
 	ls -l dist
 
 .PHONY: install
@@ -165,36 +165,36 @@ install: install-ml install-api
 
 .PHONY: install-api
 install-api: clean conda_env
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements.txt"
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); python $(CUR_DIR)/setup.py install"
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements.txt"'
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py install"'
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
 install-ml: clean conda_env update-thelper
-	@echo "Installing ML packages ..."
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/thelper"
+	@echo "Installing ML packages..."
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
-	@bash -c "$(ANACONDA_HOME)/bin/conda install -y -n $(CONDA_ENV) --file $(CUR_DIR)/requirements-gdal.txt -c conda-forge"
-	#@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-gdal.txt"
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-ml.txt"
+	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" --file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-ml.txt"'
 	# @echo "Enforcing pip install using cloned repo"
 	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
 	$(MAKE) clean-ml
 
 .PHONY: install-test
 install-test: install
-	@echo "Installing test dependencies ..."
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-dev.txt"
+	@echo "Installing test dependencies..."
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-dev.txt"'
 
 .PHONY: update
 update: clean
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: update-thelper
 update-thelper:
-	@echo "Retrieving thelper on '$(THELPER_BRANCH)' branch"
+	@test -d "$(CUR_DIR)/thelper" || echo "Retrieving thelper on '$(THELPER_BRANCH)' branch..."
 	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
-	@bash -c "cd $(CUR_DIR)/thelper && git fetch && git checkout -f $(THELPER_BRANCH) && git pull -f && cd $(CUR_DIR)"
+	@echo "Updating thelper..."
+	@bash -c 'cd "$(CUR_DIR)/thelper" && git fetch && git checkout -f "$(THELPER_BRANCH)" && git pull -f && cd "$(CUR_DIR)"'
 
 .PHONY: version
 version:
@@ -221,31 +221,31 @@ docker-push:
 
 .PHONY: start
 start:
-	@echo "Starting supervisor service ..."
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord start"
+	@echo "Starting supervisor service..."
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; "$(SRC_DIR)/bin/supervisord" start'
 
 .PHONY: stop
 stop:
-	@echo "Stopping supervisor service ..."
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord stop"
+	@echo "Stopping supervisor service..."
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; "$(SRC_DIR)/bin/supervisord" stop'
 
 .PHONY: restart
 restart:
-	@echo "Restarting supervisor service ..."
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord restart"
+	@echo "Restarting supervisor service..."
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; "$(SRC_DIR)/bin/supervisord" restart'
 
 .PHONY: status
 status:
-	@echo "Supervisor status ..."
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); $(SRC_DIR)/bin/supervisord status"
+	@echo "Supervisor status..."
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; "$(SRC_DIR)/bin/supervisord" status'
 
 ## Anaconda targets
 
 .PHONY: anaconda
 anaconda:
-	@echo "Installing Anaconda ..."
-	@test -d $(ANACONDA_HOME) || curl $(ANACONDA_URL)/$(FN) --silent --insecure --output "$(DOWNLOAD_CACHE)/$(FN)"
-	@test -d $(ANACONDA_HOME) || bash "$(DOWNLOAD_CACHE)/$(FN)" -b -p $(ANACONDA_HOME)
+	@echo "Installing Anaconda..."
+	@test -d "$(ANACONDA_HOME)" || curl "$(ANACONDA_URL)/$(FN)" --silent --insecure --output "$(DOWNLOAD_CACHE)/$(FN)"
+	@test -d "$(ANACONDA_HOME)" || bash "$(DOWNLOAD_CACHE)/$(FN)" -b -p "$(ANACONDA_HOME)"
 	@echo "Add '$(ANACONDA_HOME)/bin' to your PATH variable in '.bashrc'."
 
 .PHONY: conda_config
@@ -263,7 +263,7 @@ conda_config: anaconda
 
 .PHONY: conda_env
 conda_env: anaconda conda_config
-	@echo "Update conda environment $(CONDA_ENV) using $(ANACONDA_HOME) ..."
-	@test -d $(CONDA_ENV_PATH) || "$(ANACONDA_HOME)/bin/conda" create -y -n $(CONDA_ENV) python=$(PYTHON_VERSION)
-	"$(ANACONDA_HOME)/bin/conda" install -y -n $(CONDA_ENV) setuptools=$(SETUPTOOLS_VERSION)
-	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install --upgrade pip"
+	@echo "Update conda environment $(CONDA_ENV) using $(ANACONDA_HOME)..."
+	@test -d "$(CONDA_ENV_PATH)" || "$(ANACONDA_HOME)/bin/conda" create -y -n "$(CONDA_ENV)" python=$(PYTHON_VERSION)
+	"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" setuptools=$(SETUPTOOLS_VERSION)
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install --upgrade pip'

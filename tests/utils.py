@@ -1,9 +1,7 @@
-import os
-import six
-import requests
-import pyramid
-# noinspection PyPackageRequirements
-import pyramid.testing
+from geoimagenet_ml import __meta__, GEOIMAGENET_ML_CONFIG_INI
+from geoimagenet_ml.utils import settings_from_ini
+from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
+from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from pyramid.config import Configurator
 from pyramid.response import Response
 from distutils.version import *
@@ -11,11 +9,13 @@ from distutils.version import *
 from webtest import TestApp
 # noinspection PyPackageRequirements, PyUnresolvedReferences
 from webtest.response import TestResponse
-from geoimagenet_ml import __meta__
-from geoimagenet_ml.api.utils import settings_from_ini
-from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
-from geoimagenet_ml.store.databases.types import MONGODB_TYPE
-
+import os
+import six
+import warnings
+import requests
+import pyramid
+# noinspection PyPackageRequirements
+import pyramid.testing
 
 json_headers = [('Content-Type', 'application/json')]
 
@@ -32,9 +32,13 @@ def setup_test_app(settings=None, config=None):
 
 def setup_config_from_settings(settings=None, config=None):
     # type: (Optional[SettingDict], Optional[Configurator]) -> Configurator
-    config_ini_path = os.getenv('GEOIMAGENET_ML_CONFIG_INI_PATH')
+    config_var_name = 'GEOIMAGENET_ML_CONFIG_INI_PATH'
+    config_ini_path = os.getenv(config_var_name)
+    if not config_ini_path:
+        config_ini_path = GEOIMAGENET_ML_CONFIG_INI
+        warnings.warn(f"Test variable '{config_var_name}' not defined, using default '{config_ini_path}'.")
     if not isinstance(config_ini_path, six.string_types):
-        raise ValueError("API configuration file required for testing, please set 'GEOIMAGENET_ML_CONFIG_INI_PATH'.")
+        raise ValueError(f"API configuration file required for testing, please set '{config_var_name}'.")
     if not os.path.isfile(config_ini_path):
         raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(config_ini_path))
     settings_ini = settings_from_ini(config_ini_path, 'app:geoimagenet_ml_app')
@@ -51,7 +55,7 @@ def setup_config_with_mongodb(settings=None, config=None):
     settings_db = {
         'mongodb.host': '127.0.0.1',
         'mongodb.port': '27027',
-        'mongodb.db_name': 'src-test',
+        'mongodb.db_name': 'geoimagenet-test',
         'geoimagenet_ml.api.db_factory': MONGODB_TYPE,
         'geoimagenet_ml.api.models_path': '/tmp'  # place models somewhere they will be deleted periodically
     }

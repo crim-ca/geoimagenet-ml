@@ -13,6 +13,7 @@ import six
 # noinspection PyPackageRequirements
 import pytest
 import unittest
+import pyramid
 import pyramid.testing
 import warnings
 from geoimagenet_ml import __meta__

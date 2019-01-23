@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from src import __meta__
+from geoimagenet_ml import __meta__
 from geoimagenet_ml.processes.status import job_status_values
 from cornice.service import Service
 from pyramid.httpexceptions import (
