@@ -27,9 +27,49 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.databases.mongodb import MongoDatabase
 
 
-class TestApi(unittest.TestCase):
+class TestGenericApi(unittest.TestCase):
     """
-    Test API operations.
+    Test Generic API operations.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conf = utils.setup_config_with_mongodb()
+        cls.app = utils.setup_test_app(config=cls.conf)
+        cls.json_headers = [('Content-Type', schemas.ContentTypeJSON), ('Accept', schemas.ContentTypeJSON)]
+        # cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
+
+    # noinspection PyUnresolvedReferences
+    @classmethod
+    def tearDownClass(cls):
+        pyramid.testing.tearDown()
+
+    def test_GetVersion_valid(self):
+        resp = utils.request(self.app, 'GET', schemas.VersionsAPI.path, headers=self.json_headers)
+        utils.check_response_basic_info(resp, 200)
+        utils.check_val_equal(resp.json['data']['versions'][0]['name'], 'api')
+        utils.check_val_type(resp.json['data']['versions'][0]['version'], six.string_types)
+        utils.check_val_equal(resp.json['data']['versions'][0]['version'], __meta__.__version__)
+        utils.check_val_equal(resp.json['data']['versions'][1]['name'], 'db')
+        utils.check_val_type(resp.json['data']['versions'][1]['version'], six.string_types)
+        utils.check_val_type(resp.json['data']['versions'][1]['type'], six.string_types)
+        utils.check_val_is_in(resp.json['data']['versions'][1]['type'], [MEMORY_TYPE, MONGODB_TYPE])
+        utils.check_val_equal(resp.json['data']['versions'][2]['name'], 'ml')
+        utils.check_val_type(resp.json['data']['versions'][2]['version'], six.string_types)
+        utils.check_val_type(resp.json['data']['versions'][2]['type'], six.string_types)
+
+    def test_GetAPI_valid(self):
+        resp = utils.request(self.app, 'GET', schemas.SwaggerJSON.path, headers=self.json_headers)
+        assert resp.status_code == 200
+        assert resp.content_type == schemas.ContentTypeJSON
+        utils.check_val_is_in('info', resp.json)
+        utils.check_val_equal(resp.json['info']['version'], __meta__.__version__)
+        utils.check_val_is_in('paths', resp.json)
+
+
+class TestModelApi(unittest.TestCase):
+    """
+    Test Model API operations.
     """
 
     @classmethod
@@ -61,28 +101,6 @@ class TestApi(unittest.TestCase):
         self.model_2 = self.make_model('model-2')
         self.db.models_store.save_model(self.model_1, data={'model': 'test-1'})
         self.db.models_store.save_model(self.model_2, data={'model': 'test-2'})
-
-    def test_GetVersion_valid(self):
-        resp = utils.request(self.app, 'GET', schemas.VersionsAPI.path, headers=self.json_headers)
-        utils.check_response_basic_info(resp, 200)
-        utils.check_val_equal(resp.json['data']['versions'][0]['name'], 'api')
-        utils.check_val_type(resp.json['data']['versions'][0]['version'], six.string_types)
-        utils.check_val_equal(resp.json['data']['versions'][0]['version'], __meta__.__version__)
-        utils.check_val_equal(resp.json['data']['versions'][1]['name'], 'db')
-        utils.check_val_type(resp.json['data']['versions'][1]['version'], six.string_types)
-        utils.check_val_type(resp.json['data']['versions'][1]['type'], six.string_types)
-        utils.check_val_is_in(resp.json['data']['versions'][1]['type'], [MEMORY_TYPE, MONGODB_TYPE])
-        utils.check_val_equal(resp.json['data']['versions'][2]['name'], 'ml')
-        utils.check_val_type(resp.json['data']['versions'][2]['version'], six.string_types)
-        utils.check_val_type(resp.json['data']['versions'][2]['type'], six.string_types)
-
-    def test_GetAPI_valid(self):
-        resp = utils.request(self.app, 'GET', schemas.SwaggerJSON.path, headers=self.json_headers)
-        assert resp.status_code == 200
-        assert resp.content_type == schemas.ContentTypeJSON
-        utils.check_val_is_in('info', resp.json)
-        utils.check_val_equal(resp.json['info']['version'], __meta__.__version__)
-        utils.check_val_is_in('paths', resp.json)
 
     def test_GetModels_valid(self):
         resp = utils.request(self.app, 'GET', schemas.ModelsAPI.path, headers=self.json_headers)
@@ -121,7 +139,13 @@ class TestApi(unittest.TestCase):
         utils.check_val_equal(resp.json['data']['model']['name'], model_json['model_name'])
 
         # validate that model file was registered to expected storage location
-        assert os.path.isfile(os.path.join(self.MODEL_BASE_PATH, resp.json['data']['model']['uuid']))
+        # noinspection PyProtectedMember, PyUnresolvedReferences
+        model_name = resp.json['data']['model']['uuid'] + self.db.models_store._model_ext
+        saved_path = os.path.join(self.MODEL_BASE_PATH, model_name)
+        assert os.path.isfile(saved_path)
+
+        # validate that displayed path corresponds to uploaded model source path/URL
+        assert resp.json['data']['model']['path'] == self.TEST_MODEL_URL
 
     @pytest.mark.online
     def test_DownloadModel_valid(self):
