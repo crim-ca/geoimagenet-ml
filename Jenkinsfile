@@ -24,6 +24,7 @@ pipeline {
                      changelog: false,
                      poll: false,
                      url: 'https://www.crim.ca/stash/scm/VISI/thelper.git'
+                sh 'ls && echo $PWD'
                 sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make -f ./Makefile docker-build'
             }
         }
