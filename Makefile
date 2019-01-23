@@ -170,7 +170,7 @@ install-api: clean conda_env
 	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
 
 .PHONY: install-ml
-install-ml: clean conda_env
+install-ml: clean conda_env update-thelper
 	@echo "Installing ML packages ..."
 	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/thelper"
 	@echo "Installing packages that fail with pip using conda instead"
