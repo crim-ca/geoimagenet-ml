@@ -4,7 +4,7 @@ from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
-from geoimagenet_ml.typedefs import AnyStr, Number, List, Union, Optional, UUID, TYPE_CHECKING
+from geoimagenet_ml.typedefs import AnyStr, Number, List, Union, Optional, UUID, TYPE_CHECKING       # noqa: F401
 from geoimagenet_ml.processes.types import process_categories, PROCESS_ML
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
@@ -30,9 +30,9 @@ LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
-    from celery import Task
+    from celery import Task                     # noqa: F401
     # noinspection PyPackageRequirements
-    from owslib.wps import WPSException
+    from owslib.wps import WPSException         # noqa: F401
 
 
 def create_process(request):

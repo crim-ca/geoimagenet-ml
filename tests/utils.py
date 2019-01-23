@@ -7,11 +7,11 @@ import pyramid.testing
 from pyramid.config import Configurator
 from pyramid.response import Response
 from distutils.version import *
-# noinspection PyPackageRequirements
+# noinspection PyPackageRequirements, PyUnresolvedReferences
 from webtest import TestApp
-# noinspection PyPackageRequirements
+# noinspection PyPackageRequirements, PyUnresolvedReferences
 from webtest.response import TestResponse
-from geoimagenet_ml.api import __meta__
+from geoimagenet_ml import __meta__
 from geoimagenet_ml.api.utils import settings_from_ini
 from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
@@ -32,12 +32,12 @@ def setup_test_app(settings=None, config=None):
 
 def setup_config_from_settings(settings=None, config=None):
     # type: (Optional[SettingDict], Optional[Configurator]) -> Configurator
-    geoimagenet_ml_api_ini_path = os.getenv('GEOIMAGENET_ML_PROJECT_CONFIG_API_INI_PATH')
-    if not isinstance(geoimagenet_ml_api_ini_path, six.string_types):
-        raise ValueError("API configuration file required for testing, please set 'GEOIMAGENET_ML_PROJECT_CONFIG_API_INI_PATH'.")
-    if not os.path.isfile(geoimagenet_ml_api_ini_path):
-        raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(geoimagenet_ml_api_ini_path))
-    settings_ini = settings_from_ini(geoimagenet_ml_api_ini_path, 'app:geoimagenet_ml_app')
+    config_ini_path = os.getenv('GEOIMAGENET_ML_CONFIG_INI_PATH')
+    if not isinstance(config_ini_path, six.string_types):
+        raise ValueError("API configuration file required for testing, please set 'GEOIMAGENET_ML_CONFIG_INI_PATH'.")
+    if not os.path.isfile(config_ini_path):
+        raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(config_ini_path))
+    settings_ini = settings_from_ini(config_ini_path, 'app:geoimagenet_ml_app')
     if settings:
         settings_ini.update(settings)
     if config:

@@ -167,7 +167,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
     """
 
     def __init__(self, collection, settings, default_processes=None):
-        from geoimagenet_ml.api.routes.schemas import ProcessJobsAPI
+        from geoimagenet_ml.api.schemas import ProcessJobsAPI
         super(MongodbProcessStore, self).__init__(collection=collection)
         self.default_host = settings.get('geoimagenet_ml.api.url')
         self.default_wps_endpoint_template = '{host}{path}'.format(host=self.default_host, path=ProcessJobsAPI.path)

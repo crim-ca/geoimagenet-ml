@@ -54,9 +54,10 @@ help:
 	@echo "clean-ml         remove ML module build artifacts"
 	@echo "docker-build     build the docker image"
 	@echo "docker-push      push the docker image"
-	@echo "lint             check style with flake8"
-	@echo "test             run tests quickly with the default Python"
-	@echo "test-all         run tests on every Python version with tox"
+	@echo "pep8             check code style"
+	@echo "test             run basic unit tests (not online)"
+	@echo "test-all         run tests with every marker enabled"
+	@echo "test-tox         run tests on every Python version with tox"
 	@echo "coverage         check code coverage quickly with the default Python"
 	@echo "docs             generate Sphinx HTML documentation, including API docs"
 	@echo "release          package and upload a release"
@@ -117,24 +118,32 @@ docker-push:
 	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
 		docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
-.PHONY: lint
-lint:
-	flake8 api tests
+.PHONY: pep8
+pep8:
+	@flake8 src
 
 .PHONY: test
-test:
-	python $(CUR_DIR)/setup.py test
+test: install-test
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest -v -m 'not online'"
 
 .PHONY: test-all
-test-all:
-	tox
+test-all: install-test
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest"
+
+.PHONY: test-tox
+test-tox: install-test
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		tox"
 
 .PHONY: coverage
 coverage:
-	coverage run --source api setup.py test
-	coverage report -m
-	coverage html -d coverage
-	$(BROWSER) coverage/index.html
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
+		coverage run --source api setup.py test; \
+		coverage report -m; \
+		coverage html -d coverage; \
+		$(BROWSER) coverage/index.html; "
 
 .PHONY: migrate
 migrate:
@@ -190,6 +199,12 @@ install-ml: clean conda_env
 	# @echo "Enforcing pip install using cloned repo"
 	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
 	$(MAKE) clean-ml
+
+.PHONY: install-test
+install-test: install
+	@echo "Installing test dependencies ..."
+	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-dev.txt"
+
 
 .PHONY: update
 update: clean

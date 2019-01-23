@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyPackageRequirements
 import sqlalchemy as sa
 # noinspection PyPackageRequirements
-import sqlalchemy.orm
+import sqlalchemy.orm   # noqa: F401
 
 
 Base = declarative_base()

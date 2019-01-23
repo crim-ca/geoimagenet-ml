@@ -3,7 +3,9 @@
 
 from geoimagenet_ml.store.interfaces import DatabaseInterface
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
-from geoimagenet_ml.store.adapters.mongodb import MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore
+from geoimagenet_ml.store.adapters.mongodb import (
+    MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore
+)
 import pymongo
 import os
 
@@ -66,8 +68,8 @@ class MongoDB:
             client = pymongo.MongoClient(
                 os.getenv("MONGODB_HOST") or settings.get('mongodb.host'),
                 int(os.getenv("MONGODB_PORT") or settings.get('mongodb.port')),
-                # username=os.getenv("MONGODB_USER") or settings.get('mongodb.user'),
-                # password=os.getenv("MONGODB_PASSWORD") or settings.get('mongodb.password'),
+                username=os.getenv("MONGODB_USER") or settings.get('mongodb.user'),
+                password=os.getenv("MONGODB_PASSWORD") or settings.get('mongodb.password'),
             )
             cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get('mongodb.db_name')]
         return cls.__db

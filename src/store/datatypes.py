@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.typedefs import (
+from geoimagenet_ml.typedefs import (   # noqa: F401
     Any, AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict, TYPE_CHECKING
 )
 from geoimagenet_ml.api.utils import (
@@ -37,7 +37,7 @@ import os
 
 if TYPE_CHECKING:
     # noinspection PyPackageRequirements
-    from owslib.wps import WPSException
+    from owslib.wps import WPSException     # noqa: F401
 
 
 class Base(dict):

@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, AnyStr, List, Optional                   # noqa: F401
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job
-    from geoimagenet_ml.typedefs import *
-    from pyramid.request import Request
-    from io import BufferedIOBase
+    from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job     # noqa: F401
+    from geoimagenet_ml.typedefs import OptionDict, UUID                        # noqa: F401
+    from pyramid.request import Request                                         # noqa: F401
+    from io import BufferedIOBase                                               # noqa: F401
 
 
 class DatabaseInterface(object):

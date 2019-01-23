@@ -1,4 +1,4 @@
-from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union
+from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union  # noqa: F401
 from geoimagenet_ml.processes.status import map_status
 from six.moves.configparser import ConfigParser
 from datetime import datetime
