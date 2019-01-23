@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.api import GEOIMAGENET_ML_API_DIR
+from geoimagenet_ml import GEOIMAGENET_ML_API_DIR
 from geoimagenet_ml.store.databases import models
 from geoimagenet_ml.store.databases.types import POSTGRES_TYPE
 from geoimagenet_ml.store.interfaces import DatabaseInterface
@@ -66,11 +66,11 @@ class PostgresDatabase(DatabaseInterface):
 
 def get_postgresdb_url(settings=None):
     return "postgresql://%s:%s@%s:%s/%s" % (
-        os.getenv("POSTGRES_USER", "src") or settings.get('postgres.user'),
+        os.getenv("POSTGRES_USER", "geoimagenet") or settings.get('postgres.user'),
         os.getenv("POSTGRES_PASSWORD", "qwerty") or settings.get('postgres.password'),
         os.getenv("POSTGRES_HOST", "postgres") or settings.get('postgres.host'),
         os.getenv("POSTGRES_PORT", "5444") or settings.get('postgres.port'),
-        os.getenv("POSTGRES_DB_NAME", "src") or settings.get('postgres.db_name'),
+        os.getenv("POSTGRES_DB_NAME", "geoimagenet-ml") or settings.get('postgres.db_name'),
     )
 
 
@@ -119,6 +119,7 @@ def run_database_migration(settings):
     import alembic
     if settings.get('geoimagenet_ml.api.db_factory') == POSTGRES_TYPE:
         alembic_args = ['-c', get_alembic_ini_path(), 'upgrade', 'heads']
+        # noinspection PyUnresolvedReferences
         alembic.config.main(argv=alembic_args)  # noqa: F401
 
 

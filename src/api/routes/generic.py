@@ -2,7 +2,7 @@
 # coding: utf-8
 from geoimagenet_ml.api import exceptions as ex, schemas as s
 from geoimagenet_ml.store.factories import database_factory
-from src import ml, __meta__
+from geoimagenet_ml import ml, __meta__
 from pyramid.httpexceptions import (
     HTTPOk,
     HTTPNotFound,
