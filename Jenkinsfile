@@ -26,10 +26,10 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*" -e "MONGODB_USER=geoimagenet" -e "MONGODB_PASS=geoimagenet"') { c ->
+                    docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*"') { c ->
                         sh """
-                        docker run --rm --link ${c.id}:postgis -e GEOIMAGENET_API_POSTGIS_USER=docker -e GEOIMAGENET_API_POSTGIS_PASSWORD=docker -e GEOIMAGENET_API_POSTGIS_HOST=postgis $LOCAL_IMAGE_NAME /bin/sh -c \" \
-                        pip install -r requirements_dev.txt && \
+                        docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb $LOCAL_IMAGE_NAME /bin/sh -c \" \
+                        pip install -r requirements-dev.txt && \
                         pytest -v\"
                         """
                     }

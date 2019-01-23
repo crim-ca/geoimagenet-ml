@@ -28,13 +28,13 @@ PYWPS_CFG = None
 
 def _get_settings_or_wps_config(
         settings,                   # type: SettingDict
-        GEOIMAGENET_ML_setting_name,          # type: AnyStr
+        project_setting_name,       # type: AnyStr
         config_setting_section,     # type: AnyStr
         config_setting_name,        # type: AnyStr
         default_not_found,          # type: AnyStr
         message_not_found,          # type: AnyStr
         ):                          # type: (...) -> AnyStr
-    wps_path = settings.get(GEOIMAGENET_ML_setting_name)
+    wps_path = settings.get(project_setting_name)
     if not wps_path:
         wps_cfg = get_wps_cfg_path(settings)
         config = ConfigParser()
