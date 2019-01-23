@@ -4,7 +4,7 @@
 from geoimagenet_ml.typedefs import (   # noqa: F401
     Any, AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict, TYPE_CHECKING
 )
-from geoimagenet_ml.api.utils import (
+from geoimagenet_ml.utils import (
     now, localize_datetime,
     stringify_datetime,
     get_log_fmt,

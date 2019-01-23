@@ -12,7 +12,7 @@ from webtest import TestApp
 # noinspection PyPackageRequirements, PyUnresolvedReferences
 from webtest.response import TestResponse
 from geoimagenet_ml import __meta__
-from geoimagenet_ml.api.utils import settings_from_ini
+from geoimagenet_ml.utils import settings_from_ini
 from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 

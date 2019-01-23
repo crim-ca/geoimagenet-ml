@@ -5,7 +5,7 @@ Store adapters to read/write data to from/to mongodb using pymongo.
 from geoimagenet_ml.store import exceptions as ex
 from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job
 from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
-from geoimagenet_ml.api.utils import islambda, get_sane_name
+from geoimagenet_ml.utils import islambda, get_sane_name
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
 import pymongo
