@@ -6,7 +6,7 @@ from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
 from geoimagenet_ml.ml.impl import load_model
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPUnprocessableEntity
-from pyramid.request import Request
+from pyramid.request import Request  # noqa: F401
 
 
 def create_model(request):

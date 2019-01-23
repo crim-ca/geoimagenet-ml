@@ -26,9 +26,9 @@ from geoimagenet_ml.ml.impl import load_model
 from pywps import Process as ProcessWPS
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
-from datetime import datetime
+from datetime import datetime       # noqa: F401
 # noinspection PyProtectedMember
-from logging import _loggerClass
+from logging import _loggerClass    # noqa: F401
 import boltons.tbutils
 import logging
 import uuid

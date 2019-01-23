@@ -6,7 +6,6 @@ GeoImageNet ML API
 """
 from geoimagenet_ml.store.factories import migrate_database_when_ready
 from pyramid.config import Configurator
-from pyramid.exceptions import ConfigurationError
 from pyramid.security import NO_PERMISSION_REQUIRED
 import os
 import logging
@@ -35,8 +34,8 @@ def main(global_config=None, **settings):
         if port is None:
             port = settings['geoimagenet_ml.api.port']
         port = '{sep}{port}'.format(port=port, sep=':' if port else '')
-        GEOIMAGENET_ML_api_url_template = '{protocol}://{hostname}{port}'
-        settings['geoimagenet_ml.api.url'] = GEOIMAGENET_ML_api_url_template.format(protocol=protocol, hostname=hostname, port=port)
+        api_url_template = '{protocol}://{hostname}{port}'
+        settings['geoimagenet_ml.api.url'] = api_url_template.format(protocol=protocol, hostname=hostname, port=port)
 
     config = Configurator(settings=settings)
     config.include('geoimagenet_ml.api')
@@ -48,4 +47,3 @@ def main(global_config=None, **settings):
 
 if __name__ == '__main__':
     main()
-

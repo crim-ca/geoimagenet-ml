@@ -11,7 +11,7 @@ from geoimagenet_ml.processes.status import (
 )
 from geoimagenet_ml.processes.utils import get_base_url
 from geoimagenet_ml.ml.impl import get_test_data_runner
-from pyramid.request import Request
+from pyramid.request import Request         # noqa: F401
 from pyramid.httpexceptions import (
     HTTPCreated,
     HTTPBadRequest,
@@ -30,9 +30,9 @@ LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
-    from celery import Task                     # noqa: F401
+    from celery import Task                 # noqa: F401
     # noinspection PyPackageRequirements
-    from owslib.wps import WPSException         # noqa: F401
+    from owslib.wps import WPSException     # noqa: F401
 
 
 def create_process(request):

@@ -2,12 +2,12 @@
 pywps 4.x wrapper
 """
 
-from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict
+from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict  # noqa: F401
 from geoimagenet_ml.processes.types import PROCESS_WPS
 from geoimagenet_ml.processes.utils import get_base_url
 from pyramid.wsgi import wsgiapp2
 from pyramid.threadlocal import get_current_request
-from pyramid.registry import Registry
+from pyramid.registry import Registry  # noqa: F401
 from pyramid.httpexceptions import HTTPInternalServerError
 from pyramid_celery import celery_app as app
 # noinspection PyPackageRequirements

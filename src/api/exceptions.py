@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.api.utils import islambda, isclass
-from geoimagenet_ml.typedefs import JsonDict
+from geoimagenet_ml.typedefs import JsonDict  # noqa: F401
 from pyramid.httpexceptions import (
     HTTPError,
     HTTPException,
@@ -13,7 +13,7 @@ from pyramid.httpexceptions import (
     HTTPInternalServerError,
 )
 from pyramid.request import Request
-from typing import Any, AnyStr, Dict, List, Optional, Tuple, Union
+from typing import Any, AnyStr, Dict, List, Optional, Tuple, Union  # noqa: F401
 import traceback
 import json
 import six

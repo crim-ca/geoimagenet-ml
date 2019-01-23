@@ -1,5 +1,5 @@
 # noinspection PyUnresolvedReferences
-from typing import Any, AnyStr, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
+from typing import Any, AnyStr, Dict, List, Tuple, Optional, Union, TYPE_CHECKING   # noqa: F401
 
 Number = Union[float, int]
 SettingDict = Dict[AnyStr, AnyStr]

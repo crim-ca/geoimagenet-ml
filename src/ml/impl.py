@@ -1,4 +1,4 @@
-from geoimagenet_ml.typedefs import (
+from geoimagenet_ml.typedefs import (  # noqa: F401
     Any, AnyStr, Tuple, Union, OptionDict, JsonDict, SettingDict, TYPE_CHECKING
 )
 from six.moves.urllib.parse import urlparse
@@ -12,7 +12,7 @@ import os
 import thelper
 
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Job, Model, Dataset
+    from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
 
 
 def load_model(model_file):

@@ -120,7 +120,7 @@ docker-push:
 
 .PHONY: pep8
 pep8:
-	@flake8 src
+	@bash -c "flake8 src && echo 'All good!'"
 
 .PHONY: test
 test: install-test

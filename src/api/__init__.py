@@ -13,7 +13,7 @@ GEOIMAGENET_ML_ROOT_DIR = os.path.abspath(os.path.dirname(GEOIMAGENET_ML_PROJECT
 GEOIMAGENET_ML_ROOT_CONFIG_DIR = os.path.abspath(os.path.join(GEOIMAGENET_ML_ROOT_DIR, 'config'))
 try:
     # noinspection PyUnresolvedReferences
-    import src
+    import geoimagenet_ml   # noqa: F401
 except (ImportError, ModuleNotFoundError):
     # resolve routes location before install using local dir package structure
     sys.path.insert(0, GEOIMAGENET_ML_ROOT_DIR)
