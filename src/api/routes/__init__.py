@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def includeme(config):
-    logger.info('Adding API routes ...')
+    logger.info('Adding API routes...')
     config.include('geoimagenet_ml.api.routes.datasets')
     config.include('geoimagenet_ml.api.routes.models')
     config.include('geoimagenet_ml.api.routes.processes')
