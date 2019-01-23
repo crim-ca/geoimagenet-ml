@@ -24,7 +24,7 @@ pipeline {
                 ]) {
                     sh 'env | sort'
                     sh 'test -d thelper || git clone https://${STASH_USERNAME}:${STASH_PASSWORD}@www.crim.ca/stash/scm/VISI/thelper.git'
-                    sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make docker-build'
+                    sh 'docker build -t $LOCAL_IMAGE_NAME .'
                 }
             }
         }
