@@ -35,8 +35,7 @@ pipeline {
                     docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*"') { c ->
                         sh """
                         docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb $LOCAL_IMAGE_NAME /bin/sh -c \" \
-                        pip install -r requirements-dev.txt && \
-                        pytest -v\"
+                        make test-all"
                         """
                     }
                 }
