@@ -49,25 +49,27 @@ help:
 	@echo "clean            remove all build, test, coverage and Python artifacts"
 	@echo "clean-build      remove build artifacts"
 	@echo "clean-env        remove package environment"
+	@echo "clean-ml         remove ML module build artifacts"
 	@echo "clean-pyc        remove Python file artifacts"
 	@echo "clean-test       remove test and coverage artifacts"
-	@echo "clean-ml         remove ML module build artifacts"
-	@echo "docker-build     build the docker image"
-	@echo "docker-push      push the docker image"
-	@echo "pep8             check code style"
-	@echo "test             run basic unit tests (not online)"
-	@echo "test-all         run tests with every marker enabled"
-	@echo "test-tox         run tests on every Python version with tox"
 	@echo "coverage         check code coverage quickly with the default Python"
-	@echo "docs             generate Sphinx HTML documentation, including API docs"
-	@echo "release          package and upload a release"
 	@echo "dist             package"
+	@echo "docker-info     	print the expected docker image tag"
+	@echo "docker-build     build the docker image with the current version"
+	@echo "docker-push      push the docker image with the current version"
+	@echo "docs             generate Sphinx HTML documentation, including API docs"
 	@echo "install          install the package to the active Python's site-packages"
 	@echo "install-api      install API related components"
 	@echo "install-ml       install ML related components"
+	@echo "install-test     install test related components"
+	@echo "pep8             check code style"
+	@echo "release          package and upload a release"
+	@echo "start            start the installed application"
+	@echo "test             run basic unit tests (not online)"
+	@echo "test-all         run tests with every marker enabled"
+	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "update-thelper 	retrieve latest version of thelper"
-	@echo "start            start the installed application"
 	@echo "version          retrive the application version"
 
 .PHONY: clean
@@ -102,21 +104,6 @@ clean-test:
 clean-ml:
 	# clean thelper sources left over from build
 	@-rm -fr $(CUR_DIR)/geoimagenet_ml || true
-
-.PHONY: version
-version:
-	@echo "GeoImageNet ML version: $(APP_VERSION)"
-	@python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'
-
-.PHONY: docker-build
-docker-build: update-thelper
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
-
-.PHONY: docker-push
-docker-push:
-	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); \
-		docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: pep8
 pep8:
@@ -173,12 +160,6 @@ dist: clean
 	python $(CUR_DIR)/setup.py bdist_wheel
 	ls -l dist
 
-.PHONY: update-thelper
-update-thelper:
-	@echo "Retrieving thelper on '$(THELPER_BRANCH)' branch"
-	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
-	@bash -c "cd $(CUR_DIR)/thelper && git fetch && git checkout -f $(THELPER_BRANCH) && git pull -f && cd $(CUR_DIR)"
-
 .PHONY: install
 install: install-ml install-api
 
@@ -205,10 +186,36 @@ install-test: install
 	@echo "Installing test dependencies ..."
 	@bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install -r $(CUR_DIR)/requirements-dev.txt"
 
-
 .PHONY: update
 update: clean
 	@-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)"
+
+.PHONY: update-thelper
+update-thelper:
+	@echo "Retrieving thelper on '$(THELPER_BRANCH)' branch"
+	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
+	@bash -c "cd $(CUR_DIR)/thelper && git fetch && git checkout -f $(THELPER_BRANCH) && git pull -f && cd $(CUR_DIR)"
+
+.PHONY: version
+version:
+	@echo "GeoImageNet ML version: $(APP_VERSION)"
+	@python -c 'from src.__meta__ import __version__; print(__version__)'
+
+## Docker targets
+# we use 'src' instead of 'geoimagenet_ml' to allow fetching the info without installation of conda env
+
+.PHONY: docker-info
+docker-info:
+	@echo "Will be built, tagged and pushed as: \
+		$(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+
+.PHONY: docker-build
+docker-build: update-thelper
+	@bash -c "docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+
+.PHONY: docker-push
+docker-push:
+	@bash -c "docker push $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
 ## Supervisor targets
 
