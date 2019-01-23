@@ -24,7 +24,8 @@ pipeline {
                      changelog: false,
                      poll: false,
                      url: 'https://www.crim.ca/stash/scm/VISI/thelper.git'
-                sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make docker-build -f geoimagenet_ml/Makefile'
+                cd geoimagenet_ml
+                sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make docker-build'
             }
         }
 
