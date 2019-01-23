@@ -65,11 +65,14 @@ class MongoDB:
     def get(cls, registry):
         if not cls.__db:
             settings = registry.settings
+            username = os.getenv("MONGODB_USER") or settings.get('mongodb.user')
+            password = os.getenv("MONGODB_PASSWORD") or settings.get('mongodb.password')
             client = pymongo.MongoClient(
                 os.getenv("MONGODB_HOST") or settings.get('mongodb.host'),
                 int(os.getenv("MONGODB_PORT") or settings.get('mongodb.port')),
-                username=os.getenv("MONGODB_USER") or settings.get('mongodb.user'),
-                password=os.getenv("MONGODB_PASSWORD") or settings.get('mongodb.password'),
+                # avoid empty string causing an error
+                username=username if username else None,
+                password=password if password else None,
             )
             cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get('mongodb.db_name')]
         return cls.__db
