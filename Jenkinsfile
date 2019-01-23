@@ -23,7 +23,7 @@ pipeline {
                      credentialsId: 'f6c3d8c2-ac53-45bd-971e-1a3a02da3b19',
                      changelog: false,
                      poll: false,
-                     url: 'ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git'
+                     url: 'https://www.crim.ca/stash/scm/VISI/thelper.git'
                 sh 'DOCKER_REPO=$LOCAL_IMAGE_NAME make docker-build'
             }
         }
