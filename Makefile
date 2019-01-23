@@ -53,8 +53,9 @@ help:
 	@echo "clean-pyc        remove Python file artifacts"
 	@echo "clean-test       remove test and coverage artifacts"
 	@echo "coverage         check code coverage quickly with the default Python"
-	@echo "dist             package"
+	@echo "dist             distribution of release package"
 	@echo "docker-info     	print the expected docker image tag"
+	@echo "docker-install   utility 'install' target for docker without 'update-thelper'"
 	@echo "docker-build     build the docker image with the current version"
 	@echo "docker-push      push the docker image with the current version"
 	@echo "docs             generate Sphinx HTML documentation, including API docs"
@@ -170,7 +171,10 @@ install-api: clean conda_env
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
-install-ml: clean conda_env update-thelper
+install-ml: update-thelper --install-ml-base
+
+.PHONY: --install-ml-base
+--install-ml-base: clean conda_env
 	@echo "Installing ML packages..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
@@ -208,6 +212,10 @@ version:
 docker-info:
 	@echo "Will be built, tagged and pushed as: \
 		$(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+
+# variant for docker that needs to pre-clone/update thelper and copy it inside (ssh access bypass)
+.PHONY: docker-install
+docker-build: --install-ml-base
 
 .PHONY: docker-build
 docker-build: update-thelper
