@@ -16,8 +16,8 @@
 PYTHONPATH="/usr/bin/python2"
 SUPERVISORD="/usr/bin/supervisord"
 SUPERVISORCTL="/usr/bin/supervisorctl"
-LOGFILE="/var/log/src/supervisor/supervisord.log"
-PIDFILE="/var/run/src/supervisor/supervisord.pid"
+LOGFILE="/var/log/geoimagenet/supervisor/supervisord.log"
+PIDFILE="/var/run/geoimagenet/supervisor/supervisord.pid"
 CONFIGFILE="src/config/supervisor/supervisord.conf"
 DAEMON_OPTS="--configuration $CONFIGFILE ${DAEMON_OPTS}"
 
