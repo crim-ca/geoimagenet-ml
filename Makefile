@@ -54,7 +54,7 @@ help:
 	@echo "clean-test       remove test and coverage artifacts"
 	@echo "coverage         check code coverage quickly with the default Python"
 	@echo "dist             distribution of release package"
-	@echo "docker-info     	print the expected docker image tag"
+	@echo "docker-info      print the expected docker image tag"
 	@echo "docker-install   utility 'install' target for docker without 'update-thelper'"
 	@echo "docker-build     build the docker image with the current version"
 	@echo "docker-push      push the docker image with the current version"
@@ -70,7 +70,7 @@ help:
 	@echo "test-all         run tests with every marker enabled"
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
-	@echo "update-thelper 	retrieve latest version of thelper"
+	@echo "update-thelper   retrieve latest version of thelper"
 	@echo "version          retrive the application version"
 
 .PHONY: clean
@@ -165,19 +165,21 @@ dist: clean
 
 .PHONY: install
 install: install-ml install-api
+	@echo "Installing all packages..."
 
 .PHONY: install-api
-install-api: clean conda_env
+install-api: clean conda-env $(SRC_DIR)
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements.txt"'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py install"'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
 install-ml: update-thelper --install-ml-base
+	@echo "Installing ML packages..."
 
 .PHONY: --install-ml-base
---install-ml-base: clean conda_env
-	@echo "Installing ML packages..."
+--install-ml-base: clean conda-env thelper
+	@echo "Installing thelper package..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
 	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" --file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
@@ -258,8 +260,8 @@ anaconda:
 	@test -d "$(ANACONDA_HOME)" || bash "$(DOWNLOAD_CACHE)/$(FN)" -b -p "$(ANACONDA_HOME)"
 	@echo "Add '$(ANACONDA_HOME)/bin' to your PATH variable in '.bashrc'."
 
-.PHONY: conda_config
-conda_config: anaconda
+.PHONY: conda-config
+conda-config: anaconda
 	@echo "Update ~/.condarc"
 	@"$(ANACONDA_HOME)/bin/conda" config --add envs_dirs $(CONDA_ENVS_DIR)
 	@"$(ANACONDA_HOME)/bin/conda" config --set ssl_verify true
@@ -271,8 +273,8 @@ conda_config: anaconda
 	@"$(ANACONDA_HOME)/bin/conda" config --append channels birdhouse
 	@"$(ANACONDA_HOME)/bin/conda" config --append channels conda-forge
 
-.PHONY: conda_env
-conda_env: anaconda conda_config
+.PHONY: conda-env
+conda-env: anaconda conda-config
 	@echo "Update conda environment $(CONDA_ENV) using $(ANACONDA_HOME)..."
 	@test -d "$(CONDA_ENV_PATH)" || "$(ANACONDA_HOME)/bin/conda" create -y -n "$(CONDA_ENV)" python=$(PYTHON_VERSION)
 	"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" setuptools=$(SETUPTOOLS_VERSION)
