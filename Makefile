@@ -81,6 +81,7 @@ clean-build:
 	@-rm -fr "$(CUR_DIR)/build/"
 	@-rm -fr "$(CUR_DIR)/dist/"
 	@-rm -fr "$(CUR_DIR)/.eggs/"
+	@-find . -type d -name '*.egg-info' -exec rm -fr {} +
 	@-find . -type f -name '*.egg-info' -exec rm -fr {} +
 	@-find . -type f -name '*.egg' -exec rm -f {} +
 
@@ -100,6 +101,7 @@ clean-test:
 	@-rm -fr "$(CUR_DIR)/.tox/"
 	@-rm -f "$(CUR_DIR)/.coverage"
 	@-rm -fr "$(CUR_DIR)/coverage/"
+	@-rm -fr "$(CUR_DIR)/.pytest_cache/"
 
 .PHONY: clean-ml
 clean-ml:
@@ -215,7 +217,7 @@ docker-info:
 
 # variant for docker that needs to pre-clone/update thelper and copy it inside (ssh access bypass)
 .PHONY: docker-install
-docker-build: --install-ml-base
+docker-build: install-api --install-ml-base
 
 .PHONY: docker-build
 docker-build: update-thelper
