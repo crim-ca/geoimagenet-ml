@@ -170,7 +170,7 @@ install: install-ml install-api
 .PHONY: install-api
 install-api: clean conda-env $(SRC_DIR)
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements.txt"'
-	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py install"'
+	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py" install'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
