@@ -27,7 +27,7 @@ COPY ./ ${GEOIMAGENET_ML_PROJECT_ROOT}/
 WORKDIR ${GEOIMAGENET_ML_PROJECT_ROOT}
 
 # install packages
-RUN make install-api docker-install -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make
+RUN make install-api install-ml-base -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make
 
 ENV DAEMON_OPTS --nodaemon
 

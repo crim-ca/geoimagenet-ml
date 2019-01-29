@@ -55,7 +55,6 @@ help:
 	@echo "coverage         check code coverage quickly with the default Python"
 	@echo "dist             distribution of release package"
 	@echo "docker-info      print the expected docker image tag"
-	@echo "docker-install   utility 'install' target for docker without 'update-thelper'"
 	@echo "docker-build     build the docker image with the current version"
 	@echo "docker-push      push the docker image with the current version"
 	@echo "docs             generate Sphinx HTML documentation, including API docs"
@@ -174,15 +173,16 @@ install-api: clean conda-env $(SRC_DIR)
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
-install-ml: update-thelper --install-ml-base
+install-ml: update-thelper install-ml-base
 	@echo "Installing ML packages..."
 
-.PHONY: --install-ml-base
---install-ml-base: clean conda-env thelper
+.PHONY: install-ml-base
+install-ml-base: clean conda-env $(CUR_DIR)/thelper
 	@echo "Installing thelper package..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
-	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" --file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
+	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" \
+		--file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-ml.txt"'
 	# @echo "Enforcing pip install using cloned repo"
 	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
@@ -202,7 +202,10 @@ update-thelper:
 	@test -d "$(CUR_DIR)/thelper" || echo "Retrieving thelper on '$(THELPER_BRANCH)' branch..."
 	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
 	@echo "Updating thelper..."
-	@bash -c 'cd "$(CUR_DIR)/thelper" && git fetch && git checkout -f "$(THELPER_BRANCH)" && git pull -f && cd "$(CUR_DIR)"'
+	@bash -c 'cd "$(CUR_DIR)/thelper" && \
+		git fetch && \
+		git checkout -f "$(THELPER_BRANCH)" && \
+		git pull -f && cd "$(CUR_DIR)"'
 
 .PHONY: version
 version:
@@ -217,13 +220,10 @@ docker-info:
 	@echo "Will be built, tagged and pushed as: \
 		$(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
-# variant for docker that needs to pre-clone/update thelper and copy it inside (ssh access bypass)
-.PHONY: docker-install
-docker-build: install-api --install-ml-base
-
 .PHONY: docker-build
 docker-build: update-thelper
-	@bash -c "docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+	@bash -c "docker build $(CUR_DIR) \
+		-t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: docker-push
 docker-push:
