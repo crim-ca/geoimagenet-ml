@@ -182,7 +182,8 @@ install-ml: update-thelper --install-ml-base
 	@echo "Installing thelper package..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
-	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" --file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
+	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" \
+		--file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-ml.txt"'
 	# @echo "Enforcing pip install using cloned repo"
 	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
@@ -202,7 +203,10 @@ update-thelper:
 	@test -d "$(CUR_DIR)/thelper" || echo "Retrieving thelper on '$(THELPER_BRANCH)' branch..."
 	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
 	@echo "Updating thelper..."
-	@bash -c 'cd "$(CUR_DIR)/thelper" && git fetch && git checkout -f "$(THELPER_BRANCH)" && git pull -f && cd "$(CUR_DIR)"'
+	@bash -c 'cd "$(CUR_DIR)/thelper" && \
+		git fetch && \
+		git checkout -f "$(THELPER_BRANCH)" && \
+		git pull -f && cd "$(CUR_DIR)"'
 
 .PHONY: version
 version:
@@ -223,7 +227,8 @@ docker-build: install-api --install-ml-base
 
 .PHONY: docker-build
 docker-build: update-thelper
-	@bash -c "docker build $(CUR_DIR) -t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+	@bash -c "docker build $(CUR_DIR) \
+		-t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: docker-push
 docker-push:
