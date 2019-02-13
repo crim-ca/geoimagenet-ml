@@ -78,6 +78,9 @@ DatasetsAPI = Service(
 DatasetAPI = Service(
     path=BaseAPI.path + 'datasets/' + DatasetVariableUUID,
     name='Dataset')
+DatasetDownloadAPI = Service(
+    path=BaseAPI.path + 'datasets/' + DatasetVariableUUID + '/download',
+    name='DatasetDownload')
 ModelsAPI = Service(
     path=BaseAPI.path + 'models',
     name='Models')
@@ -350,6 +353,20 @@ class Dataset_GET_ForbiddenResponseSchema(BaseResponseSchema):
 
 class Dataset_GET_NotFoundResponseSchema(BaseResponseSchema):
     description = "Dataset could not be found in db."
+    body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
+
+
+class DatasetDownloadEndpoint(BaseRequestSchema):
+    dataset_uuid = dataset_uuid
+
+
+class DatasetDownload_GET_OkResponseSchema(BaseResponseSchema):
+    description = "Dataset download successful."
+    body = BaseBodyResponseSchema(code=HTTPOk.code, description=description)
+
+
+class DatasetDownload_GET_NotFoundResponseSchema(BaseResponseSchema):
+    description = "Dataset download file could not be found."
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
@@ -838,6 +855,11 @@ Dataset_GET_responses = {
     '400': Dataset_GET_BadRequestResponseSchema(),
     '403': Dataset_GET_ForbiddenResponseSchema(),
     '404': Dataset_GET_NotFoundResponseSchema(),
+    '500': InternalServerErrorResponseSchema(),
+}
+DatasetDownload_GET_responses = {
+    '200': DatasetDownload_GET_OkResponseSchema(),
+    '404': DatasetDownload_GET_NotFoundResponseSchema(),
     '500': InternalServerErrorResponseSchema(),
 }
 Models_GET_responses = {

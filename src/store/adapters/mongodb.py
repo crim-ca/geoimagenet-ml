@@ -5,13 +5,18 @@ Store adapters to read/write data to from/to mongodb using pymongo.
 from geoimagenet_ml.store import exceptions as ex
 from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job
 from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
-from geoimagenet_ml.utils import islambda, get_sane_name
+from geoimagenet_ml.processes.types import PROCESS_WPS
+from geoimagenet_ml.processes.runners import ProcessRunner
+from geoimagenet_ml.utils import isclass, islambda, get_sane_name
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
 import pymongo
 import os
 import io
 import logging
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import Any, AnyProcess, Callable, Dict, Union, Type  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -40,7 +45,7 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
         try:
             result = self.collection.insert_one(dataset)
             if not result.acknowledged:
-                raise Exception()
+                raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.DatasetConflictError("Dataset `{}` conflicts with an existing dataset.".format(dataset.name))
         except Exception as exc:
@@ -114,7 +119,7 @@ class MongodbModelStore(ModelStore, MongodbStore):
                 raise ex.ModelInstanceError("Model data is expected to be a buffer or dict, got {!r}.".format(data))
             result = self.collection.insert_one(model)
             if not result.acknowledged:
-                raise Exception()
+                raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.ModelConflictError("Model `{}` conflicts with an existing model.".format(model.name))
         except Exception as exc:
@@ -174,13 +179,49 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         if default_processes:
             registered_processes = [process.identifier for process in self.list_processes()]
             for process in default_processes:
+                if isinstance(default_processes, dict):
+                    process = default_processes[process]
                 sane_name = self._get_process_id(process)
                 if sane_name not in registered_processes:
                     self._add_process(process)
 
+    @staticmethod
+    def _from_runner(runner_process, **extra_params):
+        # type: (Union[ProcessRunner, Type[ProcessRunner]], Any) -> Process
+        # NOTE:
+        #   don't instantiate process because of missing init arguments, use class properties only
+        process = {
+            'type': runner_process.type,
+            'identifier': runner_process.identifier,
+            'inputs': runner_process.inputs,
+            'abstract': runner_process.__doc__,
+            'package': None,
+            'reference': None,
+        }
+        process.update(**extra_params)
+        return Process(process)
+
+    @staticmethod
+    def _from_wps(wps_process, **extra_params):
+        # type: (Union[ProcessWPS, Type[ProcessWPS]], Any) -> Process
+        # NOTE:
+        #   instantiate process if it's only the type to populate json fields from defined metadata in init
+        if isclass(wps_process):
+            wps_process = wps_process()
+        process = wps_process.json
+        process.update({
+            'type': PROCESS_WPS,
+            'package': None,
+            'reference': None,
+        })
+        process.update(**extra_params)
+        return Process(process)
+
     def _add_process(self, process):
-        if isinstance(process, ProcessWPS):
-            new_process = Process.from_wps(process)
+        if isinstance(process, ProcessWPS) or (isclass(process) and issubclass(process, ProcessWPS)):
+            new_process = self._from_wps(process)
+        elif isinstance(process, ProcessRunner) or (isclass(process) and issubclass(process, ProcessRunner)):
+            new_process = self._from_runner(process)
         else:
             new_process = process
         if not isinstance(new_process, Process):
@@ -199,26 +240,33 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
 
     @staticmethod
     def _get_process_field(process, function_dict):
+        # type: (AnyProcess, Union[Callable, Dict[AnyProcess, Callable]]) -> Any
         """
         Takes a lambda expression or a dict of process-specific lambda expressions to retrieve a field.
         Validates that the passed process object is one of the supported types.
         """
-        if isinstance(process, Process):
-            if islambda(function_dict):
-                return function_dict()
-            return function_dict[Process]()
-        elif isinstance(process, ProcessWPS):
-            if islambda(function_dict):
-                return function_dict()
-            return function_dict[ProcessWPS]()
-        else:
-            raise ex.ProcessInstanceError("Unsupported process type `{}`".format(type(process)))
+        # allow using class instances or direct class references
+        process_type = process if isclass(process) else type(process)
+        if not issubclass(process_type, (Process, ProcessWPS, ProcessRunner)):
+            raise ex.ProcessInstanceError("Unsupported process type `{}`".format(process_type))
+        if islambda(function_dict):
+            return function_dict()
+        # fix keys to use base class of derived ones
+        if issubclass(process_type, ProcessWPS):
+            process_type = ProcessWPS
+        elif issubclass(process_type, ProcessRunner):
+            process_type = ProcessRunner
+        return function_dict[process_type]()
 
     def _get_process_id(self, process):
         return self._get_process_field(process, lambda: get_sane_name(process.identifier))
 
     def _get_process_type(self, process):
-        return self._get_process_field(process, {Process: lambda: process.type, ProcessWPS: lambda: 'wps'}).lower()
+        return self._get_process_field(process, {
+            Process: lambda: process.type,
+            ProcessWPS: lambda: PROCESS_WPS,
+            ProcessRunner: lambda: process.type,
+        }).lower()
 
     def save_process(self, process, overwrite=False, request=None):
         """
@@ -287,7 +335,7 @@ class MongodbJobStore(JobStore, MongodbStore):
         try:
             result = self.collection.insert_one(job)
             if not result.acknowledged:
-                raise Exception()
+                raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.JobConflictError("Job `{}` conflicts with an existing job.".format(job.uuid))
         except Exception as exc:

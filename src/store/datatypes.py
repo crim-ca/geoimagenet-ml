@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.typedefs import (   # noqa: F401
-    Any, AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict, TYPE_CHECKING
-)
 from geoimagenet_ml.utils import (
     now, localize_datetime,
     stringify_datetime,
@@ -34,10 +31,13 @@ import logging
 import uuid
 import six
 import os
-
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # noinspection PyPackageRequirements
     from owslib.wps import WPSException     # noqa: F401
+    from geoimagenet_ml.typedefs import (   # noqa: F401
+        AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict
+    )
 
 
 class Base(dict):
@@ -213,11 +213,19 @@ class Process(Base):
         # use both 'id' and 'identifier' to support any call (WPS and recurrent 'id')
         if 'identifier' not in self:
             raise TypeError("Process `identifier` is required.")
+        if 'type' not in self:
+            raise TypeError("Process `type` is required.")
 
     @property
     def identifier(self):
         # type: (...) -> AnyStr
         return self['identifier']
+
+    # wps, workflow, etc.
+    @property
+    def type(self):
+        # type: (...) -> AnyStr
+        return self['type']
 
     @property
     def title(self):
@@ -271,12 +279,6 @@ class Process(Base):
     def executeEndpoint(self):
         # type: (...) -> AnyStr
         return self.get('executeEndpoint')
-
-    # wps, workflow, etc.
-    @property
-    def type(self):
-        # type: (...) -> AnyStr
-        return self.get('type', PROCESS_WPS)
 
     @property
     def package(self):
@@ -361,24 +363,13 @@ class Process(Base):
             'executeEndpoint': self.executeEndpoint,
         }
 
-    # noinspection PyUnresolvedReferences
-    @staticmethod
-    def from_wps(wps_process, **extra_params):
-        # type: (ProcessWPS, Any) -> Process
-        assert isinstance(wps_process, ProcessWPS)
-        process = wps_process.json
-        process.update({'type': wps_process.identifier, 'package': None, 'reference': None})
-        process.update(**extra_params)
-        return Process(process)
-
     def wps(self):
         # type: (...) -> ProcessWPS
-        process_key = self.type
-        if self.type == PROCESS_WPS:
-            process_key = self.identifier
-        # TODO: handle other types here as needed
+        process_key = self.identifier
+        if self.type != PROCESS_WPS:
+            raise ProcessInstanceError("Invalid WPS process call for `{}` of type `{}`.".format(process_key, self.type))
         if process_key not in process_mapping:
-            ProcessInstanceError("Unknown process `{}` in mapping".format(process_key))
+            raise ProcessInstanceError("Unknown process `{}` in mapping".format(process_key))
         kwargs = self.params_wps
         return process_mapping[process_key](**kwargs)
 

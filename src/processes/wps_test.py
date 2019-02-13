@@ -1,10 +1,21 @@
+from geoimagenet_ml.processes.base import ProcessBase
+from geoimagenet_ml.utils import classproperty
 from pywps import Process, LiteralInput, LiteralOutput
 import os
 import logging
 LOGGER = logging.getLogger(__name__)
 
 
-class HelloWPS(Process):
+class HelloWPS(ProcessBase, Process):
+    @classproperty
+    def identifier(self):
+        return 'hello'
+
+    @classproperty
+    def type(self):
+        from geoimagenet_ml.processes.types import PROCESS_WPS
+        return PROCESS_WPS
+
     def __init__(self):
         inputs = [
             LiteralInput('name', 'Your name', data_type='string')]
@@ -14,7 +25,7 @@ class HelloWPS(Process):
 
         super(HelloWPS, self).__init__(
             self._handler,
-            identifier='hello',
+            identifier=self.identifier,
             title='Says Hello',
             version='1.4',
             inputs=inputs,

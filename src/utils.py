@@ -1,4 +1,3 @@
-from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union, SettingDict  # noqa: F401
 from geoimagenet_ml.processes.status import map_status
 from six.moves.configparser import ConfigParser
 from datetime import datetime
@@ -9,6 +8,9 @@ import pytz
 import types
 import six
 import re
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union, SettingDict  # noqa: F401
 
 
 def get_base_url(settings):
@@ -160,3 +162,25 @@ def get_job_log_msg(status, message, progress=0, duration=None):
 def get_error_fmt():
     # type: (...) -> AnyStr
     return '{0.text} - code={0.code} - locator={0.locator}'
+
+
+class classproperty(object):
+    """
+    Decorator allowing `@property`-like call to classes.
+
+    Example ::
+
+        >> class Foo(object):
+               @classproperty
+               def bar(cls):
+                   return 'bar from Foo'
+
+        >> Foo.bar
+        'bar from Foo'
+
+    """
+    def __init__(self, getter):
+        self.getter = getter
+
+    def __get__(self, instance, owner):
+        return self.getter(owner)

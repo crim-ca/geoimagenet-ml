@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from geoimagenet_ml.processes.types import process_mapping
 from geoimagenet_ml.store.interfaces import DatabaseInterface
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from geoimagenet_ml.store.adapters.mongodb import (
@@ -30,7 +31,8 @@ class MongoDatabase(DatabaseInterface):
 
     @property
     def processes_store(self):
-        return MongodbProcessStore(collection=self._database.processes, settings=self._settings)
+        return MongodbProcessStore(collection=self._database.processes, settings=self._settings,
+                                   default_processes=process_mapping)
 
     @property
     def jobs_store(self):

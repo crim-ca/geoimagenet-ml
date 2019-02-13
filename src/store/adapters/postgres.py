@@ -8,6 +8,7 @@ from geoimagenet_ml.store import exceptions as ex
 
 
 class PostgresProcessStore(ProcessStore):
+    db = None
 
     def save_process(self, process, overwrite=True, request=None):
         try:
@@ -15,14 +16,14 @@ class PostgresProcessStore(ProcessStore):
         except Exception:
             raise ex.ProcessInstanceError()
         try:
-            process_check = models.Process.by_process_name(process_name, db_session=request.db)
+            process_check = models.Process.by_process_name(process_name, db_session=self.db)
         except Exception:
             raise ex.ProcessNotFoundError()
         if process_check is not None:
             raise ex.ProcessConflictError()
         try:
-            request.db.add(models.Process(name=process_name))
-            new_process = models.Process.by_process_name(process_name, db_session=request.db)
+            self.db.add(models.Process(name=process_name))
+            new_process = models.Process.by_process_name(process_name, db_session=self.db)
         except Exception:
             raise ex.ProcessRegistrationError()
         return new_process

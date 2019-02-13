@@ -2,19 +2,18 @@
 # coding: utf-8
 
 from geoimagenet_ml.processes.wps_test import HelloWPS
+from geoimagenet_ml.processes.runners import ProcessRunnerModelTester, ProcessRunnerBatchCreator
 
 PROCESS_WPS = 'wps'
-PROCESS_ML = 'ml'
-
 
 process_mapping = {
-    HelloWPS.__name__: HelloWPS
+    HelloWPS.identifier: HelloWPS,
+    ProcessRunnerModelTester.identifier: ProcessRunnerModelTester,
+    ProcessRunnerBatchCreator.identifier: ProcessRunnerBatchCreator,
 }
 
+# noinspection PyTypeChecker
 process_categories = frozenset(
     list(process_mapping.keys()) +
-    list([
-        PROCESS_WPS,
-        PROCESS_ML,
-    ])
+    list([PROCESS_WPS])
 )

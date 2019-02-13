@@ -16,12 +16,12 @@ from pyramid.httpexceptions import (
 @s.ProcessesAPI.get(tags=[s.ProcessesTag], response_schemas=s.Processes_GET_responses)
 def get_processes_view(request):
     """Get registered processes information."""
-    processes_list = ex.evaluate_call(lambda: database_factory(request.registry)
-                                      .processes_store.list_processes(request=request),
-                                      fallback=lambda: request.db.rollback(), httpError=HTTPForbidden, request=request,
+    db = database_factory(request.registry)
+    processes_list = ex.evaluate_call(lambda: db.processes_store.list_processes(request=request),
+                                      fallback=lambda: db.rollback(), httpError=HTTPForbidden, request=request,
                                       msgOnFail=s.Processes_GET_ForbiddenResponseSchema.description)
     processes_json = ex.evaluate_call(lambda: [p.summary() for p in processes_list],
-                                      fallback=lambda: request.db.rollback(), httpError=HTTPInternalServerError,
+                                      fallback=lambda: db.rollback(), httpError=HTTPInternalServerError,
                                       request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'processes': processes_json},
                          detail=s.Processes_GET_OkResponseSchema.description, request=request)
@@ -50,12 +50,13 @@ def get_process_view(request):
 def get_process_jobs_view(request):
     """Get registered process jobs."""
     process = get_process(request)
-    job_list = ex.evaluate_call(lambda: database_factory(request.registry).jobs_store.list_jobs(request=request),
-                                fallback=lambda: request.db.rollback(), httpError=HTTPForbidden, request=request,
+    db = database_factory(request.registry)
+    job_list = ex.evaluate_call(lambda: db.jobs_store.list_jobs(request=request),
+                                fallback=lambda: db.rollback(), httpError=HTTPForbidden, request=request,
                                 msgOnFail=s.ProcessJobs_GET_ForbiddenResponseSchema.description)
     process_jobs_json = ex.evaluate_call(lambda: [j.summary() for j in
                                                   filter(lambda j: j.process_uuid == process.uuid, job_list)],
-                                         fallback=lambda: request.db.rollback(), httpError=HTTPInternalServerError,
+                                         fallback=lambda: db.rollback(), httpError=HTTPInternalServerError,
                                          request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'jobs': process_jobs_json},
                          detail=s.ProcessJobs_GET_OkResponseSchema.description, request=request)
