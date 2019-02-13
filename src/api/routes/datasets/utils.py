@@ -5,10 +5,12 @@ from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict
+from pyramid.request import Request
 import six
 
 
 def create_dataset(request):
+    # type: (Request) -> Dataset
     dataset_name = r.get_multiformat_post(request, 'dataset_name')
     dataset_path = r.get_multiformat_post(request, 'dataset_path')
     dataset_type = r.get_multiformat_post(request, 'dataset_type')
@@ -44,6 +46,7 @@ def create_dataset(request):
 
 
 def get_dataset(request):
+    # type: (Request) -> Dataset
     dataset_uuid = request.matchdict.get('dataset_uuid')
     ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='dataset_uuid',
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
