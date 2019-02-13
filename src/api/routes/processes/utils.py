@@ -103,6 +103,17 @@ def get_job(request):
     return job
 
 
+def get_job_status_location(request, process, job):
+    # type: (Request, Process, Job) -> AnyStr
+    """Obtains the full URL of the job status location using the process ID variant specified by the request."""
+    if request.path.startswith(s.ProcessJobsAPI.path.replace(s.ProcessVariableUUID, process.identifier)):
+        proc_id = process.identifier
+    else:
+        proc_id = process.uuid
+    proc_job_path = s.ProcessJobAPI.path.replace(s.ProcessVariableUUID, proc_id).replace(s.JobVariableUUID, job.uuid)
+    return '{base}{path}'.format(base=get_base_url(request.registry.settings), path=proc_job_path)
+
+
 def create_process_job(request, process):
     # type: (Request, Process) -> HTTPCreated
     """Creates a job for the requested process and dispatches it to the celery runner."""
@@ -143,12 +154,7 @@ def create_process_job(request, process):
 
     LOGGER.debug("Celery task `{}` for `{!s}`.".format(result.id, job))
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
-    job.status_location = '{base_url}{job_path}'.format(
-        base_url=get_base_url(request.registry.settings),
-        job_path=s.ProcessJobAPI.path
-                  .replace(s.ProcessVariableUUID, job.process_uuid)
-                  .replace(s.JobVariableUUID, job.uuid)
-    )
+    job.status_location = get_job_status_location(request, process, job)
     job = jobs_store.update_job(job)
     body_data = {
         'jobID': job.uuid,
@@ -161,6 +167,7 @@ def create_process_job(request, process):
 @app.task(bind=True)
 def process_job_runner(task, job_uuid, runner_key):
     # type: (Task, UUID, AnyStr) -> AnyStr
+    LOGGER.debug('Celery task for job `{}` [{}] received.'.format(job_uuid, runner_key))
     registry = app.conf['PYRAMID_REGISTRY']
     runner = process_mapping[runner_key]
     return runner(task, registry, task.request, job_uuid)()

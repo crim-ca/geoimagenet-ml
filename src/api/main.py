@@ -23,7 +23,7 @@ def main(global_config=None, **settings):
 
     protocol = os.getenv('GEOIMAGENET_ML_API_PROTOCOL', 'http')
     hostname = os.getenv('GEOIMAGENET_ML_API_HOSTNAME') or os.getenv('HOSTNAME')
-    port = os.getenv('GEOIMAGENET_ML_API_PORT', '')
+    port = os.getenv('GEOIMAGENET_ML_API_PORT')
     url = os.getenv('GEOIMAGENET_ML_API_URL')
     if url:
         settings['geoimagenet_ml.api.url'] = url

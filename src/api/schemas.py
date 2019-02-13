@@ -50,7 +50,7 @@ ProcessesTag = 'Processes'
 # Generic Endpoint parts
 dataset_uuid = colander.SchemaNode(colander.String(), description="Dataset UUID.", title="Dataset UUID.")
 model_uuid = colander.SchemaNode(colander.String(), description="Model UUID.", title="Model UUID.")
-process_uuid = colander.SchemaNode(colander.String(), description="Process UUID.", title="Process UUID.")
+process_uuid = colander.SchemaNode(colander.String(), description="Process UUID.", title="Process UUID or Identifier.")
 job_uuid = colander.SchemaNode(colander.String(), description="Job UUID.", title="Job UUID.")
 
 # Route variables

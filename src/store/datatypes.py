@@ -746,8 +746,7 @@ class Job(Base):
 
     def __str__(self):
         # type: (...) -> AnyStr
-        p = '{},{}'.format(self.service_uuid, self.process_uuid) if self.service_uuid else str(self.process_uuid)
-        return 'Job <{}> [{}]'.format(self.uuid, p)
+        return 'Job <{}>'.format(self.uuid)
 
     def __repr__(self):
         # type: (...) -> AnyStr

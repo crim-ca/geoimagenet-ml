@@ -5,13 +5,15 @@ from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
 )
 from abc import abstractmethod
+from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
 import os
+import shutil
 import numpy
 import multiprocessing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Error, Number, Dict, List, Optional, UUID  # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, Error, Number, Dict, List, Optional, UUID, Union  # noqa: F401
     from geoimagenet_ml.store.datatypes import Job
     # noinspection PyProtectedMember
     from celery import Task                 # noqa: F401
@@ -37,14 +39,25 @@ class ProcessRunner(ProcessBase):
         # type: (List[Dict[AnyStr, Any]]) -> List[AnyStr]
         """:returns: list of missing input IDs if any. Empty list returned if all required inputs are found."""
         # noinspection PyTypeChecker
-        required_input_ids = [i['id'] for i in cls.inputs]
+        required_input_ids = [i['id'] for i in cls.inputs if i.get('minOccurs', 1) > 1]
         input_ids = [i['id'] for i in inputs]
         return list(set(required_input_ids) - set(input_ids))
 
-    @classmethod
-    def get_input(cls, input_id):
-        # type: (AnyStr) -> List[Any]
-        return [job_input['value'] for job_input in self.job.inputs if job_input['id'] == input_id]
+    def get_input(self, input_id, default=None, one=False):
+        # type: (AnyStr, Optional[Any], Optional[bool]) -> Union[List[Any], Any]
+        """:returns: flattened list of input values matching specified :param:`input_id`."""
+        inputs = [job_input['value'] for job_input in self.job.inputs if job_input['id'] == input_id]
+        flattened_inputs = []
+        for i in inputs:
+            if isinstance(i, list):
+                flattened_inputs.extend(i)
+            else:
+                flattened_inputs.append(i)
+        if not flattened_inputs and default is not None:
+            flattened_inputs = [default]
+        if one:
+            return flattened_inputs[0]
+        return flattened_inputs
 
     def __init__(self, task, registry, request, job_uuid):
         # type: (Task, Registry, Request, UUID) -> None
@@ -95,13 +108,13 @@ class ProcessRunnerModelTester(ProcessRunner):
         return [
             {
                 'id': 'dataset',
-                'formats': [{'mimeType': 'text/plain', 'default': False}],
+                'formats': [{'mimeType': 'text/plain'}],
                 'minOccurs': 1,
                 'maxOccurs': 1,
             },
             {
                 'id': 'model',
-                'formats': [{'mimeType': 'text/plain', 'default': False}],
+                'formats': [{'mimeType': 'text/plain'}],
                 'minOccurs': 1,
                 'maxOccurs': 1,
             }
@@ -218,19 +231,28 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             {
                 'id': 'name',
                 'abstract': 'Name to be applied to the batch (dataset) to be created.',
-                'formats': [{'mimeType': 'text/plain', 'default': False}],
+                'formats': [{'mimeType': 'text/plain'}],
                 'minOccurs': 1,
                 'maxOccurs': 1,
             },
             {
                 'id': 'shapefiles',
                 'abstract': 'List of shapefiles with annotated patches geo-locations.',
+                'formats': [{'mimeType': 'text/plain'}],
                 'minOccurs': 1,
+                'maxOccurs': None,
             },
             {
                 'id': 'images',
                 'abstract': 'List of images where to extract patches from.',
+                'formats': [{'mimeType': 'text/plain'}],
                 'minOccurs': 1,
+                'maxOccurs': None,
+            },
+            {
+                'id': 'overwrite',
+                'abstract': 'Overwrite an existing batch if it already exists.',
+                'formats': [{'mimeType': 'text/plain', 'default': False}],
             }
         ]
 
@@ -245,15 +267,18 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset_root = str(self.registry.settings['geoimagenet_ml.api.datasets_path'])
             if not os.path.isdir(dataset_root):
                 raise RuntimeError("cannot find datasets root path")
-            if not len(dataset_name):
+            if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
                 raise RuntimeError("invalid batch dataset name")
             dataset_path = os.path.join(dataset_root, dataset_name)
+            dataset_overwrite = asbool(self.get_input('overwrite', default=False, one=True))
+            if dataset_overwrite and os.path.isdir(dataset_path):
+                shutil.rmtree(dataset_path)
             os.makedirs(dataset_path, exist_ok=False, mode=0o644)
             dataset = Dataset(name=dataset_name, path=dataset_path, type='patches')
 
             self.update_job_status(STATUS_RUNNING, "obtaining references from process job inputs", 2)
-            shapefiles = list().extend(s for s in self.get_input('shapefiles'))
-            images = list().extend(i for i in self.get_input('images'))
+            shapefiles = self.get_input('shapefiles')
+            images = self.get_input('images')
 
             self.update_job_status(STATUS_RUNNING, "extracting patches for batch creation", 3)
             # TODO: IMPLEMENT ME!!
@@ -266,7 +291,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
         except Exception as task_exc:
             exception_class = "{}.{}".format(type(task_exc).__module__, type(task_exc).__name__)
             err_msg = "{0}: {1}".format(exception_class, str(task_exc))
-            message = "failed to run {!s} [{!s}].".format(self.job, err_msg)
+            message = "failed execution [{!s}].".format(err_msg)
             self.update_job_status(STATUS_FAILED, message, errors=task_exc)
         finally:
             self.update_job_status(self.job.status, "done")
