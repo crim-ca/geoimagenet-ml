@@ -37,6 +37,12 @@ def main(global_config=None, **settings):
         api_url_template = '{protocol}://{hostname}{port}'
         settings['geoimagenet_ml.api.url'] = api_url_template.format(protocol=protocol, hostname=hostname, port=port)
 
+    # setup logger override level
+    log_lvl = os.getenv('GEOIMAGENET_ML_LOG_LEVEL')
+    if log_lvl:
+        root_logger = logging.getLogger('geoimagenet_ml')
+        root_logger.setLevel(log_lvl)
+
     config = Configurator(settings=settings)
     config.include('geoimagenet_ml.api')
     config.set_default_permission(NO_PERMISSION_REQUIRED)

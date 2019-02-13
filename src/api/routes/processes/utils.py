@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from celery import Task                                     # noqa: F401
     from pyramid.request import Request                         # noqa: F401
     from geoimagenet_ml.typedefs import AnyStr, UUID            # noqa: F401
-    from geoimagenet_ml.processes.runners import ProcessRunner  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -130,7 +129,8 @@ def create_process_job(request, process):
                                  .format(process.identifier, process.type))
 
     # validation for specific processes, create job and dispatch it to corresponding runner
-    runner = process_mapping[process.identifier]
+    runner_key = process.identifier
+    runner = process_mapping[runner_key]
     missing_inputs = runner.check_inputs(job_inputs)
     if missing_inputs:
         raise HTTPBadRequest("Missing inputs '{}' for process of type '{}'.".format(missing_inputs, process.type))
@@ -138,7 +138,8 @@ def create_process_job(request, process):
     jobs_store = database_factory(request.registry).jobs_store
     job = Job(process_uuid=process.uuid, inputs=job_inputs)
     job = jobs_store.save_job(job)
-    result = process_job_runner.delay(job_uuid=job.uuid, runner=runner)
+    LOGGER.debug("Queuing new celery task for job `{}`.".format(job.uuid))
+    result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)
 
     LOGGER.debug("Celery task `{}` for job `{}`.".format(result.id, job.uuid))
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
@@ -158,7 +159,8 @@ def create_process_job(request, process):
 
 
 @app.task(bind=True)
-def process_job_runner(task, job_uuid, runner):
-    # type: (Task, UUID, ProcessRunner) -> AnyStr
+def process_job_runner(task, job_uuid, runner_key):
+    # type: (Task, UUID, AnyStr) -> AnyStr
     registry = app.conf['PYRAMID_REGISTRY']
+    runner = process_mapping[runner_key]
     return runner(task, registry, task.request, job_uuid)()
