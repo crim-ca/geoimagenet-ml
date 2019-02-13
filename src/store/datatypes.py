@@ -746,10 +746,11 @@ class Job(Base):
 
     def __str__(self):
         # type: (...) -> AnyStr
-        return 'Job <{}>'.format(self.uuid)
+        p = '{},{}'.format(self.service_uuid, self.process_uuid) if self.service_uuid else str(self.process_uuid)
+        return 'Job <{}> [{}]'.format(self.uuid, p)
 
     def __repr__(self):
         # type: (...) -> AnyStr
         cls = type(self)
-        repr_ = dict.__repr__(self)
-        return '{0}.{1}({2})'.format(cls.__module__, cls.__name__, repr_)
+        rep = dict.__repr__(self)
+        return '{0}.{1} ({2})'.format(cls.__module__, cls.__name__, rep)

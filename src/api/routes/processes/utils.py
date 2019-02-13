@@ -138,10 +138,10 @@ def create_process_job(request, process):
     jobs_store = database_factory(request.registry).jobs_store
     job = Job(process_uuid=process.uuid, inputs=job_inputs)
     job = jobs_store.save_job(job)
-    LOGGER.debug("Queuing new celery task for job `{}`.".format(job.uuid))
+    LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
     result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)
 
-    LOGGER.debug("Celery task `{}` for job `{}`.".format(result.id, job.uuid))
+    LOGGER.debug("Celery task `{}` for `{!s}`.".format(result.id, job))
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
     job.status_location = '{base_url}{job_path}'.format(
         base_url=get_base_url(request.registry.settings),

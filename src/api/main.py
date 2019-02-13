@@ -44,7 +44,7 @@ def main(global_config=None, **settings):
         root_logger.setLevel(log_lvl)
 
     config = Configurator(settings=settings)
-    config.include('geoimagenet_ml.api')
+    config.include('geoimagenet_ml')
     config.set_default_permission(NO_PERMISSION_REQUIRED)
 
     wsgi_app = config.make_wsgi_app()
