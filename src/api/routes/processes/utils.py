@@ -6,7 +6,7 @@ from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
 from geoimagenet_ml.processes.status import map_status
-from geoimagenet_ml.utils import get_base_url
+from geoimagenet_ml.utils import get_base_url, is_uuid
 from pyramid.httpexceptions import (
     HTTPCreated,
     HTTPBadRequest,
@@ -66,7 +66,13 @@ def get_process(request):
                     msgOnFail=s.Process_GET_BadRequestResponseSchema.description, request=request)
     process = None
     try:
-        process = database_factory(request.registry).processes_store.fetch_by_uuid(process_uuid)
+        store = database_factory(request.registry).processes_store
+        if is_uuid(process_uuid):
+            LOGGER.debug("fetching process by uuid '{}'".format(process_uuid))
+            process = store.fetch_by_uuid(process_uuid)
+        else:
+            LOGGER.debug("fetching process by identifier '{}'".format(process_uuid))
+            process = store.fetch_by_identifier(process_uuid)
         if not process:
             raise exc.ProcessNotFoundError
     except exc.ProcessInstanceError:

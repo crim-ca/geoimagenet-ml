@@ -6,6 +6,7 @@ from dateutil.parser import parse
 import time
 import pytz
 import types
+import uuid
 import six
 import re
 from typing import TYPE_CHECKING
@@ -59,28 +60,40 @@ def settings_from_ini(config_ini_file_path, ini_main_section_name):
 
 def islambda(func):
     # type: (Any) -> bool
-    """Evaluate an object for lambda type."""
+    """Evaluates :param:`func` for lambda type."""
     return isinstance(func, types.LambdaType) and func.__name__ == (lambda: None).__name__
 
 
 def isclass(obj):
     # type: (Any) -> bool
-    """Evaluate an object for class type (ie: class definition, not an instance nor any other type)."""
+    """Evaluates :param:`obj` for class type (ie: class definition, not an instance nor any other type)."""
     return isinstance(obj, (type, six.class_types))
 
 
-def get_sane_name(name, minlen=3, maxlen=None, assert_invalid=True, replace_invalid=False):
+def is_uuid(item, version=4):
+    # type: (Any, Optional[int]) -> bool
+    """Evaluates if :param:`item` is of type UUID, or a string representing one."""
+    if isinstance(item, uuid.UUID) and item.version == version:
+        return True
+    try:
+        uuid_item = uuid.UUID(item, version=version)
+    except ValueError:
+        return False
+    return str(uuid_item) == item
+
+
+def get_sane_name(name, min_len=3, max_len=None, assert_invalid=True, replace_invalid=False):
     # type: (AnyStr, Optional[int], Optional[int], Optional[bool], Optional[bool]) -> Union[AnyStr, None]
     if assert_invalid:
-        assert_sane_name(name, minlen, maxlen)
+        assert_sane_name(name, min_len, max_len)
     if name is None:
         return None
     name = name.strip()
-    if len(name) < minlen:
+    if len(name) < min_len:
         return None
     if replace_invalid:
-        maxlen = maxlen or 25
-        name = re.sub("[^a-z]", "_", name.lower()[:maxlen])
+        max_len = max_len or 25
+        name = re.sub("[^a-z]", "_", name.lower()[:max_len])
     return name
 
 
