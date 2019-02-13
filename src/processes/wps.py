@@ -2,7 +2,6 @@
 pywps 4.x wrapper
 """
 
-from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict  # noqa: F401
 from geoimagenet_ml.processes.types import PROCESS_WPS
 from geoimagenet_ml.utils import get_base_url
 from pyramid.wsgi import wsgiapp2
@@ -19,6 +18,9 @@ import os
 import six
 import logging
 import warnings
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 # can be overridden with 'settings.wps-cfg'

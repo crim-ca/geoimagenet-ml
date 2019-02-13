@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.utils import islambda, isclass
-from geoimagenet_ml.typedefs import JsonDict  # noqa: F401
 from pyramid.httpexceptions import (
     HTTPError,
     HTTPException,
@@ -17,6 +16,9 @@ from typing import Any, AnyStr, Dict, List, Optional, Tuple, Union  # noqa: F401
 import traceback
 import json
 import six
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import JsonDict, OptionDict  # noqa: F401
 
 # control variables to avoid infinite recursion in case of
 # major programming error to avoid application hanging

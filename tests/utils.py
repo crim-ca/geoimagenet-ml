@@ -1,6 +1,5 @@
 from geoimagenet_ml import __meta__, GEOIMAGENET_ML_CONFIG_INI
 from geoimagenet_ml.utils import settings_from_ini
-from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -16,6 +15,10 @@ import requests
 import pyramid
 # noinspection PyPackageRequirements
 import pyramid.testing
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict   # noqa: F401
 
 json_headers = [('Content-Type', 'application/json')]
 

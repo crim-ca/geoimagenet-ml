@@ -8,11 +8,12 @@ from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInter
 @s.ModelsAPI.get(tags=[s.ModelsTag], response_schemas=s.Models_GET_responses)
 def get_models_view(request):
     """Get registered models."""
-    models_list = ex.evaluate_call(lambda: database_factory(request.registry).models_store.list_models(),
-                                   fallback=lambda: request.db.rollback(), httpError=HTTPForbidden, request=request,
+    db = database_factory(request.registry)
+    models_list = ex.evaluate_call(lambda: db.models_store.list_models(),
+                                   fallback=lambda: db.rollback(), httpError=HTTPForbidden, request=request,
                                    msgOnFail=s.Models_GET_ForbiddenResponseSchema.description)
     models_json = ex.evaluate_call(lambda: [m.summary() for m in models_list],
-                                   fallback=lambda: request.db.rollback(), httpError=HTTPInternalServerError,
+                                   fallback=lambda: db.rollback(), httpError=HTTPInternalServerError,
                                    request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'models': models_json},
                          detail=s.Models_GET_OkResponseSchema.description, request=request)
@@ -38,7 +39,7 @@ def get_model_view(request):
 @s.ModelDownloadAPI.get(tags=[s.ModelsTag],
                         schema=s.ModelDownloadEndpoint(), response_schemas=s.ModelDownload_GET_responses)
 def download_model_view(request):
-    """Get registered model information."""
+    """Download registered model file."""
     model = get_model(request)
     response = FileResponse(model.file, content_type="application/octet-stream")
     response.content_disposition = "attachment; filename={}{}".format(model.uuid, model.format)

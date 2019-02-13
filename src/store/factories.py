@@ -4,19 +4,18 @@
 from geoimagenet_ml.store.databases.memory import MemoryDatabase
 from geoimagenet_ml.store.databases.mongodb import MongoDatabase
 from geoimagenet_ml.store.databases.postgres import PostgresDatabase
-from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE, POSTGRES_TYPE   # noqa: F401
-from geoimagenet_ml.typedefs import SettingDict                                             # noqa: F401
-from typing import AnyStr, Union, TYPE_CHECKING                                             # noqa: F401
+from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE, POSTGRES_TYPE
 from sqlalchemy.orm.session import Session
 from pyramid.registry import Registry
 import pymongo
 import os
 import time
 import logging
-logger = logging.getLogger(__name__)
-
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.interfaces import DatabaseInterface                           # noqa: F401
+    from geoimagenet_ml.typedefs import AnyStr, Union, SettingDict  # noqa: F401
+    from geoimagenet_ml.store.interfaces import DatabaseInterface   # noqa: F401
+logger = logging.getLogger(__name__)
 
 
 def get_database_type(specification):
