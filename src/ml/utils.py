@@ -45,37 +45,6 @@ GDAL2NUMPY_TYPE_CONV = {
     osgeo.gdal.GDT_CFloat64: np.complex128
 }
 
-# noinspection SpellCheckingInspection
-SPECIES_MAP = {
-    # BARKNET_CODE: (LATIN, FRENCH, ENGLISH, NRCAN_CODE)
-    "BOJ": ("betula alleghaniensis", "bouleau jaune", "yellow birch", "By"),
-    "BOP": ("betula papyrifera", "bouleau a papier", "white birch", "Bw"),
-    "CHR": ("quercus rubra", "chene rouge", "red oak", "Or"),
-    "EPB": ("picea glauca", "epinette blanche", "white spruce", "Sw"),
-    "EPN": ("picea mariana", "epinette noire", "black spruce", "Sb"),
-    "EPO": ("picea abies", "epinette communne", "norway spruce", None),
-    "EPR": ("picea rubens", "epinette rouge", "red spruce", "Sr"),
-    "ERB": ("acer platanoides", "erable plane", "norway maple", None),
-    "ERR": ("acer rubrum", "erable rouge", "red maple", "Mr"),
-    "ERS": ("acer saccharum", "erable a sucre", "sugar maple", "Mh"),
-    "FRA": ("fraxinus americana", "frene blanc", "white ash", "Aw"),
-    "HEG": ("fagus grandifolia", "hetre a grandes feuilles", "american beech", "Be"),
-    "MEL": ("larix laricina", "meleze laricin", "tamarack", "La"),
-    "ORA": ("ulmus americana", "orme d'amerique", "american elm", None),
-    "OSV": ("ostrya virginiana", "ostryer de virginie", "ironwood", "Id"),
-    "PEG": ("populus grandidentata", "peuplier a grandes dents", "large-tooth aspen", "Alt"),
-    "PET": ("populus tremuloides", "peuplier faux-tremble", "trembling aspen", "At"),  # also Pt?
-    "PIB": ("pinus strobus", "pin blanc", "white pine", "Pw"),
-    "PID": ("pinus rigida", "pin rigide", "pitch pine", None),
-    "PIR": ("pinus resinosa", "pin rouge", "red pine", "Pr"),
-    "PRU": ("tsuga canadensis", "pruche du canada", "eastern hemlock", "He"),
-    "SAB": ("abies balsamea", "sapin baumier", "balsam fir", "Bf"),
-    "THO": ("thuja occidentalis", "thuya occidental", "eastern white cedar", "Ce"),
-    # missing from barknet: ("pinus banksiana", "Pj")
-    # missing from nrcan: ("picea abies", "EPO"), ("acer platanoides", "ERB"), ("ulmus americana", "ORA"), ("pinus rigida", "PID")  # noqa E501
-    # unknown from nrcan: "Ba", "Abl", "Fb", "Pb", "Ps", "Lt", "XP", "Iw", "Ow"
-}
-
 
 def get_pxcoord(geotransform, x, y):
     inv_transform = ~affine.Affine.from_gdal(*geotransform)
@@ -134,9 +103,54 @@ def percent(count, total):
     return int(count * 100 // total)
 
 
-def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=None, count_offset=None,
-                    uncertain_flags=None, roi=None, target_category=None, target_id=None, category_counter=None,
-                    only_polygon=True):
+def parse_geojson(geojson, srs_destination, roi=None):
+    if geojson is None or not isinstance(geojson, dict):
+        raise AssertionError("unexpected geojson type")
+    if "features" not in geojson or not isinstance(geojson["features"], list):
+        raise AssertionError("unexpected geojson feature list type")
+    features = geojson["features"]
+    logger.info("total geojson feature count: %d" % len(features))
+    if "crs" not in geojson or geojson["crs"]["type"] != "EPSG":
+        raise AssertionError("geojson is missing its crs/epsg fields")
+    srs_origin = ogr.osr.SpatialReference()
+    srs_origin.ImportFromEPSG(geojson["crs"]["properties"]["code"])
+    shapes_srs_transform = None
+    if not srs_origin.IsSame(srs_destination):
+        shapes_srs_transform = osr.CoordinateTransformation(srs_origin, srs_destination)
+    kept_features = []
+    logger.debug("scanning parsed features for out-of-bounds cases...")
+    for feature in features:
+        raw_geometry = feature["geometry"]
+        if raw_geometry["type"] == "Polygon":
+            coords = raw_geometry["coordinates"]
+            if not isinstance(coords, list):
+                raise AssertionError("unexpected poly coords type")
+            if len(coords) != 1:
+                raise AssertionError("unexpected coords embedding; should be list-of-list-of-points w/ unique ring")
+            if not all([isinstance(c, list) and len(c) == 2 for c in coords[0]]) or len(coords[0]) < 4:
+                raise AssertionError("unexpected poly coord format")
+            poly = shapely.geometry.Polygon(coords[0])
+            if shapes_srs_transform is not None:
+                ogr_geometry = ogr.CreateGeometryFromWkb(poly.wkb)
+                ogr_geometry.Transform(shapes_srs_transform)
+                poly = shapely.wkt.loads(ogr_geometry.ExportToWkt())
+            feature["geometry"] = poly
+        else:
+            raise AssertionError("unhandled raw geometry type (%s)" % raw_geometry["type"])
+        if roi is not None and roi and roi.contains(feature["geometry"]):
+            kept_features.append(feature)
+    logger.info("kept features: %d (%d%%)" % (len(kept_features), int(len(kept_features) * 100 // len(features))))
+    features = kept_features
+    category_counter = collections.Counter()
+    for feature in features:
+        category_counter[feature["properties"]["taxonomy_class_id"]] += 1
+    logger.info("unique + clean feature categories: %s" % len(category_counter.keys()))
+    logger.debug("%s" % str(category_counter))
+    return features, category_counter
+
+
+def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
+                    uncertain_flags=None, roi=None, target_category=None, target_id=None):
     uncertain_flags = [] if uncertain_flags is None else uncertain_flags
     shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
     shapefile = shapefile_driver.Open(shapefile_path, 0)
@@ -162,19 +176,12 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=No
     if not got_category_field:
         raise AssertionError("could not find layer definition field with name '%s' to parse categories"
                              % category_field)
-    if isinstance(srs_destination, str):  # assume in wkt format
-        srs_destination = osr.SpatialReference(srs_destination)
-    elif isinstance(srs_destination, int):  # assume EPSG code
-        _srs_destination = osr.SpatialReference()
-        _srs_destination.ImportFromEPSG(srs_destination)
-        srs_destination = _srs_destination
     shapes_srs_transform = osr.CoordinateTransformation(layer.GetSpatialRef(), srs_destination)
     feature_count = layer.GetFeatureCount()
     logger.info("total shapefile feature count: %s" % str(feature_count))
     oob_feature_count = 0
     features = []
     logger.debug("scanning parsed features for out-of-bounds cases...")
-    feat_count = 0 if count_offset is None else count_offset
     for feature in layer:
         ogr_geometry = feature.GetGeometryRef()
         ogr_geometry.Transform(shapes_srs_transform)
@@ -182,22 +189,19 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=No
         if roi and not roi.contains(feature_geometry):
             oob_feature_count += 1
         else:
-            feature_id = feature.GetFieldAsString(id_field).strip() if id_field else str(feat_count)
+            feature_id = feature.GetFieldAsString(id_field).strip()
             feature_category = feature.GetFieldAsString(category_field).strip()
             features.append({
                 "id": feature_id,
                 "category": feature_category,
                 "geometry": feature_geometry,
             })
-        feat_count += 1
-    layer.ResetReading()
     logger.info("out-of-bounds features: %d  (%d%%)"
                 % (oob_feature_count, int(oob_feature_count * 100 // feature_count)))
     unlabeled_feature_count = 0
     uncertain_feature_count = 0
     bad_shape_feature_count = 0
-    if category_counter is None:
-        category_counter = collections.Counter()
+    category_counter = collections.Counter()
     for feature in features:
         if len(feature["category"]) == 0:
             unlabeled_feature_count += 1
@@ -206,12 +210,13 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=No
         elif any(flag in feature["category"] for flag in uncertain_flags):
             uncertain_feature_count += 1
             feature["clean"] = False
-        elif only_polygon and feature["geometry"].geom_type != "Polygon":
+        elif feature["geometry"].geom_type != "Polygon":
             bad_shape_feature_count += 1
             feature["clean"] = False
         else:
             feature["clean"] = True
             category_counter[feature["category"]] += 1
+
     n_features = len(features)
     logger.info("bad shape features: %d  (%d%%)"
                 % (bad_shape_feature_count, percent(bad_shape_feature_count, n_features)))
@@ -221,19 +226,14 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=No
                 % (uncertain_feature_count, percent(uncertain_feature_count, n_features)))
     logger.info("clean features: %s" % sum(category_counter.values()))
     logger.info("unique+clean feature categories: %s" % len(category_counter.keys()))
-    for cat in category_counter:
-        logger.debug("  %s = %d" % (cat, category_counter[cat]))
+    logger.debug("%s" % str(category_counter.keys()))
     if target_category:
-        if isinstance(target_category, str):
-            target_category = target_category.split(",")
-        if not isinstance(target_category, list):
-            raise AssertionError("unexpected target category type")
-        for tgt in target_category:
-            if tgt in category_counter:
-                category_percent = percent(category_counter[tgt], sum(category_counter.values()))
-                logger.info("selected category '%s' raw feature count: %d  (%d%%)"
-                            % (tgt, category_counter[tgt], category_percent))
-        features = [feature for feature in features if feature["category"] in target_category and feature["clean"]]
+        if target_category not in category_counter:
+            raise AssertionError("could not find specified category '%s' in parsed features" % target_category)
+        category_percent = percent(category_counter[target_category], sum(category_counter.values()))
+        logger.info("selected category raw feature count: %d  (%d%%)"
+                    % (category_counter[target_category], category_percent))
+        features = [feature for feature in features if feature["category"] == target_category and feature["clean"]]
         if not features:
             raise AssertionError("no clean feature found under category '%s'" % target_category)
     elif target_id:
@@ -248,30 +248,21 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field=No
         features = [feature for feature in features if feature["clean"]]
         if not features:
             raise AssertionError("no clean feature(s) found in shapefile" % target_id)
-    return features, category_counter, feat_count
+    return features, category_counter
 
 
 def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
-    raster_local_coverages = []
-    raster_geotransforms = []
+    rasters_data = []
+    global_rois = []
     raster_stats_map = []
-    raster_srs = None
-    raster_skew = None
-    raster_resolution = None
-    raster_bandcount = None
-    raster_datatype = None
-    raster_cols_max = 0
-    raster_rows_max = 0
     for rasterfile_path in rasterfile_paths:
-        rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
+        rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
         if rasterfile is None:
             raise AssertionError("could not open raster data file at '%s'" % rasterfile_path)
         logger.debug("Raster '%s' metadata printing below..." % rasterfile_path)
         logger.debug("%s" % str(rasterfile))
         logger.debug("%s" % str(rasterfile.GetMetadata()))
         logger.debug("band count: %s" % str(rasterfile.RasterCount))
-        raster_cols_max = max(rasterfile.RasterXSize, raster_cols_max)
-        raster_rows_max = max(rasterfile.RasterYSize, raster_rows_max)
         raster_geotransform = rasterfile.GetGeoTransform()
         raster_extent = get_geoextent(raster_geotransform, 0, 0, rasterfile.RasterXSize, rasterfile.RasterYSize)
         logger.debug("extent: %s" % str(raster_extent))
@@ -280,30 +271,15 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
         if "unknown" not in raster_curr_srs_str:
             raster_curr_srs.ImportFromWkt(raster_curr_srs_str)
         else:
-            if default_srs:
-                raster_curr_srs.ImportFromEPSG(int(default_srs))
-            else:
+            if default_srs is None:
                 raise AssertionError("raster did not provide an srs, and no default EPSG srs provided")
+            raster_curr_srs = default_srs
         logger.debug("spatial ref:\n%s" % str(raster_curr_srs))
-        if not raster_srs:
-            raster_srs = raster_curr_srs
-        elif not raster_srs.IsSame(raster_curr_srs):
-            raise AssertionError("all input rasters should already be in the same spatial ref system")
         px_width, px_height = raster_geotransform[1], raster_geotransform[5]
         skew_x, skew_y = raster_geotransform[2], raster_geotransform[4]
-        if not raster_resolution:
-            raster_resolution = (px_width, px_height)
-            raster_skew = (skew_x, skew_y)
-        elif raster_resolution != (px_width, px_height):
-            raise AssertionError("expected identical data resolutions in all bands & rasters")
-        elif raster_skew != (skew_x, skew_y):
-            raise AssertionError("expected identical grid skew in all bands & rasters")
-        if not raster_bandcount:
-            raster_bandcount = rasterfile.RasterCount
-        elif raster_bandcount != rasterfile.RasterCount:
-            raise AssertionError("expected identical band counts for all rasters")
         raster_bands_stats = []
-        for raster_band_idx in range(raster_bandcount):
+        raster_datatype = None
+        for raster_band_idx in range(rasterfile.RasterCount):
             curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)  # offset, starts at 1
             if curr_band is None:
                 raise AssertionError("found invalid raster band")
@@ -328,13 +304,32 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
                     np.ma.mean(band_ma)])
         if normalize:
             raster_stats_map.append({"name": os.path.split(rasterfile_path)[1], "stats": raster_bands_stats})
-        raster_local_coverage = shapely.geometry.Polygon([list(pt) for pt in raster_extent]).buffer(0.01)
-        raster_local_coverages.append(raster_local_coverage)
-        raster_geotransforms.append(raster_geotransform)
-        # noinspection PyUnusedLocal
+        local_roi = shapely.geometry.Polygon([list(pt) for pt in raster_extent]).buffer(0.01)
+        if not raster_curr_srs.IsSame(default_srs):
+            shapes_srs_transform = osr.CoordinateTransformation(raster_curr_srs, default_srs)
+            ogr_geometry = ogr.CreateGeometryFromWkb(local_roi.wkb)
+            ogr_geometry.Transform(shapes_srs_transform)
+            global_roi = shapely.wkt.loads(ogr_geometry.ExportToWkt())
+        else:
+            global_roi = local_roi
+        global_rois.append(global_roi)
+        rasters_data.append({
+            "srs": raster_curr_srs,
+            "geotransform": raster_geotransform,
+            "offset_geotransform": (0, px_width, skew_x, 0, skew_y, px_height),
+            "extent": raster_extent,
+            "skew": (skew_x, skew_y),
+            "resolution": (px_width, px_height),
+            "bandcount": rasterfile.RasterCount,
+            "cols": rasterfile.RasterXSize,
+            "rows": rasterfile.RasterYSize,
+            "datatype": raster_datatype,
+            "local_roi": local_roi,
+            "global_roi": global_roi,
+            "filepath": rasterfile_path,
+        })
         rasterfile = None  # close input fd
-    raster_offset_geotransform = (0, raster_resolution[0], raster_skew[0], 0, raster_skew[1], raster_resolution[1])
-    raster_global_coverage = shapely.ops.cascaded_union(raster_local_coverages)
+    coverage = shapely.ops.cascaded_union(global_rois)
     if normalize:
         if not raster_stats_map:
             import pickle
@@ -345,28 +340,17 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
         else:
             raster_errbars_labels = [raster_stats["name"] for raster_stats in raster_stats_map]
             raster_errbars_stats = [raster_stats["stats"] for raster_stats in raster_stats_map]
-        raster_errbars_min = np.array([[band[:][0] for band in file] for file in raster_errbars_stats])
-        raster_errbars_max = np.array([[band[:][1] for band in file] for file in raster_errbars_stats])
-        raster_errbars_stddev = np.array([[band[:][2] for band in file] for file in raster_errbars_stats])
-        raster_errbars_mean = np.array([[band[:][3] for band in file] for file in raster_errbars_stats])
-        tu.draw_errbars(raster_errbars_labels, raster_errbars_min, raster_errbars_max, raster_errbars_stddev,
-                        raster_errbars_mean, xlabel="Filename")
+        raster_errbars_min = np.array([[per_band[:][0] for per_band in per_file] for per_file in raster_errbars_stats])
+        raster_errbars_max = np.array([[per_band[:][1] for per_band in per_file] for per_file in raster_errbars_stats])
+        raster_errbars_stddev = np.array([[per_band[:][2] for per_band in per_file] for per_file in raster_errbars_stats])
+        raster_errbars_mean = np.array([[per_band[:][3] for per_band in per_file] for per_file in raster_errbars_stats])
+        draw_errbars(raster_errbars_labels, raster_errbars_min, raster_errbars_max, raster_errbars_stddev,
+                     raster_errbars_mean, xlabel="Filename")
         logger.info("overall mean = %s" % str(np.mean(raster_errbars_mean, axis=0)))
         logger.info("overall stddev = %s" % str(np.mean(raster_errbars_stddev, axis=0)))
         # normalization impl below still missing, output is still in orig datatype without range modifications
         plt.show()
-    common_metadata = {
-        "srs": raster_srs.ExportToWkt(),
-        "skew": raster_skew,
-        "resolution": raster_resolution,
-        "bandcount": raster_bandcount,
-        "datatype": raster_datatype,
-        "cols_max": raster_cols_max,
-        "rows_max": raster_rows_max,
-        "offset_geotransform": raster_offset_geotransform,
-        "roi": raster_global_coverage
-    }
-    return raster_local_coverages, raster_geotransforms, common_metadata
+    return rasters_data, coverage
 
 
 def get_feature_bbox(geom, offsets=None):
@@ -383,130 +367,110 @@ def get_feature_bbox(geom, offsets=None):
     return roi_tl, roi_br
 
 
-def get_feature_roi(geom, raster_metadata, crop_img_size=None, crop_real_size=None):
-    if crop_img_size and crop_real_size:
-        raise AssertionError("should only provide one type of crop resolution, or none")
-    offset_geotransform = raster_metadata["offset_geotransform"]
-    if crop_img_size or crop_real_size:
-        if crop_img_size:
-            crop_size = int(crop_img_size)
-            x_offset, y_offset = get_geocoord(offset_geotransform, crop_size, crop_size)
-            x_offset, y_offset = abs(x_offset / 2), abs(y_offset / 2)
-        elif crop_real_size:
-            x_offset = y_offset = float(crop_real_size) / 2
-        else:
-            raise ValueError()
-        roi_tl, roi_br = get_feature_bbox(geom, (x_offset, y_offset))
+def process_feature(geom, geom_srs, raster_data, crop_fixed_size=None):
+    if not raster_data["global_roi"].contains(geom):
+        return None, None, None  # exact shape should be fully contained in a single raster
+    if not raster_data["srs"].IsSame(geom_srs):
+        shapes_srs_transform = osr.CoordinateTransformation(geom_srs, raster_data["srs"])
+        ogr_geometry = ogr.CreateGeometryFromWkb(geom.wkb)
+        ogr_geometry.Transform(shapes_srs_transform)
+        geom = shapely.wkt.loads(ogr_geometry.ExportToWkt())
+    if crop_fixed_size:
+        offset = float(crop_fixed_size) / 2
+        roi_tl, roi_br = get_feature_bbox(geom, (offset, offset))
     else:
         roi_tl, roi_br = get_feature_bbox(geom)
+    # round projected geometry bounds to nearest pixel in raster
+    offset_geotransform = raster_data["offset_geotransform"]
     roi_tl_offsetpx_real = get_pxcoord(offset_geotransform, roi_tl[0], roi_tl[1])
     roi_tl_offsetpx = (int(math.floor(roi_tl_offsetpx_real[0])), int(math.floor(roi_tl_offsetpx_real[1])))
-    if crop_img_size:
-        crop_width = crop_height = int(crop_img_size)
-        roi_br_offsetpx = (roi_tl_offsetpx[0] + crop_width, roi_tl_offsetpx[1] + crop_height)
-    else:
-        roi_br_offsetpx_real = get_pxcoord(offset_geotransform, roi_br[0], roi_br[1])
-        roi_br_offsetpx = (int(math.ceil(roi_br_offsetpx_real[0])), int(math.ceil(roi_br_offsetpx_real[1])))
-        crop_width = max(roi_br_offsetpx[0] - roi_tl_offsetpx[0], 1)
-        crop_height = max(roi_br_offsetpx[1] - roi_tl_offsetpx[1], 1)
+    roi_br_offsetpx_real = get_pxcoord(offset_geotransform, roi_br[0], roi_br[1])
+    roi_br_offsetpx = (int(math.ceil(roi_br_offsetpx_real[0])), int(math.ceil(roi_br_offsetpx_real[1])))
+    crop_width = max(roi_br_offsetpx[0] - roi_tl_offsetpx[0], 1)
+    crop_height = max(roi_br_offsetpx[1] - roi_tl_offsetpx[1], 1)
     roi_tl = get_geocoord(offset_geotransform, roi_tl_offsetpx[0], roi_tl_offsetpx[1])
     roi_br = get_geocoord(offset_geotransform, roi_br_offsetpx[0], roi_br_offsetpx[1])
     roi = shapely.geometry.Polygon([roi_tl, (roi_br[0], roi_tl[1]), roi_br, (roi_tl[0], roi_br[1])])
-    return roi, roi_tl, roi_br, crop_width, crop_height
-
-
-def process_feature(geom, rasters_data, raster_metadata, crop_img_size=None, crop_real_size=None):
-    roi, roi_tl, roi_br, crop_width, crop_height = get_feature_roi(geom, raster_metadata, crop_img_size, crop_real_size)
-    if not raster_metadata["roi"].contains(roi):
-        raise AssertionError("roi not fully contained in rasters, should have been filtered out")
-    crop_datatype = GDAL2NUMPY_TYPE_CONV[raster_metadata["datatype"]]
-    crop_size = (crop_height, crop_width, raster_metadata["bandcount"])
+    if not raster_data["local_roi"].contains(roi):
+        return None, None, None  # asking for a larger crop can clip raster bounds
+    crop_datatype = GDAL2NUMPY_TYPE_CONV[raster_data["datatype"]]
+    crop_size = (crop_height, crop_width, raster_data["bandcount"])
     crop = np.ma.array(np.zeros(crop_size, dtype=crop_datatype), mask=np.ones(crop_size, dtype=np.uint8))
     crop_inv = np.ma.copy(crop)
-    roi_hits = []
-    roi_segms = []
-    # raster data parsing loop (will test all regions that touch the selected feature)
-    for raster_idx, raster_data in enumerate(rasters_data):
-        append_inters_polygons(raster_data["roi"], roi, raster_idx, roi_hits, roi_segms)
-    for raster_idx in roi_hits:
-        rasterfile_path = rasters_data[raster_idx]["filepath"]
-        rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
-        if rasterfile is None:
-            raise AssertionError("could not open raster data file at '%s'" % rasterfile_path)
-        raster_geotransform = rasters_data[raster_idx]["geotransform"]
-        local_roi_tl_px_real = get_pxcoord(raster_geotransform, roi_tl[0], roi_tl[1])
-        local_roi_tl_px = (int(max(round(local_roi_tl_px_real[0]), 0)),
-                           int(max(round(local_roi_tl_px_real[1]), 0)))
-        local_roi_br_px_real = get_pxcoord(raster_geotransform, roi_br[0], roi_br[1])
-        local_roi_br_px = (int(min(round(local_roi_br_px_real[0]), rasterfile.RasterXSize)),
-                           int(min(round(local_roi_br_px_real[1]), rasterfile.RasterYSize)))
-        local_roi_offset = (local_roi_tl_px[1] - int(round(local_roi_tl_px_real[1])),
-                            local_roi_tl_px[0] - int(round(local_roi_tl_px_real[0])))
-        local_roi_cols = min(local_roi_br_px[0] - local_roi_tl_px[0], crop_width - local_roi_offset[1])
-        local_roi_rows = min(local_roi_br_px[1] - local_roi_tl_px[1], crop_height - local_roi_offset[0])
-        if local_roi_cols <= 0 or local_roi_rows <= 0:
-            # most likely just intersected the edge with less than one pixel worth of info
-            if len(roi_hits) <= 1:
-                raise AssertionError("unexpected empty intersection with no fallback raster")
-            continue
-        local_roi_tl_real = get_geocoord(raster_geotransform, *local_roi_tl_px)
-        local_geotransform = list(raster_metadata["offset_geotransform"])
-        local_geotransform[0], local_geotransform[3] = local_roi_tl_real[0], local_roi_tl_real[1]
-        local_target_ds = osgeo.gdal.GetDriverByName("MEM").Create(
-            '', local_roi_cols, local_roi_rows, 2, osgeo.gdal.GDT_Byte)  # one band for mask, one inv mask
-        local_target_ds.SetGeoTransform(local_geotransform)
-        raster_srs = osr.SpatialReference(raster_metadata["srs"])
-        local_target_ds.SetProjection(raster_metadata["srs"])
-        local_target_ds.GetRasterBand(1).WriteArray(np.zeros((local_roi_rows, local_roi_cols), dtype=np.uint8))
-        ogr_dataset = ogr.GetDriverByName("Memory").CreateDataSource("masks")
-        ogr_layer = ogr_dataset.CreateLayer("feature_mask", srs=raster_srs)
-        ogr_feature = ogr.Feature(ogr_layer.GetLayerDefn())
-        ogr_geometry = ogr.CreateGeometryFromWkt(geom.wkt)
-        ogr_feature.SetGeometry(ogr_geometry)
-        ogr_layer.CreateFeature(ogr_feature)
-        osgeo.gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
-        local_feature_mask_array = local_target_ds.GetRasterBand(1).ReadAsArray()
-        if local_feature_mask_array is None:
-            raise AssertionError("layer rasterization failed")
-        local_target_ds.GetRasterBand(2).WriteArray(np.ones((local_roi_rows, local_roi_cols), dtype=np.uint8))
-        ogr_layer_inv = ogr_dataset.CreateLayer("bg_mask", srs=raster_srs)
-        ogr_feature_inv = ogr.Feature(ogr_layer_inv.GetLayerDefn())
-        ogr_feature_inv.SetGeometry(ogr_geometry)
-        ogr_layer_inv.CreateFeature(ogr_feature_inv)
-        osgeo.gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
-        local_bg_mask_array = local_target_ds.GetRasterBand(2).ReadAsArray()
-        if local_bg_mask_array is None:
-            raise AssertionError("layer rasterization failed")
-        for raster_band_idx in range(raster_metadata["bandcount"]):
-            curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)
-            band_nodataval = curr_band.GetNoDataValue()
-            raw_band_crop_data = curr_band.ReadAsArray(local_roi_tl_px[0], local_roi_tl_px[1],
-                                                       local_roi_cols, local_roi_rows)
-            if raw_band_crop_data is None:
-                raise AssertionError("raster crop data read failed")
-            band_crop_inv_data = np.where(local_bg_mask_array > 0, raw_band_crop_data, band_nodataval)
-            band_crop_data = np.where(local_feature_mask_array > 0, raw_band_crop_data, band_nodataval)
-            crop_i_min = local_roi_offset[0]
-            crop_i_max = local_roi_offset[0] + local_roi_rows
-            crop_j_min = local_roi_offset[1]
-            crop_j_max = local_roi_offset[1] + local_roi_cols
-            local_crop_inv_data = crop_inv.data[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
-            local_crop_inv_mask = crop_inv.mask[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
-            local_crop_data = crop.data[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
-            local_crop_mask = crop.mask[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
-            if local_crop_inv_mask.shape != band_crop_inv_data.shape:
-                raise AssertionError("crop/roi mask size mismatch, probably rounding error somewhere")
-            local_copy_inv_mask = np.where(
-                np.bitwise_and(local_crop_inv_mask, band_crop_inv_data != band_nodataval), True, False)
-            local_copy_mask = np.where(np.bitwise_and(local_crop_mask, band_crop_data != band_nodataval), True, False)
-            # could also blend already-written pixels? (ignored for now)
-            np.copyto(local_crop_inv_data, np.where(local_copy_inv_mask, raw_band_crop_data, local_crop_inv_data))
-            np.copyto(local_crop_data, np.where(local_copy_mask, raw_band_crop_data, local_crop_data))
-            np.bitwise_and(local_crop_inv_mask, np.invert(local_copy_inv_mask), out=local_crop_inv_mask)
-            np.bitwise_and(local_crop_mask, np.invert(local_copy_mask), out=local_crop_mask)
+    bounds = np.asarray(list(roi_tl) + list(roi_br))
+    rasterfile_path = raster_data["filepath"]
+    rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
+    if rasterfile is None:
+        raise AssertionError("could not open raster data file at '%s'" % rasterfile_path)
+    raster_geotransform = raster_data["geotransform"]
+    # edge handling code below leftover from ccfb02 impl
+    local_roi_tl_px_real = get_pxcoord(raster_geotransform, roi_tl[0], roi_tl[1])
+    local_roi_tl_px = (int(max(round(local_roi_tl_px_real[0]), 0)),
+                       int(max(round(local_roi_tl_px_real[1]), 0)))
+    local_roi_br_px_real = get_pxcoord(raster_geotransform, roi_br[0], roi_br[1])
+    local_roi_br_px = (int(min(round(local_roi_br_px_real[0]), rasterfile.RasterXSize)),
+                       int(min(round(local_roi_br_px_real[1]), rasterfile.RasterYSize)))
+    local_roi_offset = (local_roi_tl_px[1] - int(round(local_roi_tl_px_real[1])),
+                        local_roi_tl_px[0] - int(round(local_roi_tl_px_real[0])))
+    local_roi_cols = min(local_roi_br_px[0] - local_roi_tl_px[0], crop_width - local_roi_offset[1])
+    local_roi_rows = min(local_roi_br_px[1] - local_roi_tl_px[1], crop_height - local_roi_offset[0])
+    if local_roi_cols <= 0 or local_roi_rows <= 0:
+        return None, None, None
+    local_roi_tl_real = get_geocoord(raster_geotransform, *local_roi_tl_px)
+    local_geotransform = list(offset_geotransform)
+    local_geotransform[0], local_geotransform[3] = local_roi_tl_real[0], local_roi_tl_real[1]
+    local_target_ds = gdal.GetDriverByName("MEM").Create(
+        '', local_roi_cols, local_roi_rows, 2, gdal.GDT_Byte)  # one band for mask, one inv mask
+    local_target_ds.SetGeoTransform(local_geotransform)
+    local_target_ds.SetProjection(raster_data["srs"].ExportToWkt())
+    local_target_ds.GetRasterBand(1).WriteArray(np.zeros((local_roi_rows, local_roi_cols), dtype=np.uint8))
+    ogr_dataset = ogr.GetDriverByName("Memory").CreateDataSource("masks")
+    ogr_layer = ogr_dataset.CreateLayer("feature_mask", srs=raster_data["srs"])
+    ogr_feature = ogr.Feature(ogr_layer.GetLayerDefn())
+    ogr_geometry = ogr.CreateGeometryFromWkt(geom.wkt)
+    ogr_feature.SetGeometry(ogr_geometry)
+    ogr_layer.CreateFeature(ogr_feature)
+    gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+    local_feature_mask_array = local_target_ds.GetRasterBand(1).ReadAsArray()
+    if local_feature_mask_array is None:
+        raise AssertionError("layer rasterization failed")
+    local_target_ds.GetRasterBand(2).WriteArray(np.ones((local_roi_rows, local_roi_cols), dtype=np.uint8))
+    ogr_layer_inv = ogr_dataset.CreateLayer("bg_mask", srs=raster_data["srs"])
+    ogr_feature_inv = ogr.Feature(ogr_layer_inv.GetLayerDefn())
+    ogr_feature_inv.SetGeometry(ogr_geometry)
+    ogr_layer_inv.CreateFeature(ogr_feature_inv)
+    gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
+    local_bg_mask_array = local_target_ds.GetRasterBand(2).ReadAsArray()
+    if local_bg_mask_array is None:
+        raise AssertionError("layer rasterization failed")
+    for raster_band_idx in range(raster_data["bandcount"]):
+        curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)
+        band_nodataval = curr_band.GetNoDataValue()
+        raw_band_crop_data = curr_band.ReadAsArray(local_roi_tl_px[0], local_roi_tl_px[1],
+                                                   local_roi_cols, local_roi_rows)
+        if raw_band_crop_data is None:
+            raise AssertionError("raster crop data read failed")
+        band_crop_inv_data = np.where(local_bg_mask_array > 0, raw_band_crop_data, band_nodataval)
+        band_crop_data = np.where(local_feature_mask_array > 0, raw_band_crop_data, band_nodataval)
+        crop_i_min = local_roi_offset[0]
+        crop_i_max = local_roi_offset[0] + local_roi_rows
+        crop_j_min = local_roi_offset[1]
+        crop_j_max = local_roi_offset[1] + local_roi_cols
+        local_crop_inv_data = crop_inv.data[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
+        local_crop_inv_mask = crop_inv.mask[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
+        local_crop_data = crop.data[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
+        local_crop_mask = crop.mask[crop_i_min:crop_i_max, crop_j_min:crop_j_max, raster_band_idx]
+        if local_crop_inv_mask.shape != band_crop_inv_data.shape:
+            raise AssertionError("crop/roi mask size mismatch, probably rounding error somewhere")
+        local_copy_inv_mask = np.where(
+            np.bitwise_and(local_crop_inv_mask, band_crop_inv_data != band_nodataval), True, False)
+        local_copy_mask = np.where(np.bitwise_and(local_crop_mask, band_crop_data != band_nodataval), True, False)
+        # could also blend already-written pixels? (ignored for now)
+        np.copyto(local_crop_inv_data, np.where(local_copy_inv_mask, raw_band_crop_data, local_crop_inv_data))
+        np.copyto(local_crop_data, np.where(local_copy_mask, raw_band_crop_data, local_crop_data))
+        np.bitwise_and(local_crop_inv_mask, np.invert(local_copy_inv_mask), out=local_crop_inv_mask)
+        np.bitwise_and(local_crop_mask, np.invert(local_copy_mask), out=local_crop_mask)
     # ogr_dataset = None # close local fd
-    # noinspection PyUnusedLocal
     local_target_ds = None  # close local fd
-    # noinspection PyUnusedLocal
     rasterfile = None  # close input fd
-    return crop, crop_inv, np.asarray(list(roi_tl) + list(roi_br))
+    return crop, crop_inv, bounds

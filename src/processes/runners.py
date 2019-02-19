@@ -1,5 +1,8 @@
 from geoimagenet_ml.utils import classproperty
 from geoimagenet_ml.ml.impl import get_test_data_runner
+from geoimagenet_ml.ml.utils import (
+    parse_rasters, parse_geojson, process_feature
+)
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
@@ -7,6 +10,8 @@ from geoimagenet_ml.processes.status import (
 from abc import abstractmethod
 from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
+import osgeo.gdal
+import ogr
 import os
 import shutil
 import numpy
@@ -277,11 +282,59 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset = Dataset(name=dataset_name, path=dataset_path, type='patches')
 
             self.update_job_status(STATUS_RUNNING, "obtaining references from process job inputs", 2)
-            shapefiles = self.get_input('shapefiles')
-            images = self.get_input('images')
+            annotations = self.get_input('annotations')
+            raster_paths = self.get_input('raster_paths')
+            crop_fixed_size = self.get_input('crop_fixed_size', default=None)  # return full annotation if no crop size given
 
-            self.update_job_status(STATUS_RUNNING, "extracting patches for batch creation", 3)
-            # TODO: IMPLEMENT ME!!
+            self.update_job_status(STATUS_RUNNING, "parsing raster files", 3)
+            default_srs = ogr.osr.SpatialReference()
+            default_srs.ImportFromEPSG(3857)  # pass as param?
+            rasters_data, raster_global_coverage = parse_rasters(raster_paths, default_srs=default_srs)
+
+            self.update_job_status(STATUS_RUNNING, "parsing shape files", 8)
+            if not isinstance(annotations, dict):
+                raise AssertionError("annotations should be passed in as dict obtained from geojson?")
+            features, category_counter = parse_geojson(annotations, srs_destination=default_srs, roi=raster_global_coverage)
+
+            last_progress_offset, progress_scale = 0, (99 - 13) / len(features)
+            for feature_idx, feature in enumerate(features):
+                progress_offset = 13 + feature_idx * progress_scale
+                if progress_offset != last_progress_offset:
+                    last_progress_offset = progress_offset
+                    self.update_job_status(STATUS_RUNNING, "extracting patches for batch creation", progress_offset)
+                feature_geometry = feature["geometry"]
+                raster_data = None
+                if "properties" in feature and "image_name" in feature["properties"]:
+                    raster_name = feature["properties"]["image_name"].replace("8bits", "xbits").replace("16bits", "xbits")
+                    for data in rasters_data:
+                        target_path = data["filepath"].replace("8bits", "xbits").replace("16bits", "xbits")
+                        if raster_name in target_path:
+                            raster_data = data
+                            break
+                if raster_data is None:
+                    for data in rasters_data:
+                        if data["global_roi"].contains(feature_geometry):
+                            raster_data = data
+                            break
+                    if raster_data is None:
+                        raise AssertionError("could not find proper raster for feature '%s'" % feature["id"])
+                crop, crop_inv, bbox = process_feature(feature_geometry, default_srs, raster_data, crop_fixed_size)
+                if crop is not None:
+                    if crop.ndim < 3 or crop.shape[2] != raster_data["bandcount"]:
+                        raise AssertionError("bad crop channel size")
+                    output_geotransform = list(raster_data["offset_geotransform"])
+                    output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
+                    output_driver = gdal.GetDriverByName("GTiff")
+                    output_path = os.path.join(dataset_path, feature["id"] + ".tif")
+                    if os.path.exists(output_path):
+                        os.remove(output_path)  # gdal raster creation fails if file already exists
+                    output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0], crop.shape[2], raster_data["datatype"])
+                    for raster_band_idx in range(crop.shape[2]):
+                        output_dataset.GetRasterBand(raster_band_idx + 1).SetNoDataValue(0)
+                        output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(crop.data[:, :, raster_band_idx])
+                    output_dataset.SetProjection(raster_data["srs"].ExportToWkt())
+                    output_dataset.SetGeoTransform(output_geotransform)
+                    output_dataset = None  # close output fd
 
             self.update_job_status(STATUS_RUNNING, "updating completed dataset definition", 99)
             dataset = database_factory(self.registry).datasets_store.save_dataset(dataset, request=self.request)
