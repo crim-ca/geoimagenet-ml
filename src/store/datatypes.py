@@ -48,6 +48,16 @@ class Base(dict):
         # type: (...) -> UUID
         return self['uuid']
 
+    @property
+    def created(self):
+        # type: (...) -> datetime
+        created = self.get('created', None)
+        if not created:
+            self['created'] = now()
+        if isinstance(created, six.string_types):
+            self['created'] = parse(self['created'])
+        return localize_datetime(self.get('created'))
+
 
 class Dataset(Base):
     """
@@ -98,6 +108,7 @@ class Dataset(Base):
             'path': self.path,
             'type': self.type,
             'params': self.parameters,
+            'created': stringify_datetime(self.created),
         }
 
     def json(self):
@@ -166,16 +177,6 @@ class Model(Base):
                 raise ModelLoadingError("Failed retrieving model data.")
             return data
         return None
-
-    @property
-    def created(self):
-        # type: (...) -> datetime
-        created = self.get('created', None)
-        if not created:
-            self['created'] = now()
-        if isinstance(created, six.string_types):
-            self['created'] = parse(self['created'])
-        return localize_datetime(self.get('created'))
 
     @property
     def params(self):
@@ -563,14 +564,6 @@ class Job(Base):
         if not isinstance(is_workflow, bool):
             raise TypeError("Type `bool` is required for `{}.is_workflow`".format(type(self)))
         self['is_workflow'] = is_workflow
-
-    @property
-    def created(self):
-        # type: (...) -> datetime
-        created = self.get('created', None)
-        if not created:
-            self['created'] = now()
-        return localize_datetime(self.get('created'))
 
     @property
     def finished(self):

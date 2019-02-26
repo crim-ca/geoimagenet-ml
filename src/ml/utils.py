@@ -1,5 +1,5 @@
-from geoimagenet_ml.typedefs import JsonBody
 from geoimagenet_ml.utils import ClassCounter
+from typing import TYPE_CHECKING
 import logging
 import math
 import os
@@ -23,6 +23,9 @@ import shapely.geometry
 import shapely.ops
 # noinspection PyPackageRequirements
 import shapely.wkt
+
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import JsonBody
 
 LOGGER = logging.getLogger(__name__)
 

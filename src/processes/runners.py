@@ -4,7 +4,6 @@ from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
 )
-from geoimagenet_ml.typedefs import JsonBody
 from abc import abstractmethod
 from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
@@ -17,7 +16,7 @@ import multiprocessing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (   # noqa: F401
-        Any, AnyStr, ErrorType, LevelType, Number, Dict, List, Optional, UUID, Union
+        Any, AnyStr, ErrorType, LevelType, Number, Dict, List, JsonBody, Optional, UUID, Union
     )
     from geoimagenet_ml.store.datatypes import Job
     # noinspection PyProtectedMember
@@ -324,7 +323,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                     level=logging.WARNING,
                 )
                 return None
-            return dataset[0]
+            return dataset[-1]
         elif isinstance(batch_id, six.string_types):
             dataset = self.dataset_store.fetch_by_uuid(batch_id)
             if dataset.type != self.dataset_type:

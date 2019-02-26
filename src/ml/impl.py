@@ -149,14 +149,6 @@ def retrieve_annotations(geojson_urls):
         raise RuntimeError("Could not find any annotation from URL(s): {}".format(geojson_urls))
 
 
-def filter_existing_patches(features, feature_counters, batch):
-    # type: (JsonBody, ClassCounter, Dataset) -> Tuple[JsonBody, ClassCounter]
-    """Removes any redundant features from the GeoJSON that are already contained within ``batch``."""
-    if not batch:
-        return features, feature_counters
-
-
-
 def create_batch_patches(annotations_meta,      # type: JsonBody
                          raster_search_paths,   # type: List[AnyStr]
                          dataset_container,     # type: Dataset
@@ -190,17 +182,22 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
     def fix_raster_search_name(name):
         return name.replace("8bits", "xbits").replace("16bits", "xbits")
 
-    def random_select_split(splits, class_id):
-        # type: (List[Tuple[AnyStr, ClassCounter]], Union[int, AnyStr]) -> AnyStr
+    def select_split(splits, class_id, name=None):
+        # type: (List[Tuple[AnyStr, ClassCounter]], Union[int, AnyStr], Optional[AnyStr]) -> AnyStr
         """
-        Randomly selects a split set from ``splits`` and decreases ``class_id`` in the corresponding counter
-        if any is left for that class (counter didn't reach 0). The other counter is returned and decreased otherwise.
+        Selects a split set from ``splits`` and decreases ``class_id`` in its corresponding counter
+        if any 'instance' is left for selection within that class (counter didn't reach 0).
+        Otherwise, the counter of the other split decreased and its name is returned instead.
 
         :param splits: list of tuple with 'train'/'test' and its corresponding counter.
         :param class_id: class for which to update the selected split counter.
+        :param name: select the set by 'name' value, or randomly if `None`.
         :returns: selected split 'name', updated counters by reference.
         """
-        chosen = random.choice(splits)
+        if name:
+            chosen = list(filter(lambda s: s[0] == name, splits))[0]
+        else:
+            chosen = random.choice(splits)
         if chosen[1][class_id] <= 0:
             if chosen[0] == splits[0][0]:
                 chosen = splits[1]
@@ -221,13 +218,19 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
 
     start_percent += 1
     update_func("resolving incremental batch patches", start_percent)
-    filter_existing_patches(features, category_counter, latest_batch)
+    if latest_batch:
+        existing_features = set([patch["feature"] for patch in latest_batch.parameters])
+        provided_features = set([feature["id"] for feature in features])
+        new_features = list(provided_features - existing_features)
+    else:
+        new_features = []
 
     train_counter, test_counter = category_counter.split(train_test_ratio)
     train_test_splits = [('train', train_counter), ('test', test_counter)]
     patches_data = []
     patches_crop = [(None, 'raw')]
     if isinstance(crop_fixed_size, int):
+        update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
         patches_crop.append((crop_fixed_size, 'fixed'))
 
     last_progress_offset, progress_scale = 0, int(end_percent - start_percent / len(features))
@@ -236,62 +239,75 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
         if progress_offset != last_progress_offset:
             last_progress_offset = progress_offset
             update_func("extracting patches for batch creation", progress_offset)
-        feature_geometry = feature["geometry"]
-        raster_data = None
-        if "properties" in feature and "image_name" in feature["properties"]:
-            raster_name = fix_raster_search_name(feature["properties"]["image_name"])
-            for data in rasters_data:
-                target_path = fix_raster_search_name(data["filepath"])
-                if raster_name in target_path:
-                    raster_data = data
-                    break
-        if raster_data is None:
-            for data in rasters_data:
-                if data["global_roi"].contains(feature_geometry):
-                    raster_data = data
-                    break
+
+        # transfer patch data from previous batch, preserve selected split
+        if feature["id"] not in new_features:
+            patch_info = [patch["feature"] for patch in latest_batch.parameters if patch["feature"] == feature["id"]]
+            if not len(patch_info) == 1:
+                raise RuntimeError("Failed to retrieve existing patch from previous batch.")
+            patch_info = patch_info[0]
+            patches_data.append(deepcopy(patch_info))
+            # update counter with previously selected split set
+            select_split(train_test_splits, patch_info["class"], name=patch_info["split"])
+
+        # new patch creation from feature specification, generate metadata and randomly select split
+        else:
+            feature_geometry = feature["geometry"]
+            raster_data = None
+            if "properties" in feature and "image_name" in feature["properties"]:
+                raster_name = fix_raster_search_name(feature["properties"]["image_name"])
+                for data in rasters_data:
+                    target_path = fix_raster_search_name(data["filepath"])
+                    if raster_name in target_path:
+                        raster_data = data
+                        break
             if raster_data is None:
-                raise AssertionError("could not find proper raster for feature '%s'" % feature["id"])
+                for data in rasters_data:
+                    if data["global_roi"].contains(feature_geometry):
+                        raster_data = data
+                        break
+                if raster_data is None:
+                    raise AssertionError("could not find proper raster for feature '{}'".format(feature["id"]))
 
-        crop_class_id = feature.get('properties', {}).get('taxonomy_class_id')
-        patches_data.append({
-            "crops": [],    # updated gradually after
-            "image": feature.get('properties', {}).get('image_name'),
-            "class": crop_class_id,
-            "split": random_select_split(train_test_splits, crop_class_id),
-            "feature": feature.get('id'),
-        })
+            crop_class_id = feature.get('properties', {}).get('taxonomy_class_id')
+            patches_data.append({
+                "crops": [],    # updated gradually after
+                "image": feature.get('properties', {}).get('image_name'),
+                "class": crop_class_id,
+                "split": select_split(train_test_splits, crop_class_id),
+                "feature": feature.get('id'),
+            })
 
-        for crop_size, crop_name in patches_crop:
-            crop, crop_inv, bbox = process_feature(feature_geometry, srs, raster_data, crop_size)
-            if crop is not None:
-                if crop.ndim < 3 or crop.shape[2] != raster_data["bandcount"]:
-                    raise AssertionError("bad crop channel size")
-                output_geotransform = list(raster_data["offset_geotransform"])
-                output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
-                output_driver = osgeo.gdal.GetDriverByName("GTiff")
-                output_name = "{}_{}".format(feature["id"], crop_name)
-                output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
-                if os.path.exists(output_path):
-                    msg = "Output path [{}] already exists but shouldn't.".format(output_path)
-                    if dataset_overwrite:
-                        update_func(msg + " Removing...", logging.WARNING)
-                        os.remove(output_path)  # gdal raster creation fails if file already exists
-                    else:
-                        raise RuntimeError(msg)
-                output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
-                                                      crop.shape[2], raster_data["datatype"])
-                for raster_band_idx in range(crop.shape[2]):
-                    output_dataset.GetRasterBand(raster_band_idx + 1).SetNoDataValue(0)
-                    output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(crop.data[:, :, raster_band_idx])
-                output_dataset.SetProjection(raster_data["srs"].ExportToWkt())
-                output_dataset.SetGeoTransform(output_geotransform)
-                output_dataset = None  # close output fd
-                patches_data[-1]["crops"].append({
-                    "type": crop_name,
-                    "path": output_path,
-                    "shape": list(crop.shape),
-                    "datatype": raster_data["datatype"],
-                    "coordinates": output_geotransform,
-                })
+            for crop_size, crop_name in patches_crop:
+                crop, crop_inv, bbox = process_feature(feature_geometry, srs, raster_data, crop_size)
+                if crop is not None:
+                    if crop.ndim < 3 or crop.shape[2] != raster_data["bandcount"]:
+                        raise AssertionError("bad crop channel size")
+                    output_geotransform = list(raster_data["offset_geotransform"])
+                    output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
+                    output_driver = osgeo.gdal.GetDriverByName("GTiff")
+                    output_name = "{}_{}".format(feature["id"], crop_name)
+                    output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
+                    if os.path.exists(output_path):
+                        msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
+                        if dataset_overwrite:
+                            update_func(msg + " Removing...", logging.WARNING)
+                            os.remove(output_path)  # gdal raster creation fails if file already exists
+                        else:
+                            raise RuntimeError(msg)
+                    output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
+                                                          crop.shape[2], raster_data["datatype"])
+                    for raster_band_idx in range(crop.shape[2]):
+                        output_dataset.GetRasterBand(raster_band_idx + 1).SetNoDataValue(0)
+                        output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(crop.data[:, :, raster_band_idx])
+                    output_dataset.SetProjection(raster_data["srs"].ExportToWkt())
+                    output_dataset.SetGeoTransform(output_geotransform)
+                    output_dataset = None  # close output fd
+                    patches_data[-1]["crops"].append({
+                        "type": crop_name,
+                        "path": output_path,
+                        "shape": list(crop.shape),
+                        "datatype": raster_data["datatype"],
+                        "coordinates": output_geotransform,
+                    })
     dataset_container.parameters = patches_data
