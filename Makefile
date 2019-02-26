@@ -114,11 +114,13 @@ pep8:
 .PHONY: test
 test: install-test
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		export LD_PRELOAD="$(CONDA_ENV_PATH)/lib/libgdal.so" && \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" -v -m "not online"'
 
 .PHONY: test-all
 test-all: install-test
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		export LD_PRELOAD="$(CONDA_ENV_PATH)/lib/libgdal.so" && \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest"'
 
 .PHONY: test-tox

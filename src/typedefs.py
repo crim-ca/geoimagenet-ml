@@ -6,14 +6,20 @@ if TYPE_CHECKING:
     from pywps import Process as ProcessWPS                             # noqa: F401
     from geoimagenet_ml.store.datatypes import Process as ProcessDB     # noqa: F401
     from geoimagenet_ml.processes.runners import ProcessRunner          # noqa: F401
+    # noinspection PyProtectedMember
+    from logging import _loggerClass                                    # noqa: F401
+    from uuid import UUID as _UUID
 
     AnyProcess = Union[ProcessDB, ProcessWPS, ProcessRunner]
     Number = Union[float, int]
-    SettingDict = Dict[AnyStr, AnyStr]
-    OptionDict = Dict[AnyStr, Any]
-    Output = OptionDict
+    JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
-    JsonDict = Dict[AnyStr, Union[JsonValue, List[JsonValue], Dict[AnyStr, Union[JsonValue, 'JsonDict']]]]
-    Error = Union[AnyStr, Exception, List[WPSException]]
-    Input = OptionDict
-    UUID = AnyStr
+    JsonBody = Dict[JsonKey, Union[JsonValue, List[JsonValue], Dict[JsonKey, Union[JsonValue, 'JsonBody']]]]
+    SettingsType = Dict[AnyStr, JsonValue]
+    OptionType = Dict[AnyStr, Any]
+    InputType = OptionType
+    OutputType = OptionType
+    LoggerType = _loggerClass
+    ErrorType = Union[AnyStr, Exception, List[WPSException]]
+    LevelType = Union[AnyStr, int]
+    UUID = Union[AnyStr, _UUID]

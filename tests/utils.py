@@ -1,5 +1,5 @@
 from geoimagenet_ml import __meta__, GEOIMAGENET_ML_CONFIG_INI
-from geoimagenet_ml.utils import settings_from_ini
+from geoimagenet_ml.utils import settings_from_ini, null, isnull
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -18,13 +18,13 @@ import pyramid.testing
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingDict   # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingsType   # noqa: F401
 
 json_headers = [('Content-Type', 'application/json')]
 
 
 def setup_test_app(settings=None, config=None):
-    # type: (Optional[SettingDict], Optional[Configurator]) -> TestApp
+    # type: (Optional[SettingsType], Optional[Configurator]) -> TestApp
     config = setup_config_from_settings(settings=settings, config=config)
     # scan dependencies
     config.include('geoimagenet_ml.api')
@@ -34,7 +34,7 @@ def setup_test_app(settings=None, config=None):
 
 
 def setup_config_from_settings(settings=None, config=None):
-    # type: (Optional[SettingDict], Optional[Configurator]) -> Configurator
+    # type: (Optional[SettingsType], Optional[Configurator]) -> Configurator
     config_var_name = 'GEOIMAGENET_ML_CONFIG_INI_PATH'
     config_ini_path = os.getenv(config_var_name)
     if not config_ini_path:
@@ -54,7 +54,7 @@ def setup_config_from_settings(settings=None, config=None):
 
 
 def setup_config_with_mongodb(settings=None, config=None):
-    # type: (Optional[SettingDict], Optional[Configurator]) -> Configurator
+    # type: (Optional[SettingsType], Optional[Configurator]) -> Configurator
     settings_db = {
         'mongodb.host': '127.0.0.1',
         'mongodb.port': '27027',
@@ -137,19 +137,19 @@ def check_all_equal(iter_val, iter_ref, any_order=False, msg=None):
 
 
 def check_val_equal(val, ref, msg=None):
-    assert isinstance(ref, null) or val == ref, msg or format_test_val_ref(val, ref, pre='Equal Fail')
+    assert isnull(ref) or val == ref, msg or format_test_val_ref(val, ref, pre='Equal Fail')
 
 
 def check_val_not_equal(val, ref, msg=None):
-    assert isinstance(ref, null) or val != ref, msg or format_test_val_ref(val, ref, pre='Equal Fail')
+    assert isnull(ref) or val != ref, msg or format_test_val_ref(val, ref, pre='Equal Fail')
 
 
 def check_val_is_in(val, ref, msg=None):
-    assert isinstance(ref, null) or val in ref, msg or format_test_val_ref(val, ref, pre='Is In Fail')
+    assert isnull(ref) or val in ref, msg or format_test_val_ref(val, ref, pre='Is In Fail')
 
 
 def check_val_not_in(val, ref, msg=None):
-    assert isinstance(ref, null) or val not in ref, msg or format_test_val_ref(val, ref, pre='Not In Fail')
+    assert isnull(ref) or val not in ref, msg or format_test_val_ref(val, ref, pre='Not In Fail')
 
 
 def check_val_type(val, ref, msg=None):
@@ -180,16 +180,7 @@ def check_response_basic_info(response, expected_code=200):
     return json_body
 
 
-class null(object):
-    """ Represents a null value to differentiate from None. """
-    def __repr__(self):
-        return '<Null>'
-
-
-Null = null()
-
-
-def check_error_param_structure(json_body, paramValue=Null, paramName=Null, paramCompare=Null,
+def check_error_param_structure(json_body, paramValue=null, paramName=null, paramCompare=null,
                                 isParamValueLiteralUnicode=False, paramCompareExists=False, version=None):
     """
     Validates error response 'param' information based on different Magpie version formats.

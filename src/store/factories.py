@@ -13,13 +13,13 @@ import time
 import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import AnyStr, Union, SettingDict  # noqa: F401
+    from geoimagenet_ml.typedefs import AnyStr, Union, SettingsType  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatabaseInterface   # noqa: F401
 logger = logging.getLogger(__name__)
 
 
 def get_database_type(specification):
-    # type: (Union[Session, Registry, SettingDict]) -> AnyStr
+    # type: (Union[Session, Registry, SettingsType]) -> AnyStr
     """
     Return the db type string from a given specification or environment variable
     'GEOIMAGENET_ML_API_DB_FACTORY' if defined.

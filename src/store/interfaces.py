@@ -4,7 +4,7 @@
 from typing import TYPE_CHECKING, Any, AnyStr, List, Optional                   # noqa: F401
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job     # noqa: F401
-    from geoimagenet_ml.typedefs import OptionDict, UUID                        # noqa: F401
+    from geoimagenet_ml.typedefs import OptionType, UUID                        # noqa: F401
     from pyramid.request import Request                                         # noqa: F401
     from io import BufferedIOBase                                               # noqa: F401
 
@@ -52,7 +52,7 @@ class DatabaseInterface(object):
         raise NotImplementedError
 
     def get_information(self):
-        # type: (...) -> OptionDict
+        # type: (...) -> OptionType
         """
         :returns: {'version': version, 'type': db_type}
         """
@@ -103,7 +103,7 @@ class ModelStore(object):
     """
 
     def save_model(self, model, data=None, request=None):
-        # type: (Model, Optional[OptionDict, BufferedIOBase], Optional[Request]) -> Model
+        # type: (Model, Optional[OptionType, BufferedIOBase], Optional[Request]) -> Model
         """
         Stores a model in storage.
         """
