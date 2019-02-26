@@ -1,22 +1,30 @@
+from geoimagenet_ml.typedefs import JsonDict
 import collections
 import logging
 import math
 import os
 
+# === PACKAGE PROVIDED BY THELPER ===
+# noinspection PyPackageRequirements
 import affine
+# noinspection PyPackageRequirements
 import osgeo.gdal
-import matplotlib.pyplot as plt
+# noinspection PyPackageRequirements
 import numpy as np
+# noinspection PyPackageRequirements
 import ogr
+# noinspection PyPackageRequirements
 import osr
+# noinspection PyPackageRequirements
 import shapely
+# noinspection PyPackageRequirements
 import shapely.geometry
+# noinspection PyPackageRequirements
 import shapely.ops
+# noinspection PyPackageRequirements
 import shapely.wkt
 
-import thelper.utils as tu
-
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 NUMPY2GDAL_TYPE_CONV = {
     np.uint8: osgeo.gdal.GDT_Byte,
@@ -103,13 +111,38 @@ def percent(count, total):
     return int(count * 100 // total)
 
 
+def parse_coordinate_system(body):
+    # type: (JsonDict) -> osr.SpatialReference
+    crs_body = body.get('crs') or body.get('srs')
+    crs_type = crs_body.get('type', '').upper()
+    crs_opts = list(crs_body.get('properties').values())
+    srs = ogr.osr.SpatialReference()
+    csr = None
+    if crs_type == 'EPSG':
+        csr = srs.ImportFromEPSG(*crs_opts)
+    if crs_type == 'EPSGA':
+        csr = srs.ImportFromEPSGA(*crs_opts)
+    if crs_type == 'ERM':
+        csr = srs.ImportFromERM(*crs_opts)
+    if crs_type == 'ESRI':
+        csr = srs.ImportFromESRI(*crs_opts)
+    if crs_type == 'ESRI':
+        csr = srs.ImportFromESRI(*crs_opts)
+    if crs_type == 'PCI':
+        csr = srs.ImportFromPCI(*crs_opts)
+    if not csr:
+        LOGGER.error("Could not identify CRS/SRS type.")
+        raise NotImplementedError("Could not identify CRS/SRS type.")
+    return csr
+
+
 def parse_geojson(geojson, srs_destination, roi=None):
     if geojson is None or not isinstance(geojson, dict):
         raise AssertionError("unexpected geojson type")
     if "features" not in geojson or not isinstance(geojson["features"], list):
         raise AssertionError("unexpected geojson feature list type")
     features = geojson["features"]
-    logger.info("total geojson feature count: %d" % len(features))
+    LOGGER.info("total geojson feature count: %d" % len(features))
     if "crs" not in geojson or geojson["crs"]["type"] != "EPSG":
         raise AssertionError("geojson is missing its crs/epsg fields")
     srs_origin = ogr.osr.SpatialReference()
@@ -118,7 +151,7 @@ def parse_geojson(geojson, srs_destination, roi=None):
     if not srs_origin.IsSame(srs_destination):
         shapes_srs_transform = osr.CoordinateTransformation(srs_origin, srs_destination)
     kept_features = []
-    logger.debug("scanning parsed features for out-of-bounds cases...")
+    LOGGER.debug("scanning parsed features for out-of-bounds cases...")
     for feature in features:
         raw_geometry = feature["geometry"]
         if raw_geometry["type"] == "Polygon":
@@ -139,13 +172,13 @@ def parse_geojson(geojson, srs_destination, roi=None):
             raise AssertionError("unhandled raw geometry type (%s)" % raw_geometry["type"])
         if roi is not None and roi and roi.contains(feature["geometry"]):
             kept_features.append(feature)
-    logger.info("kept features: %d (%d%%)" % (len(kept_features), int(len(kept_features) * 100 // len(features))))
+    LOGGER.info("kept features: %d (%d%%)" % (len(kept_features), int(len(kept_features) * 100 // len(features))))
     features = kept_features
     category_counter = collections.Counter()
     for feature in features:
         category_counter[feature["properties"]["taxonomy_class_id"]] += 1
-    logger.info("unique + clean feature categories: %s" % len(category_counter.keys()))
-    logger.debug("%s" % str(category_counter))
+    LOGGER.info("unique + clean feature categories: %s" % len(category_counter.keys()))
+    LOGGER.debug("%s" % str(category_counter))
     return features, category_counter
 
 
@@ -156,13 +189,13 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
     shapefile = shapefile_driver.Open(shapefile_path, 0)
     if shapefile is None:
         raise AssertionError("could not open vector data file at '%s'" % shapefile_path)
-    logger.debug("Shapefile vector metadata printing below... %s" % str(shapefile))
+    LOGGER.debug("Shapefile vector metadata printing below... %s" % str(shapefile))
     if len(shapefile) != 1:
         raise AssertionError("expected one layer, got multiple")
     layer = shapefile.GetLayer()
     layer_def = layer.GetLayerDefn()
-    logger.debug("layer name: %s" % str(layer.GetName()))
-    logger.debug("field count: %s" % str(layer_def.GetFieldCount()))
+    LOGGER.debug("layer name: %s" % str(layer.GetName()))
+    LOGGER.debug("field count: %s" % str(layer_def.GetFieldCount()))
     got_category_field = False
     for field_idx in range(layer_def.GetFieldCount()):
         field_name = layer_def.GetFieldDefn(field_idx).GetName()
@@ -170,7 +203,7 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
         field_type = layer_def.GetFieldDefn(field_idx).GetFieldTypeName(field_type_code)
         field_width = layer_def.GetFieldDefn(field_idx).GetWidth()
         precision = layer_def.GetFieldDefn(field_idx).GetPrecision()
-        logger.debug("field %d: {name:\"%s\", type:\"%s\", length:%s, precision:%s}"
+        LOGGER.debug("field %d: {name:\"%s\", type:\"%s\", length:%s, precision:%s}"
                      % (field_idx, field_name, field_type, str(field_width), str(precision)))
         got_category_field = got_category_field or field_name == category_field
     if not got_category_field:
@@ -178,10 +211,10 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
                              % category_field)
     shapes_srs_transform = osr.CoordinateTransformation(layer.GetSpatialRef(), srs_destination)
     feature_count = layer.GetFeatureCount()
-    logger.info("total shapefile feature count: %s" % str(feature_count))
+    LOGGER.info("total shapefile feature count: %s" % str(feature_count))
     oob_feature_count = 0
     features = []
-    logger.debug("scanning parsed features for out-of-bounds cases...")
+    LOGGER.debug("scanning parsed features for out-of-bounds cases...")
     for feature in layer:
         ogr_geometry = feature.GetGeometryRef()
         ogr_geometry.Transform(shapes_srs_transform)
@@ -196,7 +229,7 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
                 "category": feature_category,
                 "geometry": feature_geometry,
             })
-    logger.info("out-of-bounds features: %d  (%d%%)"
+    LOGGER.info("out-of-bounds features: %d  (%d%%)"
                 % (oob_feature_count, int(oob_feature_count * 100 // feature_count)))
     unlabeled_feature_count = 0
     uncertain_feature_count = 0
@@ -218,20 +251,20 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
             category_counter[feature["category"]] += 1
 
     n_features = len(features)
-    logger.info("bad shape features: %d  (%d%%)"
+    LOGGER.info("bad shape features: %d  (%d%%)"
                 % (bad_shape_feature_count, percent(bad_shape_feature_count, n_features)))
-    logger.info("unlabeled features: %d  (%d%%)"
+    LOGGER.info("unlabeled features: %d  (%d%%)"
                 % (unlabeled_feature_count, percent(unlabeled_feature_count, n_features)))
-    logger.info("uncertain features: %d  (%d%%)"
+    LOGGER.info("uncertain features: %d  (%d%%)"
                 % (uncertain_feature_count, percent(uncertain_feature_count, n_features)))
-    logger.info("clean features: %s" % sum(category_counter.values()))
-    logger.info("unique+clean feature categories: %s" % len(category_counter.keys()))
-    logger.debug("%s" % str(category_counter.keys()))
+    LOGGER.info("clean features: %s" % sum(category_counter.values()))
+    LOGGER.info("unique+clean feature categories: %s" % len(category_counter.keys()))
+    LOGGER.debug("%s" % str(category_counter.keys()))
     if target_category:
         if target_category not in category_counter:
             raise AssertionError("could not find specified category '%s' in parsed features" % target_category)
         category_percent = percent(category_counter[target_category], sum(category_counter.values()))
-        logger.info("selected category raw feature count: %d  (%d%%)"
+        LOGGER.info("selected category raw feature count: %d  (%d%%)"
                     % (category_counter[target_category], category_percent))
         features = [feature for feature in features if feature["category"] == target_category and feature["clean"]]
         if not features:
@@ -256,16 +289,16 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
     global_rois = []
     raster_stats_map = []
     for rasterfile_path in rasterfile_paths:
-        rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
+        rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
         if rasterfile is None:
             raise AssertionError("could not open raster data file at '%s'" % rasterfile_path)
-        logger.debug("Raster '%s' metadata printing below..." % rasterfile_path)
-        logger.debug("%s" % str(rasterfile))
-        logger.debug("%s" % str(rasterfile.GetMetadata()))
-        logger.debug("band count: %s" % str(rasterfile.RasterCount))
+        LOGGER.debug("Raster '%s' metadata printing below..." % rasterfile_path)
+        LOGGER.debug("%s" % str(rasterfile))
+        LOGGER.debug("%s" % str(rasterfile.GetMetadata()))
+        LOGGER.debug("band count: %s" % str(rasterfile.RasterCount))
         raster_geotransform = rasterfile.GetGeoTransform()
         raster_extent = get_geoextent(raster_geotransform, 0, 0, rasterfile.RasterXSize, rasterfile.RasterYSize)
-        logger.debug("extent: %s" % str(raster_extent))
+        LOGGER.debug("extent: %s" % str(raster_extent))
         raster_curr_srs = osr.SpatialReference()
         raster_curr_srs_str = rasterfile.GetProjectionRef()
         if "unknown" not in raster_curr_srs_str:
@@ -274,7 +307,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
             if default_srs is None:
                 raise AssertionError("raster did not provide an srs, and no default EPSG srs provided")
             raster_curr_srs = default_srs
-        logger.debug("spatial ref:\n%s" % str(raster_curr_srs))
+        LOGGER.debug("spatial ref:\n%s" % str(raster_curr_srs))
         px_width, px_height = raster_geotransform[1], raster_geotransform[5]
         skew_x, skew_y = raster_geotransform[2], raster_geotransform[4]
         raster_bands_stats = []
@@ -283,7 +316,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
             curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)  # offset, starts at 1
             if curr_band is None:
                 raise AssertionError("found invalid raster band")
-            # lines below cause crashes on python 3.6m on windows w/ gdal from precomp wheel
+            # lines below cause crashes on python 3.6m on windows w/ gdal from pre-compiled wheel
             # curr_band_stats = curr_band.GetStatistics(True,True)
             # if curr_band_stats is None:
             #    raise AssertionError("could not compute band statistics")
@@ -292,7 +325,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
             elif raster_datatype != curr_band.DataType:
                 raise AssertionError("expected identical data types in all bands & rasters")
             if normalize:
-                logger.debug("computing band #%d statistics..." % (raster_band_idx + 1))
+                LOGGER.debug("computing band #%d statistics..." % (raster_band_idx + 1))
                 band_array = curr_band.ReadAsArray()
                 band_nodataval = curr_band.GetNoDataValue()
                 band_ma = np.ma.array(band_array.astype(np.float32),
@@ -330,26 +363,6 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
         })
         rasterfile = None  # close input fd
     coverage = shapely.ops.cascaded_union(global_rois)
-    if normalize:
-        if not raster_stats_map:
-            import pickle
-            with open("raster_errbars_labels.pickle", "rb") as handle:
-                raster_errbars_labels = pickle.load(handle)
-            with open("raster_errbars_stats.pickle", "rb") as handle:
-                raster_errbars_stats = pickle.load(handle)
-        else:
-            raster_errbars_labels = [raster_stats["name"] for raster_stats in raster_stats_map]
-            raster_errbars_stats = [raster_stats["stats"] for raster_stats in raster_stats_map]
-        raster_errbars_min = np.array([[per_band[:][0] for per_band in per_file] for per_file in raster_errbars_stats])
-        raster_errbars_max = np.array([[per_band[:][1] for per_band in per_file] for per_file in raster_errbars_stats])
-        raster_errbars_stddev = np.array([[per_band[:][2] for per_band in per_file] for per_file in raster_errbars_stats])
-        raster_errbars_mean = np.array([[per_band[:][3] for per_band in per_file] for per_file in raster_errbars_stats])
-        draw_errbars(raster_errbars_labels, raster_errbars_min, raster_errbars_max, raster_errbars_stddev,
-                     raster_errbars_mean, xlabel="Filename")
-        logger.info("overall mean = %s" % str(np.mean(raster_errbars_mean, axis=0)))
-        logger.info("overall stddev = %s" % str(np.mean(raster_errbars_stddev, axis=0)))
-        # normalization impl below still missing, output is still in orig datatype without range modifications
-        plt.show()
     return rasters_data, coverage
 
 
@@ -399,11 +412,11 @@ def process_feature(geom, geom_srs, raster_data, crop_fixed_size=None):
     crop_inv = np.ma.copy(crop)
     bounds = np.asarray(list(roi_tl) + list(roi_br))
     rasterfile_path = raster_data["filepath"]
-    rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
+    rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
     if rasterfile is None:
         raise AssertionError("could not open raster data file at '%s'" % rasterfile_path)
     raster_geotransform = raster_data["geotransform"]
-    # edge handling code below leftover from ccfb02 impl
+    # edge handling code below leftover from CCFB02 impl
     local_roi_tl_px_real = get_pxcoord(raster_geotransform, roi_tl[0], roi_tl[1])
     local_roi_tl_px = (int(max(round(local_roi_tl_px_real[0]), 0)),
                        int(max(round(local_roi_tl_px_real[1]), 0)))
@@ -419,8 +432,8 @@ def process_feature(geom, geom_srs, raster_data, crop_fixed_size=None):
     local_roi_tl_real = get_geocoord(raster_geotransform, *local_roi_tl_px)
     local_geotransform = list(offset_geotransform)
     local_geotransform[0], local_geotransform[3] = local_roi_tl_real[0], local_roi_tl_real[1]
-    local_target_ds = gdal.GetDriverByName("MEM").Create(
-        '', local_roi_cols, local_roi_rows, 2, gdal.GDT_Byte)  # one band for mask, one inv mask
+    local_target_ds = osgeo.gdal.GetDriverByName("MEM").Create(
+        '', local_roi_cols, local_roi_rows, 2, osgeo.gdal.GDT_Byte)  # one band for mask, one inv mask
     local_target_ds.SetGeoTransform(local_geotransform)
     local_target_ds.SetProjection(raster_data["srs"].ExportToWkt())
     local_target_ds.GetRasterBand(1).WriteArray(np.zeros((local_roi_rows, local_roi_cols), dtype=np.uint8))
@@ -430,7 +443,7 @@ def process_feature(geom, geom_srs, raster_data, crop_fixed_size=None):
     ogr_geometry = ogr.CreateGeometryFromWkt(geom.wkt)
     ogr_feature.SetGeometry(ogr_geometry)
     ogr_layer.CreateFeature(ogr_feature)
-    gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+    osgeo.gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
     local_feature_mask_array = local_target_ds.GetRasterBand(1).ReadAsArray()
     if local_feature_mask_array is None:
         raise AssertionError("layer rasterization failed")
@@ -439,7 +452,7 @@ def process_feature(geom, geom_srs, raster_data, crop_fixed_size=None):
     ogr_feature_inv = ogr.Feature(ogr_layer_inv.GetLayerDefn())
     ogr_feature_inv.SetGeometry(ogr_geometry)
     ogr_layer_inv.CreateFeature(ogr_feature_inv)
-    gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
+    osgeo.gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
     local_bg_mask_array = local_target_ds.GetRasterBand(2).ReadAsArray()
     if local_bg_mask_array is None:
         raise AssertionError("layer rasterization failed")
