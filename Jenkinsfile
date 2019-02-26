@@ -45,7 +45,10 @@ pipeline {
 
         stage('Deploy') {
             when {
-                environment name: 'GIT_LOCAL_BRANCH', value: 'release'
+                anyOf {
+                    environment name: 'GIT_LOCAL_BRANCH', value: 'release';
+                    not { environment name: 'TAG_NAME', value: 'latest' }
+                }
             }
             steps {
                 sh 'docker tag $LOCAL_IMAGE_NAME $TAGGED_IMAGE_NAME'
