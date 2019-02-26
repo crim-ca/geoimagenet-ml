@@ -1,20 +1,24 @@
-from geoimagenet_ml.utils import classproperty
+from geoimagenet_ml.utils import classproperty, null, isnull, str_2_path_list
 from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
 )
+from geoimagenet_ml.typedefs import JsonBody
 from abc import abstractmethod
 from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
 import os
+import six
 import shutil
 import numpy
-import requests
+import logging
 import multiprocessing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Error, Number, Dict, List, Optional, UUID, Union  # noqa: F401
+    from geoimagenet_ml.typedefs import (   # noqa: F401
+        Any, AnyStr, ErrorType, LevelType, Number, Dict, List, Optional, UUID, Union
+    )
     from geoimagenet_ml.store.datatypes import Job
     # noinspection PyProtectedMember
     from celery import Task                 # noqa: F401
@@ -28,10 +32,10 @@ class ProcessRunner(ProcessBase):
     @classproperty
     @abstractmethod
     def inputs(self):
-        # type: () -> List[Dict[AnyStr, Any]]
+        # type: () -> List[JsonBody]
         """
-        Expected inputs of the class defined as list of `{'id': '', <other-params>}`.
-        Is returned as the 'inputs' of a Process description.
+        Expected inputs of the class defined as list of ``{"id": '', <other-params>}``.
+        Is returned as the `inputs` section of a `ProcessDescription` response.
         """
         raise NotImplementedError
 
@@ -40,22 +44,39 @@ class ProcessRunner(ProcessBase):
         # type: (List[Dict[AnyStr, Any]]) -> List[AnyStr]
         """:returns: list of missing input IDs if any. Empty list returned if all required inputs are found."""
         # noinspection PyTypeChecker
-        required_input_ids = [i['id'] for i in cls.inputs if i.get('minOccurs', 1) > 1]
-        input_ids = [i['id'] for i in inputs]
+        required_input_ids = [i["id"] for i in cls.inputs if i.get("minOccurs", 1) > 1]
+        input_ids = [i["id"] for i in inputs]
         return list(set(required_input_ids) - set(input_ids))
 
-    def get_input(self, input_id, default=None, one=False):
+    def get_input(self, input_id, default=null, one=False):
         # type: (AnyStr, Optional[Any], Optional[bool]) -> Union[List[Any], Any]
-        """:returns: flattened list of input values matching specified :param:`input_id`."""
-        inputs = [job_input['value'] for job_input in self.job.inputs if job_input['id'] == input_id]
+        """
+        Retrieves a flattened list of input values matching any number of occurrences of ``input_id``.
+
+        If ``input_id`` is not matched:
+            - if ``default`` is specified, it is returned instead as a list.
+            - if ``default`` is missing, but can be found in the process's ``input`` definition, it is used instead.
+
+        If ``one=True``, the first element of any list from previous step is returned instead of the whole list.
+        """
+        inputs = [job_input["value"] for job_input in self.job.inputs if job_input["id"] == input_id]
         flattened_inputs = []
         for i in inputs:
             if isinstance(i, list):
                 flattened_inputs.extend(i)
             else:
                 flattened_inputs.append(i)
-        if not flattened_inputs and default is not None:
-            flattened_inputs = [default]
+        if not flattened_inputs:
+            if not isnull(default):
+                flattened_inputs = [default]
+            else:
+                input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]  # type: JsonBody
+                if 'default' in input_spec:
+                    flattened_inputs = [input_spec['default']]
+                else:
+                    formats_defaults = [f['default'] for f in input_spec['formats'] if 'default' in f]
+                    if formats_defaults:
+                        flattened_inputs = [formats_defaults[0]]
         if one:
             return flattened_inputs[0]
         return flattened_inputs
@@ -82,13 +103,13 @@ class ProcessRunner(ProcessBase):
         job = self.jobs_store.update_job(job, request=request)
         return job
 
-    def update_job_status(self, status, status_message, status_progress=None, errors=None):
-        # type: (AnyStr, AnyStr, Optional[Number], Optional[Error]) -> None
+    def update_job_status(self, status, status_message, status_progress=None, errors=None, level=None):
+        # type: (AnyStr, AnyStr, Optional[Number], Optional[ErrorType], Optional[LevelType]) -> None
         """Updates the new job status."""
         self.job.status = map_status(status)
         self.job.status_message = "{} {}.".format(str(self.job), status_message)
         self.job.progress = status_progress if status_progress is not None else self.job.progress
-        self.job.save_log(logger=self.logger, errors=errors)
+        self.job.save_log(logger=self.logger, errors=errors, level=level)
         self.jobs_store.update_job(self.job, request=self.request)
 
 
@@ -108,16 +129,18 @@ class ProcessRunnerModelTester(ProcessRunner):
     def inputs(self):
         return [
             {
-                'id': 'dataset',
-                'formats': [{'mimeType': 'text/plain'}],
-                'minOccurs': 1,
-                'maxOccurs': 1,
+                "id": "dataset",
+                "formats": [{"mimeType": "text/plain"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": 1,
             },
             {
-                'id': 'model',
-                'formats': [{'mimeType': 'text/plain'}],
-                'minOccurs': 1,
-                'maxOccurs': 1,
+                "id": "model",
+                "formats": [{"mimeType": "text/plain"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": 1,
             }
         ]
 
@@ -140,7 +163,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             Updates the job progress based on evaluation progress (after each batch).
             Called using callback of prediction metric.
             """
-            metric = test_runner.test_metrics['predictions']
+            metric = test_runner.test_metrics["predictions"]
             total_sample_count = test_runner.test_loader.sample_count
             evaluated_sample_count = len(metric.predictions)  # gradually expanded on each evaluation callback
             batch_count = len(test_runner.test_loader)
@@ -152,13 +175,13 @@ class ProcessRunnerModelTester(ProcessRunner):
 
             # update job results and add important fields
             _job.results = [{
-                'identifier': 'predictions',
-                'value': metric.predictions,
+                "identifier": "predictions",
+                "value": metric.predictions,
             }]
-            if hasattr(test_runner, 'class_names'):
+            if hasattr(test_runner, "class_names"):
                 _job.results.insert(0, {
-                    'identifier': 'classes',
-                    'value': test_runner.class_names
+                    "identifier": "classes",
+                    "value": test_runner.class_names
                 })
             self.jobs_store.update_job(_job)
 
@@ -179,11 +202,11 @@ class ProcessRunnerModelTester(ProcessRunner):
             self.update_job_status(STATUS_STARTED, "initiation done", 1)
 
             self.update_job_status(STATUS_RUNNING, "retrieving dataset definition", 2)
-            dataset_uuid = self.get_input('dataset')[0]
+            dataset_uuid = self.get_input("dataset")[0]
             dataset = database_factory(self.registry).datasets_store.fetch_by_uuid(dataset_uuid, request=self.request)
 
             self.update_job_status(STATUS_RUNNING, "loading model from definition", 3)
-            model_uuid = self.get_input('model')[0]
+            model_uuid = self.get_input("model")[0]
             model = database_factory(self.registry).models_store.fetch_by_uuid(model_uuid, request=self.request)
             model_config = model.data  # calls loading method, raises failure accordingly
 
@@ -195,7 +218,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             test_runner.eval_iter_callback = batch_iter.__call__
 
             # link the predictions with a callback for progress update during evaluation
-            pred_metric = test_runner.test_metrics['predictions']
+            pred_metric = test_runner.test_metrics["predictions"]
             pred_metric.callback = lambda: _update_job_eval_progress(self.job, batch_iter,
                                                                      start_percent=5, final_percent=99)
             self.update_job_status(STATUS_RUNNING, "starting test data prediction evaluation", 5)
@@ -215,7 +238,14 @@ class ProcessRunnerModelTester(ProcessRunner):
 
 
 class ProcessRunnerBatchCreator(ProcessRunner):
-    """Executes patches creation from a batch of annotated shapefiles and images."""
+    """
+    Executes patches creation from a batch of annotated images with GeoJSON metadata.
+    Uses with GeoImageNet API requests format for annotation data extraction.
+    """
+
+    @classproperty
+    def dataset_type(self):
+        return 'geoimagenet-batch-patches'
 
     @classproperty
     def identifier(self):
@@ -230,63 +260,119 @@ class ProcessRunnerBatchCreator(ProcessRunner):
     def inputs(self):
         return [
             {
-                'id': 'name',
-                'abstract': "Name to be applied to the batch (dataset) to be created.",
-                'formats': [{'mimeType': 'text/plain'}],
-                'minOccurs': 1,
-                'maxOccurs': 1,
+                "id": "name",
+                "abstract": "Name to be applied to the batch (dataset) to be created.",
+                "formats": [{"mimeType": "text/plain"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": 1,
             },
             {
-                'id': 'geojson_urls',
-                'abstract': "List of request URL to GeoJSON annotations with patches geo-locations and metadata. " +
-                            "Multiple URL are combined into a single batch creation call, it should be used only for " +
+                "id": "geojson_urls",
+                "abstract": "List of request URL to GeoJSON annotations with patches geo-locations and metadata. "
+                            "Multiple URL are combined into a single batch creation call, it should be used only for "
                             "paging GeoJSON responses. Coordinate reference systems must match between each URL.",
-                'formats': [{'mimeType': 'text/plain'}],
-                'minOccurs': 1,
-                'maxOccurs': None,
+                "formats": [{"mimeType": "text/plain"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": None,
             },
             {
-                'id': 'overwrite',
-                'abstract': "Overwrite an existing batch if it already exists.",
-                'formats': [{'mimeType': 'text/plain', 'default': False}],
-            }
+                "id": "crop_fixed_size",
+                "abstract": "Overwrite an existing batch if it already exists.",
+                "formats": [{"mimeType": "text/plain", "default": None}],
+                "type": "integer",
+                "minOccurs": 0,
+                "maxOccurs": 1,
+            },
+            {
+                "id": "split_ratio",
+                "abstract": "Ratio to employ for train/test patch splits of the created batch.",
+                "formats": [{"mimeType": "text/plain", "default": 0.90}],
+                "type": "float",
+                "minOccurs": 0,
+                "maxOccurs": 1,
+            },
+            {
+                "id": "incremental_batch",
+                "abstract": "Base dataset ID (string) to use for incremental addition of new patches to the batch. "
+                            "If False (boolean), create the new batch from nothing, without using any incremental "
+                            "patches from previous datasets. By default, searches and uses the 'latest' batch.",
+                "formats": [{"mimeType": "text/plain", "default": None}],
+                "types": ["string", "boolean"],
+                "minOccurs": 0,
+                "maxOccurs": 1,
+            },
+            {
+                "id": 'overwrite',
+                "abstract": "Overwrite an existing batch if it already exists.",
+                "formats": [{"mimeType": "text/plain", "default": False}],
+                "type": "boolean",
+                "minOccurs": 0,
+                "maxOccurs": 1,
+            },
         ]
+
+    def find_batch(self, batch_id):
+        if batch_id is None:
+            dataset = sorted([d for d in self.dataset_store.list_datasets() if d.type == self.dataset_type],
+                             key=lambda d: d.created)
+            if not dataset:
+                self.update_job_status(
+                    STATUS_RUNNING,
+                    "Could not find latest dataset with [{!s}]. Building from scratch...".format(batch_id),
+                    level=logging.WARNING,
+                )
+                return None
+            return dataset[0]
+        elif isinstance(batch_id, six.string_types):
+            dataset = self.dataset_store.fetch_by_uuid(batch_id)
+            if dataset.type != self.dataset_type:
+                raise ValueError("Invalid dataset type, found [{}], expected [{}]"
+                                 .format(dataset.type, self.dataset_type))
+        return None
 
     def __call__(self, *args, **kwargs):
         try:
             from geoimagenet_ml.store.datatypes import Dataset
             from geoimagenet_ml.store.factories import database_factory
+            self.dataset_store = database_factory(self.registry).datasets_store
             self.update_job_status(STATUS_STARTED, "initiation done", 1)
 
             self.update_job_status(STATUS_RUNNING, "creating dataset representation of patches", 2)
-            dataset_name = str(self.get_input('name')[0])
-            dataset_root = str(self.registry.settings['geoimagenet_ml.api.datasets_path'])
+            dataset_name = str(self.get_input("name")[0])
+            dataset_root = str(self.registry.settings['geoimagenet_ml.ml.datasets_path'])
             if not os.path.isdir(dataset_root):
                 raise RuntimeError("cannot find datasets root path")
             if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
                 raise RuntimeError("invalid batch dataset name")
             dataset_path = os.path.join(dataset_root, dataset_name)
-            dataset_overwrite = asbool(self.get_input('overwrite', default=False, one=True))
+            dataset_overwrite = asbool(self.get_input('overwrite', one=True))
             if dataset_overwrite and os.path.isdir(dataset_path):
                 shutil.rmtree(dataset_path)
             os.makedirs(dataset_path, exist_ok=False, mode=0o644)
-            dataset = Dataset(name=dataset_name, path=dataset_path, type='patches')
+            dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type)
 
             self.update_job_status(STATUS_RUNNING, "obtaining references from process job inputs", 2)
             geojson_urls = self.get_input('geojson_urls')
+            raster_paths = str_2_path_list(self.registry.settings['geoimagenet_ml.ml.source_images_paths'])
+            crop_fixed_size = self.get_input('crop_fixed_size', one=True)
+            split_ratio = self.get_input('split_ratio', one=True)
+            latest_batch = self.get_input('incremental_batch', one=True)
+
+            self.update_job_status(STATUS_RUNNING, "fetching annotations using process job inputs", 3)
             annotations = retrieve_annotations(geojson_urls)
-            raster_paths = self.get_input('geojson_urls')
-            crop_fixed_size = self.get_input('crop_fixed_size', default=None)  # return full annotation if no crop size
 
-            patches_meta = create_batch_patches(annotations, raster_paths, dataset_path, crop_fixed_size,
-                                                lambda s, p: self.update_job_status(STATUS_RUNNING, s, p),
-                                                start_percent=3, end_percent=97)
+            self.update_job_status(STATUS_RUNNING, "looking for latest batch", 4)
+            latest_batch = self.find_batch(latest_batch)
 
-            self.update_job_status(STATUS_RUNNING, "updating batch splits", 98)
-
+            create_batch_patches(annotations, raster_paths, dataset, dataset_overwrite,
+                                 latest_batch, crop_fixed_size,
+                                 lambda s, p=None: self.update_job_status(STATUS_RUNNING, s, p),
+                                 start_percent=5, end_percent=98, train_test_ratio=split_ratio)
 
             self.update_job_status(STATUS_RUNNING, "updating completed dataset definition", 99)
-            dataset = database_factory(self.registry).datasets_store.save_dataset(dataset, request=self.request)
+            dataset = self.dataset_store.save_dataset(dataset, request=self.request)
 
             self.update_job_status(STATUS_SUCCEEDED, "processing complete", 100)
 

@@ -18,7 +18,7 @@ import json
 import six
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import JsonDict, OptionDict  # noqa: F401
+    from geoimagenet_ml.typedefs import JsonBody, OptionType  # noqa: F401
 
 # control variables to avoid infinite recursion in case of
 # major programming error to avoid application hanging
@@ -33,7 +33,7 @@ def verify_param(param,                             # type: Any
                  httpError=HTTPNotAcceptable,       # type: Optional[HTTPError]
                  httpKWArgs=None,                   # type: Optional[Dict[AnyStr, Any]]
                  msgOnFail="",                      # type: Optional[AnyStr]
-                 content=None,                      # type: Optional[JsonDict]
+                 content=None,                      # type: Optional[JsonBody]
                  contentType='application/json',    # type: Optional[AnyStr]
                  notNone=False,                     # type: Optional[bool]
                  notEmpty=False,                    # type: Optional[bool]
@@ -237,9 +237,9 @@ def valid_http(httpSuccess=HTTPOk, httpKWArgs=None, detail="",
 
 
 def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
-               httpKWArgs=None,                     # type: Optional[OptionDict]
+               httpKWArgs=None,                     # type: Optional[OptionType]
                detail="",                           # type: Optional[AnyStr]
-               content=None,                        # type: Optional[AnyStr, JsonDict]
+               content=None,                        # type: Optional[AnyStr, JsonBody]
                contentType='application/json',      # type: Optional[AnyStr]
                nothrow=False,                       # type: Optional[bool]
                request=None                         # type: Optional[Request]
@@ -287,10 +287,10 @@ def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
 def validate_params(httpClass,      # type: HTTPException
                     httpBase,       # type: Union[HTTPException, List[HTTPException]]
                     detail,         # type: AnyStr
-                    content,        # type: JsonDict
+                    content,        # type: JsonBody
                     contentType,    # type: AnyStr
                     request,        # type: Request
-                    ):              # type: (...) -> Tuple[int, AnyStr, JsonDict]
+                    ):              # type: (...) -> Tuple[int, AnyStr, JsonBody]
     """
     Validates parameter types and formats required by `valid_http` and `raise_http`.
 
@@ -356,7 +356,7 @@ def get_request_info(request):
 
 
 def format_content_meta_data(httpCode, detail, content, contentType, request):
-    # type: (int, AnyStr, Union[AnyStr, JsonDict], AnyStr, Request) -> JsonDict
+    # type: (int, AnyStr, Union[AnyStr, JsonBody], AnyStr, Request) -> JsonBody
     """Store meta information under 'meta' and the remaining content under 'data'."""
     json_body = {
         u'meta': {

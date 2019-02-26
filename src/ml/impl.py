@@ -1,4 +1,5 @@
-from geoimagenet_ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature
+from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature
+from geoimagenet_ml.utils import ClassCounter
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
@@ -6,6 +7,7 @@ from io import BytesIO
 import osgeo.gdal
 import requests
 import logging
+import random
 import six
 import ssl
 import os
@@ -15,14 +17,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Callable, List, Tuple, Union, OptionDict, JsonDict, SettingDict, Number
+        Any, AnyStr, Callable, List, Tuple, Union, OptionType, JsonBody, SettingsType, Number, Optional
     )
 
 LOGGER = logging.getLogger(__name__)
 
 
 def load_model(model_file):
-    # type: (Union[Any, AnyStr]) -> Tuple[bool, OptionDict, Union[BytesIO, None], Union[Exception, None]]
+    # type: (Union[Any, AnyStr]) -> Tuple[bool, OptionType, Union[BytesIO, None], Union[Exception, None]]
     """
     Tries to load a model checkpoint file from the file-like object, file path or URL.
     :return: tuple of (success, data, buffer, exception) accordingly.
@@ -50,7 +52,7 @@ def load_model(model_file):
 
 
 def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
-    # type: (Job, JsonDict, Model, Dataset, SettingDict) -> thelper.train.Trainer
+    # type: (Job, JsonBody, Model, Dataset, SettingsType) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
@@ -68,7 +70,7 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
 
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
-    # type: (JsonDict, Model, Dataset, SettingDict) -> JsonDict
+    # type: (JsonBody, Model, Dataset, SettingsType) -> JsonBody
     """
     Obtains a simplified version of the configuration for 'test' task corresponding to the model and dataset.
     Removes parameters from the original file that would require additional unnecessary operations other than testing.
@@ -76,7 +78,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     """
 
     # transfer required parts, omit training specific values or error-prone configurations
-    test_config = deepcopy(model_checkpoint_config)     # type: JsonDict
+    test_config = deepcopy(model_checkpoint_config)     # type: JsonBody
     test_config["name"] = model_config_override["name"]
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
@@ -92,9 +94,9 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     if "loaders" not in test_config["config"]:
         raise ValueError("Missing 'loaders' configuration from model checkpoint.")
 
-    dataset = test_config["config"]["datasets"][dataset_config_override["name"]]    # type: JsonDict
-    loaders = test_config["config"]["loaders"]  # type: JsonDict
-    trainer = test_config["config"]["trainer"]  # type: JsonDict
+    dataset = test_config["config"]["datasets"][dataset_config_override["name"]]    # type: JsonBody
+    loaders = test_config["config"]["loaders"]  # type: JsonBody
+    trainer = test_config["config"]["trainer"]  # type: JsonBody
 
     # adjust root dir of dataset location to match version deployed on server
     dataset["params"]["root"] = dataset_config_override.path
@@ -147,44 +149,82 @@ def retrieve_annotations(geojson_urls):
         raise RuntimeError("Could not find any annotation from URL(s): {}".format(geojson_urls))
 
 
-def create_batch_patches(annotations_body,      # type: JsonDict
+def filter_existing_patches(features, feature_counters, batch):
+    # type: (JsonBody, ClassCounter, Dataset) -> Tuple[JsonBody, ClassCounter]
+    """Removes any redundant features from the GeoJSON that are already contained within ``batch``."""
+    if not batch:
+        return features, feature_counters
+
+
+
+def create_batch_patches(annotations_meta,      # type: JsonBody
                          raster_search_paths,   # type: List[AnyStr]
-                         dataset_save_path,     # type: AnyStr
-                         crop_fixed_size,       # type: Union[None, int]
-                         update_func,           # type: Callable[[AnyStr, Number], None]
+                         dataset_container,     # type: Dataset
+                         dataset_overwrite,     # type: bool
+                         latest_batch,          # type: Union[Dataset, None]
+                         crop_fixed_size,       # type: Union[int, None]
+                         update_func,           # type: Callable[[AnyStr, Optional[Number]], None]
                          start_percent,         # type: Number
-                         end_percent            # type: Number
-                         ):                     # type: (...) -> List[JsonDict]
+                         end_percent,           # type: Number
+                         train_test_ratio,      # type: float
+                         ):                     # type: (...) -> None
     """
     Creates patches on disk using provided annotation metadata.
-    Parses ``annotation_body`` using format specified by `GeoImageNet API`.
+    Parses ``annotations_meta`` using format specified by `GeoImageNet API`.
 
-    Patches are created by transforming the geometry into the appropriate coordinate system from ``annotation_body``.
+    Patches are created by transforming the geometry into the appropriate coordinate system from ``annotations_meta``.
 
-    Literal coordinate values as dimension limits of the patch are fist applied.
+    Literal coordinate values as dimension limits of the patch are first applied.
     This creates patches of variable size, but corresponding to the original annotations.
     If ``crop_fixed_size`` is provided, fixed sized patches are afterwards created by cropping accordingly with
-    dimensions of each patch's annotation coordinates.
+    dimensions of each patch's annotation coordinates. Both `raw` and `crop` patches are preserved in this case.
+
+    Created patches for the batch are then split into train/test sets per corresponding ``taxonomy_class_id``.
 
     .. seealso::
-        - GeoImageNet API format: https://geoimagenetdev.crim.ca/api/v1/ui/#/paths/~1batches/post
-        - GeoImageNet API example: https://geoimagenetdev.crim.ca/api/v1/batches?taxonomy_id=1
+        - `GeoImageNet API` format: https://geoimagenetdev.crim.ca/api/v1/ui/#/paths/~1batches/post
+        - `GeoImageNet API` example: https://geoimagenetdev.crim.ca/api/v1/batches?taxonomy_id=1
 
-    :returns: list of metadata of created patches and counter of class ids.
+    :returns: None, ``dataset_container`` updated with metadata of created patches.
     """
     def fix_raster_search_name(name):
         return name.replace("8bits", "xbits").replace("16bits", "xbits")
 
+    def random_select_split(splits, class_id):
+        # type: (List[Tuple[AnyStr, ClassCounter]], Union[int, AnyStr]) -> AnyStr
+        """
+        Randomly selects a split set from ``splits`` and decreases ``class_id`` in the corresponding counter
+        if any is left for that class (counter didn't reach 0). The other counter is returned and decreased otherwise.
+
+        :param splits: list of tuple with 'train'/'test' and its corresponding counter.
+        :param class_id: class for which to update the selected split counter.
+        :returns: selected split 'name', updated counters by reference.
+        """
+        chosen = random.choice(splits)
+        if chosen[1][class_id] <= 0:
+            if chosen[0] == splits[0][0]:
+                chosen = splits[1]
+            else:
+                chosen = splits[0]
+        chosen[1][class_id] -= 1
+        return chosen[0]
+
     update_func("parsing raster files", start_percent)
-    srs = parse_coordinate_system(annotations_body)
+    srs = parse_coordinate_system(annotations_meta)
     rasters_data, raster_global_coverage = parse_rasters(raster_search_paths, default_srs=srs)
 
     start_percent += 1
-    update_func("parsing shape files", start_percent)
-    if not isinstance(annotations_body, dict):
-        raise AssertionError("annotations should be passed in as dict obtained from geojson?")
-    features, category_counter = parse_geojson(annotations_body, srs_destination=srs, roi=raster_global_coverage)
+    update_func("parsing GeoJSON metadata", start_percent)
+    if not isinstance(annotations_meta, dict):
+        raise AssertionError("annotations should be passed in as dict obtained from geojson")
+    features, category_counter = parse_geojson(annotations_meta, srs_destination=srs, roi=raster_global_coverage)
 
+    start_percent += 1
+    update_func("resolving incremental batch patches", start_percent)
+    filter_existing_patches(features, category_counter, latest_batch)
+
+    train_counter, test_counter = category_counter.split(train_test_ratio)
+    train_test_splits = [('train', train_counter), ('test', test_counter)]
     patches_data = []
     patches_crop = [(None, 'raw')]
     if isinstance(crop_fixed_size, int):
@@ -213,10 +253,12 @@ def create_batch_patches(annotations_body,      # type: JsonDict
             if raster_data is None:
                 raise AssertionError("could not find proper raster for feature '%s'" % feature["id"])
 
+        crop_class_id = feature.get('properties', {}).get('taxonomy_class_id')
         patches_data.append({
             "crops": [],    # updated gradually after
             "image": feature.get('properties', {}).get('image_name'),
-            "class": feature.get('properties', {}).get('taxonomy_class_id'),
+            "class": crop_class_id,
+            "split": random_select_split(train_test_splits, crop_class_id),
             "feature": feature.get('id'),
         })
 
@@ -229,10 +271,14 @@ def create_batch_patches(annotations_body,      # type: JsonDict
                 output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
                 output_driver = osgeo.gdal.GetDriverByName("GTiff")
                 output_name = "{}_{}".format(feature["id"], crop_name)
-                output_path = os.path.join(dataset_save_path, "{}.tif".format(output_name))
+                output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                 if os.path.exists(output_path):
-                    LOGGER.warning("Output path already exists but shouldn't, removing: [{}]".format(output_path))
-                    os.remove(output_path)  # gdal raster creation fails if file already exists
+                    msg = "Output path [{}] already exists but shouldn't.".format(output_path)
+                    if dataset_overwrite:
+                        update_func(msg + " Removing...", logging.WARNING)
+                        os.remove(output_path)  # gdal raster creation fails if file already exists
+                    else:
+                        raise RuntimeError(msg)
                 output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
                                                       crop.shape[2], raster_data["datatype"])
                 for raster_band_idx in range(crop.shape[2]):
@@ -242,8 +288,10 @@ def create_batch_patches(annotations_body,      # type: JsonDict
                 output_dataset.SetGeoTransform(output_geotransform)
                 output_dataset = None  # close output fd
                 patches_data[-1]["crops"].append({
+                    "type": crop_name,
                     "path": output_path,
+                    "shape": list(crop.shape),
+                    "datatype": raster_data["datatype"],
                     "coordinates": output_geotransform,
-
                 })
-    return patches_data, category_counter
+    dataset_container.parameters = patches_data

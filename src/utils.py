@@ -3,19 +3,21 @@ from six.moves.configparser import ConfigParser
 from datetime import datetime
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
+import collections
 import time
 import pytz
 import types
 import uuid
 import six
 import re
+import os
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Dict, Optional, Union, SettingDict  # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, Dict, List, Optional, Union, SettingsType  # noqa: F401
 
 
 def get_base_url(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     return settings.get('geoimagenet_ml.api.url').rstrip('/').strip()
 
 
@@ -58,21 +60,42 @@ def settings_from_ini(config_ini_file_path, ini_main_section_name):
     return settings
 
 
+def str_2_path_list(str_list):
+    # type: (Union[None, AnyStr]) -> List[AnyStr]
+    """Obtains a list of existing and validated paths from a comma-separated string of potential paths."""
+    if not isinstance(str_list, six.string_types) or not str_list:
+        return []
+    path_list = [p.strip() for p in str_list.split(',')]
+    path_list = [p for p in path_list if os.path.isdir(p) or os.path.isfile(p)]
+
+
+class null(object):
+    """Represents a ``null`` value to differentiate from ``None`` when used as default value."""
+    def __repr__(self):
+        return '<Null>'
+
+
+def isnull(item):
+    # type: (Any) -> bool
+    """Evaluates ``item`` for ``null`` type or instance."""
+    return isinstance(item, null) or item is null
+
+
 def islambda(func):
     # type: (Any) -> bool
-    """Evaluates :param:`func` for lambda type."""
+    """Evaluates ``func`` for ``lambda`` type."""
     return isinstance(func, types.LambdaType) and func.__name__ == (lambda: None).__name__
 
 
 def isclass(obj):
     # type: (Any) -> bool
-    """Evaluates :param:`obj` for class type (ie: class definition, not an instance nor any other type)."""
+    """Evaluates ``obj`` for ``class`` type (ie: class definition, not an instance nor any other type)."""
     return isinstance(obj, (type, six.class_types))
 
 
 def is_uuid(item, version=4):
     # type: (Any, Optional[int]) -> bool
-    """Evaluates if :param:`item` is of type UUID, or a string representing one."""
+    """Evaluates if ``item`` is of type ``UUID``, or a string representing one."""
     if isinstance(item, uuid.UUID) and item.version == version:
         return True
     try:
@@ -97,7 +120,7 @@ def get_sane_name(name, min_len=3, max_len=None, assert_invalid=True, replace_in
     return name
 
 
-def assert_sane_name(name, minlen=3, maxlen=None):
+def assert_sane_name(name, min_len=3, max_len=None):
     # type: (AnyStr, Optional[int], Optional[int]) -> None
     if name is None:
         raise ValueError('Invalid name : {0}'.format(name))
@@ -105,8 +128,8 @@ def assert_sane_name(name, minlen=3, maxlen=None):
     if '--' in name \
             or name.startswith('-') \
             or name.endswith('-') \
-            or len(name) < minlen \
-            or (maxlen is not None and len(name) > maxlen) \
+            or len(name) < min_len \
+            or (max_len is not None and len(name) > max_len) \
             or not re.match(r"^[a-zA-Z0-9_\-]+$", name):
         raise ValueError('Invalid name : {0}'.format(name))
 
@@ -197,3 +220,15 @@ class classproperty(object):
 
     def __get__(self, instance, owner):
         return self.getter(owner)
+
+
+class ClassCounter(collections.Counter):
+    """Counter with additional utility methods for class splitting."""
+    def split(self, ratio):
+        """Produces two :class:`ClassCounter` split by ``ratio``."""
+        c1 = ClassCounter()
+        c2 = ClassCounter()
+        for c in self:
+            c1[c] = int(self[c] * ratio)
+            c2[c] = self[c] - c1[c]
+        return c1, c2

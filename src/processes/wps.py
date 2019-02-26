@@ -20,7 +20,7 @@ import logging
 import warnings
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingDict  # noqa: F401
+    from geoimagenet_ml.typedefs import AnyStr, Union, Optional, SettingsType  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 # can be overridden with 'settings.wps-cfg'
@@ -29,7 +29,7 @@ PYWPS_CFG = None
 
 
 def _get_settings_or_wps_config(
-        settings,                   # type: SettingDict
+        settings,                   # type: SettingsType
         project_setting_name,       # type: AnyStr
         config_setting_section,     # type: AnyStr
         config_setting_name,        # type: AnyStr
@@ -49,7 +49,7 @@ def _get_settings_or_wps_config(
 
 
 def get_wps_cfg_path(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     """
     Retrieves the WPS configuration file (`wps.cfg` by default or `geoimagenet_ml.wps_cfg` if specified).
     """
@@ -57,7 +57,7 @@ def get_wps_cfg_path(settings):
 
 
 def get_wps_path(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     """
     Retrieves the WPS path (without hostname).
     Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
@@ -70,7 +70,7 @@ def get_wps_path(settings):
 
 
 def get_wps_url(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     """
     Retrieves the full WPS URL (hostname + WPS path).
     Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
@@ -79,7 +79,7 @@ def get_wps_url(settings):
 
 
 def get_wps_output_path(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     """
     Retrieves the WPS output path directory where to write XML and result files.
     Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
@@ -89,7 +89,7 @@ def get_wps_output_path(settings):
 
 
 def get_wps_output_url(settings):
-    # type: (SettingDict) -> AnyStr
+    # type: (SettingsType) -> AnyStr
     """
     Retrieves the WPS output URL that maps to WPS output path directory.
     Searches directly in settings, then `geoimagenet_ml.wps_cfg` file, or finally, uses the default values if not found.
@@ -100,7 +100,7 @@ def get_wps_output_url(settings):
 
 
 def load_pywps_cfg(registry, config=None):
-    # type: (Registry, Optional[Union[AnyStr, SettingDict]]) -> None
+    # type: (Registry, Optional[Union[AnyStr, SettingsType]]) -> None
     global PYWPS_CFG
 
     if PYWPS_CFG is None:

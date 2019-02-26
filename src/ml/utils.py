@@ -1,5 +1,5 @@
-from geoimagenet_ml.typedefs import JsonDict
-import collections
+from geoimagenet_ml.typedefs import JsonBody
+from geoimagenet_ml.utils import ClassCounter
 import logging
 import math
 import os
@@ -112,7 +112,7 @@ def percent(count, total):
 
 
 def parse_coordinate_system(body):
-    # type: (JsonDict) -> osr.SpatialReference
+    # type: (JsonBody) -> osr.SpatialReference
     crs_body = body.get('crs') or body.get('srs')
     crs_type = crs_body.get('type', '').upper()
     crs_opts = list(crs_body.get('properties').values())
@@ -169,16 +169,16 @@ def parse_geojson(geojson, srs_destination, roi=None):
                 poly = shapely.wkt.loads(ogr_geometry.ExportToWkt())
             feature["geometry"] = poly
         else:
-            raise AssertionError("unhandled raw geometry type (%s)" % raw_geometry["type"])
+            raise AssertionError("unhandled raw geometry type [{}]".format(raw_geometry["type"]))
         if roi is not None and roi and roi.contains(feature["geometry"]):
             kept_features.append(feature)
-    LOGGER.info("kept features: %d (%d%%)" % (len(kept_features), int(len(kept_features) * 100 // len(features))))
+    LOGGER.info("kept features: {} ({}%)".format(len(kept_features), int(len(kept_features) * 100 // len(features))))
     features = kept_features
-    category_counter = collections.Counter()
+    category_counter = ClassCounter()
     for feature in features:
         category_counter[feature["properties"]["taxonomy_class_id"]] += 1
-    LOGGER.info("unique + clean feature categories: %s" % len(category_counter.keys()))
-    LOGGER.debug("%s" % str(category_counter))
+    LOGGER.info("unique + clean feature categories: {}".format(len(category_counter.keys())))
+    LOGGER.debug(str(category_counter))
     return features, category_counter
 
 
@@ -234,7 +234,7 @@ def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
     unlabeled_feature_count = 0
     uncertain_feature_count = 0
     bad_shape_feature_count = 0
-    category_counter = collections.Counter()
+    category_counter = ClassCounter()
     for feature in features:
         if len(feature["category"]) == 0:
             unlabeled_feature_count += 1

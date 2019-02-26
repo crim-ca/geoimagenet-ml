@@ -24,8 +24,6 @@ from pywps import Process as ProcessWPS
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
 from datetime import datetime       # noqa: F401
-# noinspection PyProtectedMember
-from logging import _loggerClass    # noqa: F401
 import boltons.tbutils
 import logging
 import uuid
@@ -34,9 +32,9 @@ import os
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # noinspection PyPackageRequirements
-    from owslib.wps import WPSException     # noqa: F401
     from geoimagenet_ml.typedefs import (   # noqa: F401
-        AnyStr, List, Union, Optional, Input, Output, UUID, JsonDict, OptionDict
+        AnyStr, ErrorType, LevelType, List, LoggerType, Union,
+        Optional, InputType, OutputType, UUID, JsonBody, OptionType
     )
 
 
@@ -83,12 +81,17 @@ class Dataset(Base):
 
     @property
     def parameters(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return self['params']
+
+    @parameters.setter
+    def parameters(self, params):
+        # type: (Union[None, JsonBody]) -> None
+        self['params'] = params
 
     @property
     def params(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'name': self.name,
@@ -98,11 +101,11 @@ class Dataset(Base):
         }
 
     def json(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return self.params
 
     def summary(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'name': self.name,
@@ -148,7 +151,7 @@ class Model(Base):
 
     @property
     def data(self):
-        # type: (...) -> Union[OptionDict, None]
+        # type: (...) -> Union[OptionType, None]
         """
         Retrieve the model's data from the stored file.
         Data can be
@@ -176,7 +179,7 @@ class Model(Base):
 
     @property
     def params(self):
-        # type: (...) -> OptionDict
+        # type: (...) -> OptionType
         return {
             'uuid': self.uuid,
             'name': self.name,
@@ -186,7 +189,7 @@ class Model(Base):
         }
 
     def json(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'name': self.name,
@@ -195,7 +198,7 @@ class Model(Base):
         }
 
     def summary(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'name': self.name,
@@ -254,12 +257,12 @@ class Process(Base):
 
     @property
     def inputs(self):
-        # type: (...) -> List[Input]
+        # type: (...) -> List[InputType]
         return self.get('inputs')
 
     @property
     def outputs(self):
-        # type: (...) -> List[Output]
+        # type: (...) -> List[OutputType]
         return self.get('outputs')
 
     # noinspection PyPep8Naming
@@ -282,7 +285,7 @@ class Process(Base):
 
     @property
     def package(self):
-        # type: (...) -> OptionDict
+        # type: (...) -> OptionType
         return self.get('package')
 
     def __str__(self):
@@ -297,7 +300,7 @@ class Process(Base):
 
     @property
     def params(self):
-        # type: (...) -> OptionDict
+        # type: (...) -> OptionType
         return {
             'uuid': self.uuid,
             'identifier': self.identifier,
@@ -317,7 +320,7 @@ class Process(Base):
 
     @property
     def params_wps(self):
-        # type: (...) -> OptionDict
+        # type: (...) -> OptionType
         """
         Values applicable to WPS Process __init__
         """
@@ -333,7 +336,7 @@ class Process(Base):
         }
 
     def json(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'identifier': self.identifier,
@@ -350,7 +353,7 @@ class Process(Base):
         }
 
     def summary(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'identifier': self.identifier,
@@ -393,8 +396,10 @@ class Job(Base):
             msg = self.status_message
         return get_job_log_msg(duration=self.duration, progress=self.progress, status=self.status, message=msg)
 
-    def save_log(self, errors=None, logger=None):
-        # type: (Optional[Union[AnyStr, Exception, List[WPSException]]], Optional[_loggerClass]) -> None
+    def save_log(self, errors=None, logger=None, level=logging.INFO):
+        # type: (Optional[ErrorType], Optional[LoggerType], Optional[LevelType]) -> None
+        if isinstance(level, six.string_types):
+            level = logging.getLevelName(level)
         if isinstance(errors, six.string_types):
             log_msg = [(logging.ERROR, self._get_log_msg())]
             self.exceptions.append(errors)
@@ -417,17 +422,17 @@ class Job(Base):
                 'Text': error.text
             } for error in errors])
         else:
-            log_msg = [(logging.INFO, self._get_log_msg())]
-        for level, msg in log_msg:
+            log_msg = [(level, self._get_log_msg())]
+        for lvl, msg in log_msg:
             # noinspection PyProtectedMember
             fmt_msg = get_log_fmt() % dict(asctime=now().strftime(get_log_datefmt()),
-                                           levelname=logging.getLevelName(level),
+                                           levelname=logging.getLevelName(lvl),
                                            name=fully_qualified_name(self),
                                            message=msg)
             if len(self.logs) == 0 or self.logs[-1] != fmt_msg:
                 self.logs.append(fmt_msg)
                 if logger:
-                    logger.log(level, msg)
+                    logger.log(lvl, msg)
 
     @property
     def task_uuid(self):
@@ -466,13 +471,13 @@ class Job(Base):
         self['process_uuid'] = process_uuid
 
     def _get_inputs(self):
-        # type: (...) -> List[Optional[JsonDict]]
+        # type: (...) -> List[Optional[JsonBody]]
         if self.get('inputs') is None:
             self['inputs'] = list()
         return self['inputs']
 
     def _set_inputs(self, inputs):
-        # type: (List[Optional[JsonDict]]) -> None
+        # type: (List[Optional[JsonBody]]) -> None
         if not isinstance(inputs, list):
             raise TypeError("Type `list` is required for `{}.inputs`".format(type(self)))
         self['inputs'] = inputs
@@ -606,13 +611,13 @@ class Job(Base):
         self['progress'] = progress
 
     def _get_results(self):
-        # type: (...) -> List[Optional[JsonDict]]
+        # type: (...) -> List[Optional[JsonBody]]
         if self.get('results') is None:
             self['results'] = list()
         return self['results']
 
     def _set_results(self, results):
-        # type: (List[Optional[JsonDict]]) -> None
+        # type: (List[Optional[JsonBody]]) -> None
         if not isinstance(results, list):
             raise TypeError("Type `list` is required for `{}.results`".format(type(self)))
         self['results'] = results
@@ -621,13 +626,13 @@ class Job(Base):
     results = property(_get_results, _set_results)
 
     def _get_exceptions(self):
-        # type: (...) -> List[Optional[JsonDict]]
+        # type: (...) -> List[Optional[JsonBody]]
         if self.get('exceptions') is None:
             self['exceptions'] = list()
         return self['exceptions']
 
     def _set_exceptions(self, exceptions):
-        # type: (List[Optional[JsonDict]]) -> None
+        # type: (List[Optional[JsonBody]]) -> None
         if not isinstance(exceptions, list):
             raise TypeError("Type `list` is required for `{}.exceptions`".format(type(self)))
         self['exceptions'] = exceptions
@@ -636,13 +641,13 @@ class Job(Base):
     exceptions = property(_get_exceptions, _set_exceptions)
 
     def _get_logs(self):
-        # type: (...) -> List[Optional[JsonDict]]
+        # type: (...) -> List[Optional[JsonBody]]
         if self.get('logs') is None:
             self['logs'] = list()
         return self['logs']
 
     def _set_logs(self, logs):
-        # type: (List[Optional[JsonDict]]) -> None
+        # type: (List[Optional[JsonBody]]) -> None
         if not isinstance(logs, list):
             raise TypeError("Type `list` is required for `{}.logs`".format(type(self)))
         self['logs'] = logs
@@ -691,7 +696,7 @@ class Job(Base):
 
     @property
     def params(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'task_uuid': self.task_uuid,
@@ -717,7 +722,7 @@ class Job(Base):
         }
 
     def json(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'task_uuid': self.task_uuid,
@@ -738,7 +743,7 @@ class Job(Base):
         }
 
     def summary(self):
-        # type: (...) -> JsonDict
+        # type: (...) -> JsonBody
         return {
             'uuid': self.uuid,
             'process_uuid': self.process_uuid,
