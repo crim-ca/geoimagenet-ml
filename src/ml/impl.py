@@ -7,6 +7,7 @@ from io import BytesIO
 import osgeo.gdal
 import requests
 import logging
+import numpy as np
 import random
 import six
 import ssl
@@ -283,6 +284,8 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
                 if crop is not None:
                     if crop.ndim < 3 or crop.shape[2] != raster_data["bandcount"]:
                         raise AssertionError("bad crop channel size")
+                    img = np.where(crop.mask, crop_inv.data, crop.data)
+
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
                     output_driver = osgeo.gdal.GetDriverByName("GTiff")
@@ -295,11 +298,13 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
                             os.remove(output_path)  # gdal raster creation fails if file already exists
                         else:
                             raise RuntimeError(msg)
-                    output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
-                                                          crop.shape[2], raster_data["datatype"])
-                    for raster_band_idx in range(crop.shape[2]):
+                    output_dataset = output_driver.Create(output_path, img.shape[1], img.shape[0],
+                                                          img.shape[2] + 1, raster_data["datatype"])
+                    for raster_band_idx in range(img.shape[2]):
                         output_dataset.GetRasterBand(raster_band_idx + 1).SetNoDataValue(0)
-                        output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(crop.data[:, :, raster_band_idx])
+                        output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(img[:, :, raster_band_idx])
+                    output_dataset.GetRasterBand(img.shape[2] + 1).SetNoDataValue(0)
+                    output_dataset.GetRasterBand(img.shape[2] + 1).WriteArray(np.all(~crop.mask, axis=2).astype(img.dtype))
                     output_dataset.SetProjection(raster_data["srs"].ExportToWkt())
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
