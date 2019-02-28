@@ -1,5 +1,4 @@
 from geoimagenet_ml.utils import classproperty, null, isnull, str_2_path_list
-from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import (
     map_status, STATUS_SUCCEEDED, STATUS_FAILED, STATUS_STARTED, STATUS_RUNNING
@@ -82,12 +81,15 @@ class ProcessRunner(ProcessBase):
 
     def __init__(self, task, registry, request, job_uuid):
         # type: (Task, Registry, Request, UUID) -> None
+
+        # imports to avoid circular references
         from geoimagenet_ml.store.factories import database_factory
+
         self.task = task
         self.logger = get_task_logger(self.identifier)
         self.request = request
         self.registry = registry
-        self.jobs_store = database_factory(self.registry).jobs_store
+        self.db = database_factory(self.registry)
         self.job = self.setup_job(self.registry, self.request, job_uuid)
 
     @abstractmethod
@@ -96,10 +98,10 @@ class ProcessRunner(ProcessBase):
 
     def setup_job(self, registry, request, job_uuid):
         # type: (Registry, Request, UUID) -> Job
-        job = self.jobs_store.fetch_by_uuid(job_uuid, request=request)
+        job = self.db.jobs_store.fetch_by_uuid(job_uuid, request=request)
         job.task_uuid = request.id
         job.tags.append(self.type)
-        job = self.jobs_store.update_job(job, request=request)
+        job = self.db.jobs_store.update_job(job, request=request)
         return job
 
     def update_job_status(self, status, status_message, status_progress=None, errors=None, level=None):
@@ -109,7 +111,7 @@ class ProcessRunner(ProcessBase):
         self.job.status_message = "{} {}.".format(str(self.job), status_message)
         self.job.progress = status_progress if status_progress is not None else self.job.progress
         self.job.save_log(logger=self.logger, errors=errors, level=level)
-        self.jobs_store.update_job(self.job, request=self.request)
+        self.db.jobs_store.update_job(self.job, request=self.request)
 
 
 class ProcessRunnerModelTester(ProcessRunner):
@@ -182,10 +184,12 @@ class ProcessRunnerModelTester(ProcessRunner):
                     "identifier": "classes",
                     "value": test_runner.class_names
                 })
-            self.jobs_store.update_job(_job)
+            self.db.jobs_store.update_job(_job)
 
         try:
-            from geoimagenet_ml.store.factories import database_factory
+            # imports that require 'thelper' and sub-libraries (dynamically loaded)
+            # only celery running the process is setup to load them properly
+            from geoimagenet_ml.ml.impl import get_test_data_runner
 
             # note:
             #   for dataset loader using multiple worker sub-processes to load samples by batch,
@@ -202,11 +206,11 @@ class ProcessRunnerModelTester(ProcessRunner):
 
             self.update_job_status(STATUS_RUNNING, "retrieving dataset definition", 2)
             dataset_uuid = self.get_input("dataset")[0]
-            dataset = database_factory(self.registry).datasets_store.fetch_by_uuid(dataset_uuid, request=self.request)
+            dataset = self.db.datasets_store.fetch_by_uuid(dataset_uuid, request=self.request)
 
             self.update_job_status(STATUS_RUNNING, "loading model from definition", 3)
             model_uuid = self.get_input("model")[0]
-            model = database_factory(self.registry).models_store.fetch_by_uuid(model_uuid, request=self.request)
+            model = self.db.models_store.fetch_by_uuid(model_uuid, request=self.request)
             model_config = model.data  # calls loading method, raises failure accordingly
 
             self.update_job_status(STATUS_RUNNING, "retrieving data loader for model and dataset", 4)
@@ -314,7 +318,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
     def find_batch(self, batch_id):
         if batch_id is None:
-            dataset = sorted([d for d in self.dataset_store.list_datasets() if d.type == self.dataset_type],
+            dataset = sorted([d for d in self.db.datasets_store.list_datasets() if d.type == self.dataset_type],
                              key=lambda d: d.created)
             if not dataset:
                 self.update_job_status(
@@ -325,7 +329,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 return None
             return dataset[-1]
         elif isinstance(batch_id, six.string_types):
-            dataset = self.dataset_store.fetch_by_uuid(batch_id)
+            dataset = self.db.datasets_store.fetch_by_uuid(batch_id)
             if dataset.type != self.dataset_type:
                 raise ValueError("Invalid dataset type, found [{}], expected [{}]"
                                  .format(dataset.type, self.dataset_type))
@@ -333,9 +337,12 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
     def __call__(self, *args, **kwargs):
         try:
+            # imports to avoid circular references
             from geoimagenet_ml.store.datatypes import Dataset
-            from geoimagenet_ml.store.factories import database_factory
-            self.dataset_store = database_factory(self.registry).datasets_store
+            # imports that require 'thelper' and sub-libraries (dynamically loaded)
+            # only celery running the process is setup to load them properly
+            from geoimagenet_ml.ml.impl import create_batch_patches, retrieve_annotations
+
             self.update_job_status(STATUS_STARTED, "initiation done", 1)
 
             self.update_job_status(STATUS_RUNNING, "creating dataset representation of patches", 2)
@@ -371,7 +378,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                                  start_percent=5, end_percent=98, train_test_ratio=split_ratio)
 
             self.update_job_status(STATUS_RUNNING, "updating completed dataset definition", 99)
-            dataset = self.dataset_store.save_dataset(dataset, request=self.request)
+            dataset = self.db.datasets_store.save_dataset(dataset, request=self.request)
 
             self.update_job_status(STATUS_SUCCEEDED, "processing complete", 100)
 
