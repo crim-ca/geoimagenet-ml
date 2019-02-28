@@ -1,10 +1,19 @@
-from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# FIXME:
+#   Because of unresolved reference caused by GDAL, only `geoimagenet_ml.ml.utils` should import
+#   it directly. Otherwise, any method in `geoimagenet_ml.ml.impl` should import GDAL inside the
+#   corresponding function using it to avoid import error from elsewhere, and should be executed
+#   only form a celery worker that knows how to map the library without breaking other imports.
+#   |
+#   see about unresolved reference error:
+#       - https://github.com/conda-forge/libgdal-feedstock/pull/33
+#       - https://github.com/conda-forge/fiona-feedstock/issues/68
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 from geoimagenet_ml.utils import ClassCounter
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
-import osgeo.gdal
 import requests
 import logging
 import random
@@ -62,7 +71,7 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])   # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
-    loaders = None, None, test_loader
+    loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
     # session name as Job UUID will write data under '<geoimagenet_ml.api.models_path>/<model-UUID>/output/<job-UUID>/'
     trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
@@ -179,6 +188,12 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
 
     :returns: None, ``dataset_container`` updated with metadata of created patches.
     """
+    # FIXME:
+    #   imports that require libraries dynamically loaded
+    #   only celery running the process is setup to load them properly
+    from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature
+    import osgeo.gdal
+
     def fix_raster_search_name(name):
         return name.replace("8bits", "xbits").replace("16bits", "xbits")
 

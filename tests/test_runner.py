@@ -1,11 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
+import sys
+import os
+# add parent directory of 'tests' to path to allow import although not a module
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 
-test_modules = [
-    'test_api',
-]
+def filter_test_files(root, filename):
+    return os.path.isfile(os.path.join(root, filename)) and filename.startswith('test') and filename.endswith('.py')
+
+
+test_root_path = os.path.abspath(os.path.dirname(__file__))
+test_root_name = os.path.split(test_root_path)[1]
+test_files = os.listdir(test_root_path)
+test_modules = [os.path.splitext(f)[0] for f in filter(lambda i: filter_test_files(test_root_path, i), test_files)]
 
 
 def test_suite():

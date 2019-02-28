@@ -187,8 +187,9 @@ class ProcessRunnerModelTester(ProcessRunner):
             self.db.jobs_store.update_job(_job)
 
         try:
-            # imports that require 'thelper' and sub-libraries (dynamically loaded)
-            # only celery running the process is setup to load them properly
+            # FIXME:
+            #   imports that require libraries dynamically loaded
+            #   only celery running the process is setup to load them properly
             from geoimagenet_ml.ml.impl import get_test_data_runner
 
             # note:
@@ -339,8 +340,9 @@ class ProcessRunnerBatchCreator(ProcessRunner):
         try:
             # imports to avoid circular references
             from geoimagenet_ml.store.datatypes import Dataset
-            # imports that require 'thelper' and sub-libraries (dynamically loaded)
-            # only celery running the process is setup to load them properly
+            # FIXME:
+            #   imports that require libraries dynamically loaded
+            #   only celery running the process is setup to load them properly
             from geoimagenet_ml.ml.impl import create_batch_patches, retrieve_annotations
 
             self.update_job_status(STATUS_STARTED, "initiation done", 1)

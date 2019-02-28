@@ -1,3 +1,15 @@
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# FIXME:
+#   Because of unresolved reference caused by GDAL, only `geoimagenet_ml.ml.utils` should import
+#   it directly. Otherwise, any method in `geoimagenet_ml.ml.impl` should import GDAL inside the
+#   corresponding function using it to avoid import error from elsewhere, and should be executed
+#   only form a celery worker that knows how to map the library without breaking other imports.
+#   |
+#   see about unresolved reference error:
+#       - https://github.com/conda-forge/libgdal-feedstock/pull/33
+#       - https://github.com/conda-forge/fiona-feedstock/issues/68
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 from geoimagenet_ml.utils import ClassCounter
 from typing import TYPE_CHECKING
 import logging
