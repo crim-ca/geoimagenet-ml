@@ -2,7 +2,7 @@
 General meta information on the GeoImageNet Machine Learning package.
 """
 
-__version__ = '0.6.2'
+__version__ = '0.6.3'
 __package__ = 'geoimagenet_ml'
 __title__ = "GeoImageNet Machine Learning"
 __author__ = "Francis Charette-Migneault"
