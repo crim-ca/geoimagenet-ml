@@ -9,6 +9,7 @@
 #       - https://github.com/conda-forge/libgdal-feedstock/pull/33
 #       - https://github.com/conda-forge/fiona-feedstock/issues/68
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+from geoimagenet_ml.processes.status import STATUS_SUCCESS
 from geoimagenet_ml.utils import ClassCounter
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
@@ -25,6 +26,7 @@ import thelper
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
+    from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
         Any, AnyStr, Callable, List, Tuple, Union, OptionType, JsonBody, SettingsType, Number, Optional
     )
@@ -160,9 +162,10 @@ def retrieve_annotations(geojson_urls):
 
 def create_batch_patches(annotations_meta,      # type: JsonBody
                          raster_search_paths,   # type: List[AnyStr]
+                         dataset_store,         # type: DatasetStore
                          dataset_container,     # type: Dataset
-                         dataset_overwrite,     # type: bool
-                         latest_batch,          # type: Union[Dataset, None]
+                         dataset_latest,        # type: Union[Dataset, None]
+                         dataset_update_count,  # type: int
                          crop_fixed_size,       # type: Union[int, None]
                          update_func,           # type: Callable[[AnyStr, Optional[Number]], None]
                          start_percent,         # type: Number
@@ -232,12 +235,13 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
     features, category_counter = parse_geojson(annotations_meta, srs_destination=srs, roi=raster_global_coverage)
 
     start_percent += 1
-    update_func("resolving incremental batch patches", start_percent)
-    if latest_batch:
-        existing_features = set([patch["feature"] for patch in latest_batch.parameters])
+    if dataset_latest:
+        update_func("resolving incremental batch patches on top of [{!s}]".format(dataset_latest), start_percent)
+        existing_features = set([patch["feature"] for patch in dataset_latest.data])
         provided_features = set([feature["id"] for feature in features])
         new_features = list(provided_features - existing_features)
     else:
+        update_func("creating batch patches from new dataset (not incremental)", start_percent)
         new_features = []
 
     train_counter, test_counter = category_counter.split(train_test_ratio)
@@ -257,7 +261,7 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
 
         # transfer patch data from previous batch, preserve selected split
         if feature["id"] not in new_features:
-            patch_info = [patch["feature"] for patch in latest_batch.parameters if patch["feature"] == feature["id"]]
+            patch_info = [patch["feature"] for patch in dataset_latest.data if patch["feature"] == feature["id"]]
             if not len(patch_info) == 1:
                 raise RuntimeError("Failed to retrieve existing patch from previous batch.")
             patch_info = patch_info[0]
@@ -285,7 +289,7 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
                     raise AssertionError("could not find proper raster for feature '{}'".format(feature["id"]))
 
             crop_class_id = feature.get('properties', {}).get('taxonomy_class_id')
-            patches_data.append({
+            dataset_container.data.append({
                 "crops": [],    # updated gradually after
                 "image": feature.get('properties', {}).get('image_name'),
                 "class": crop_class_id,
@@ -305,11 +309,8 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
-                        if dataset_overwrite:
-                            update_func(msg + " Removing...", logging.WARNING)
-                            os.remove(output_path)  # gdal raster creation fails if file already exists
-                        else:
-                            raise RuntimeError(msg)
+                        update_func(msg + " Removing...", logging.WARNING)
+                        os.remove(output_path)  # gdal raster creation fails if file already exists
                     output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
                                                           crop.shape[2], raster_data["datatype"])
                     for raster_band_idx in range(crop.shape[2]):
@@ -318,11 +319,21 @@ def create_batch_patches(annotations_meta,      # type: JsonBody
                     output_dataset.SetProjection(raster_data["srs"].ExportToWkt())
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
-                    patches_data[-1]["crops"].append({
+                    dataset_container.files.append(output_path)
+                    dataset_container.data[-1]["crops"].append({
                         "type": crop_name,
                         "path": output_path,
                         "shape": list(crop.shape),
                         "datatype": raster_data["datatype"],
                         "coordinates": output_geotransform,
                     })
-    dataset_container.parameters = patches_data
+        if feature_idx // dataset_update_count:
+            update_func("updating dataset definition (checkpoint: {}/{})"
+                        .format(feature_idx, len(features)), end_percent)
+            dataset = dataset_store.save_dataset(dataset_container)
+
+    dataset_container.data = patches_data
+
+    update_func("updating completed dataset definition", end_percent)
+    dataset_container.status = STATUS_SUCCESS
+    dataset = dataset_store.save_dataset(dataset_container)

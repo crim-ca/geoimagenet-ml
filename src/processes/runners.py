@@ -337,6 +337,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
         return None
 
     def __call__(self, *args, **kwargs):
+        dataset = None
         try:
             # imports to avoid circular references
             from geoimagenet_ml.store.datatypes import Dataset
@@ -345,11 +346,13 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             #   only celery running the process is setup to load them properly
             from geoimagenet_ml.ml.impl import create_batch_patches, retrieve_annotations
 
-            self.update_job_status(STATUS_STARTED, "initiation done", 1)
+            self.update_job_status(STATUS_STARTED, 'initializing configuration settings', 0)
+            dataset_root = str(self.registry.settings['geoimagenet_ml.ml.datasets_path'])
+            dataset_update_count = int(self.registry.settings.get('geoimagenet_ml.ml.datasets_update_patch_count', 32))
+            self.update_job_status(STATUS_RUNNING, "initiation done", 1)
 
             self.update_job_status(STATUS_RUNNING, "creating dataset representation of patches", 2)
             dataset_name = str(self.get_input("name")[0])
-            dataset_root = str(self.registry.settings['geoimagenet_ml.ml.datasets_path'])
             if not os.path.isdir(dataset_root):
                 raise RuntimeError("cannot find datasets root path")
             if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
@@ -357,30 +360,31 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset_path = os.path.join(dataset_root, dataset_name)
             dataset_overwrite = asbool(self.get_input('overwrite', one=True))
             if dataset_overwrite and os.path.isdir(dataset_path):
+                self.update_job_status(STATUS_RUNNING, "removing old dataset [{}]".format(dataset_name), 2,
+                                       level=logging.WARNING)
                 shutil.rmtree(dataset_path)
             os.makedirs(dataset_path, exist_ok=False, mode=0o644)
-            dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type)
+            dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type, status=STATUS_RUNNING)
 
-            self.update_job_status(STATUS_RUNNING, "obtaining references from process job inputs", 2)
+            self.update_job_status(STATUS_RUNNING, "obtaining references from process job inputs", 3)
             geojson_urls = self.get_input('geojson_urls')
             raster_paths = str_2_path_list(self.registry.settings['geoimagenet_ml.ml.source_images_paths'])
             crop_fixed_size = self.get_input('crop_fixed_size', one=True)
             split_ratio = self.get_input('split_ratio', one=True)
             latest_batch = self.get_input('incremental_batch', one=True)
 
-            self.update_job_status(STATUS_RUNNING, "fetching annotations using process job inputs", 3)
+            self.update_job_status(STATUS_RUNNING, "fetching annotations using process job inputs", 4)
             annotations = retrieve_annotations(geojson_urls)
 
-            self.update_job_status(STATUS_RUNNING, "looking for latest batch", 4)
+            self.update_job_status(STATUS_RUNNING, "looking for latest batch", 5)
             latest_batch = self.find_batch(latest_batch)
 
-            create_batch_patches(annotations, raster_paths, dataset, dataset_overwrite,
+            # number of patches to create before update in db
+
+            create_batch_patches(annotations, raster_paths, self.dataset_store, dataset, dataset_update_count,
                                  latest_batch, crop_fixed_size,
                                  lambda s, p=None: self.update_job_status(STATUS_RUNNING, s, p),
-                                 start_percent=5, end_percent=98, train_test_ratio=split_ratio)
-
-            self.update_job_status(STATUS_RUNNING, "updating completed dataset definition", 99)
-            dataset = self.db.datasets_store.save_dataset(dataset, request=self.request)
+                                 start_percent=6, end_percent=99, train_test_ratio=split_ratio)
 
             self.update_job_status(STATUS_SUCCEEDED, "processing complete", 100)
 

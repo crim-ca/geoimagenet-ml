@@ -58,6 +58,17 @@ class Base(dict):
             self['created'] = parse(self['created'])
         return localize_datetime(self.get('created'))
 
+    def __str__(self):
+        # type: (...) -> AnyStr
+        cls = type(self)
+        return '{} <{}>'.format(cls.__name__, self.uuid)
+
+    def __repr__(self):
+        # type: (...) -> AnyStr
+        cls = type(self)
+        rep = dict.__repr__(self)
+        return '{0}.{1} ({2})'.format(cls.__module__, cls.__name__, rep)
+
 
 class Dataset(Base):
     """
@@ -79,25 +90,57 @@ class Dataset(Base):
         # type: (...) -> AnyStr
         return self['name']
 
+    @name.setter
+    def name(self, name):
+        # type: (AnyStr) -> None
+        self['name'] = name
+
     @property
     def path(self):
         # type: (...) -> AnyStr
         return self['path']
+
+    @path.setter
+    def path(self, path):
+        # type: (AnyStr) -> None
+        self['path'] = path
 
     @property
     def type(self):
         # type: (...) -> AnyStr
         return self['type']
 
-    @property
-    def parameters(self):
-        # type: (...) -> JsonBody
-        return self['params']
+    @type.setter
+    def type(self, _type):
+        # type: (AnyStr) -> None
+        self['type'] = _type
 
-    @parameters.setter
-    def parameters(self, params):
+    @property
+    def status(self):
+        # type: (...) -> AnyStr
+        return self['status']
+
+    @status.setter
+    def status(self, status):
+        # type: (AnyStr) -> None
+        self['status'] = status
+
+    @property
+    def data(self):
+        # type: (...) -> JsonBody
+        """Raw data contained in the dataset definition."""
+        return self['data']
+
+    @data.setter
+    def data(self, data):
         # type: (Union[None, JsonBody]) -> None
-        self['params'] = params
+        self['data'] = data
+
+    @property
+    def files(self):
+        # type: (...) -> List[AnyStr]
+        """All files referenced by the dataset."""
+        return self['files']
 
     @property
     def params(self):
@@ -107,7 +150,9 @@ class Dataset(Base):
             'name': self.name,
             'path': self.path,
             'type': self.type,
-            'params': self.parameters,
+            'data': self.data,
+            'files': self.files,
+            'status': self.status,
             'created': stringify_datetime(self.created),
         }
 
@@ -741,13 +786,3 @@ class Job(Base):
             'uuid': self.uuid,
             'process_uuid': self.process_uuid,
         }
-
-    def __str__(self):
-        # type: (...) -> AnyStr
-        return 'Job <{}>'.format(self.uuid)
-
-    def __repr__(self):
-        # type: (...) -> AnyStr
-        cls = type(self)
-        rep = dict.__repr__(self)
-        return '{0}.{1} ({2})'.format(cls.__module__, cls.__name__, rep)

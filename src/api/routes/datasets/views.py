@@ -5,6 +5,7 @@ from pyramid.response import FileResponse
 from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInternalServerError
 from zipfile import ZipFile
 from tempfile import gettempprefix
+import json
 import os
 
 
@@ -42,15 +43,24 @@ def get_dataset_view(request):
 
 @s.DatasetDownloadAPI.get(tags=[s.DatasetsTag],
                           schema=s.DatasetDownloadEndpoint(), response_schemas=s.DatasetDownload_GET_responses)
-def get_dataset_view(request):
+def download_dataset_view(request):
     """Download registered dataset file."""
     dataset = get_dataset(request)
-    dataset_zip = os.path.join(gettempprefix(), 'dataset-{}-{}.zip'.format(dataset.name, dataset.uuid))
+    dataset_name = 'dataset-{}-{}.zip'.format(dataset.name, dataset.uuid)
+    dataset_meta = os.path.join(dataset.path, 'meta.json')
+    dataset_zip = os.path.join(gettempprefix(), dataset_name)
     if not os.path.isfile(dataset_zip):
+        if os.path.isfile(dataset_meta):
+            os.remove(dataset_meta)
+        meta_str = json.dumps(dataset.data, indent=4)
+        meta_str = meta_str.replace(dataset.path + '/', '')  # substitute all server save paths
+        with open(dataset_meta, 'w') as f_meta:
+            f_meta.write(meta_str)
         with ZipFile(dataset_zip, 'w') as f_zip:
-            f_zip.write()
-            dataset.parameters['']
+            f_zip.write(dataset_meta)
+            for f in dataset.files:
+                f_zip.write(f)
 
-    response = FileResponse(model.file, content_type="application/octet-stream")
-    response.content_disposition = "attachment; filename={}{}".format(model.uuid, model.format)
+    response = FileResponse(dataset_zip, content_type="application/octet-stream")
+    response.content_disposition = "attachment; filename={}".format(dataset_name)
     return response

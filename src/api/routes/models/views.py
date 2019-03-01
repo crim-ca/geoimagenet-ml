@@ -42,5 +42,5 @@ def download_model_view(request):
     """Download registered model file."""
     model = get_model(request)
     response = FileResponse(model.file, content_type="application/octet-stream")
-    response.content_disposition = "attachment; filename={}{}".format(model.uuid, model.format)
+    response.content_disposition = "attachment; filename=model-{}{}".format(model.uuid, model.format)
     return response
