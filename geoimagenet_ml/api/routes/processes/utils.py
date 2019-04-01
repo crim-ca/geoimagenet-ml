@@ -21,7 +21,6 @@ from pyramid.httpexceptions import (
 from pyramid_celery import celery_app as app
 from typing import TYPE_CHECKING
 import logging
-import os
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from celery import Task                                     # noqa: F401
@@ -95,7 +94,10 @@ def get_job(request):
                     msgOnFail=s.ProcessJob_GET_BadRequestResponseSchema.description, request=request)
     job = None
     try:
-        job = database_factory(request.registry).jobs_store.fetch_by_uuid(job_uuid)
+        if job_uuid in ["current", "latest"]:
+            job = get_job_special(request, job_uuid)
+        else:
+            job = database_factory(request.registry).jobs_store.fetch_by_uuid(job_uuid)
         if not job:
             raise exc.JobNotFoundError
     except exc.ProcessInstanceError:
@@ -107,17 +109,13 @@ def get_job(request):
     return job
 
 
-def get_job_special(request):
-    # type: (Request) -> Optional[Job]
+def get_job_special(request, job_type):
+    # type: (Request, AnyStr) -> Optional[Job]
     """Retrieves a job based on the request using keyword specifiers input validation."""
-    job_path = os.path.split(request.path)[-1]
-    ex.verify_param(job_path, isIn=True, paramCompare=["latest", "current"],  httpError=HTTPBadRequest,
-                    msgOnFail=s.ProcessJob_GET_BadRequestResponseSchema.description, request=request)
-
     jobs_store = database_factory(request.registry).jobs_store
     proc = get_process(request)  # process required, raise if not specified
-    status = CATEGORY.RUNNING if job_path == "current" else map_status(STATUS.SUCCESS)
-    sort = SORT.FINISHED if job_path == "latest" else SORT.CREATED
+    status = CATEGORY.RUNNING if job_type == "current" else map_status(STATUS.SUCCESS)
+    sort = SORT.FINISHED if job_type == "latest" else SORT.CREATED
     jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort, limit=1)
     if count > 1:
         ex.raise_http(httpError=HTTPInternalServerError, request=request,

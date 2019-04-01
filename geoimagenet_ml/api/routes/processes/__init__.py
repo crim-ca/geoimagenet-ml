@@ -11,6 +11,8 @@ def includeme(config):
     config.add_route(**s.service_api_route_info(s.ProcessesAPI))
     config.add_route(**s.service_api_route_info(s.ProcessAPI))
     config.add_route(**s.service_api_route_info(s.ProcessJobAPI))
+    config.add_route(**s.service_api_route_info(s.ProcessJobCurrentAPI))
+    config.add_route(**s.service_api_route_info(s.ProcessJobLatestAPI))
     config.add_route(**s.service_api_route_info(s.ProcessJobsAPI))
     config.add_route(**s.service_api_route_info(s.ProcessJobResultAPI))
     config.add_route(**s.service_api_route_info(s.ProcessJobLogsAPI))
@@ -22,6 +24,10 @@ def includeme(config):
     config.add_view(v.get_process_view, route_name=s.ProcessAPI.name,
                     request_method='GET', renderer='json')
     config.add_view(v.get_process_job_view, route_name=s.ProcessJobAPI.name,
+                    request_method='GET', renderer='json')
+    config.add_view(v.get_process_job_current_view, route_name=s.ProcessJobCurrentAPI.name,
+                    request_method='GET', renderer='json')
+    config.add_view(v.get_process_job_latest_view, route_name=s.ProcessJobLatestAPI.name,
                     request_method='GET', renderer='json')
     config.add_view(v.get_process_jobs_view, route_name=s.ProcessJobsAPI.name,
                     request_method='GET', renderer='json')

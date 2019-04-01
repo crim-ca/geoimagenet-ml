@@ -2,13 +2,15 @@
 # coding: utf-8
 
 from geoimagenet_ml.utils import (
-    now, localize_datetime,
+    now,
+    localize_datetime,
     stringify_datetime,
     get_log_fmt,
     get_log_datefmt,
     get_job_log_msg,
     get_error_fmt,
-    fully_qualified_name
+    fully_qualified_name,
+    is_uuid,
 )
 from geoimagenet_ml.processes.status import CATEGORY, STATUS, job_status_categories
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
@@ -74,7 +76,10 @@ class Base(dict):
 
     @uuid.setter
     def uuid(self, _uuid):
-        self['uuid'] = str(uuid.UUID(_uuid, version=4))  # raises ValueError if invalid format
+        # type: (UUID) -> None
+        if not is_uuid(_uuid):
+            raise ValueError("Not a valid UUID: {!s}.".format(_uuid))
+        self['uuid'] = str(_uuid)
 
     @property
     def created(self):
@@ -511,8 +516,10 @@ class Job(Base):
             msg = self.status_message
         return get_job_log_msg(duration=self.duration, progress=self.progress, status=self.status, message=msg)
 
-    def save_log(self, errors=None, logger=None, level=logging.INFO):
-        # type: (Optional[ErrorType], Optional[LoggerType], LevelType) -> None
+    def save_log(self, errors=None, logger=None, level=None):
+        # type: (Optional[ErrorType], Optional[LoggerType], Optional[LevelType]) -> None
+        if level is None:
+            level = logging.INFO
         if isinstance(level, six.string_types):
             level = logging.getLevelName(level)
         if isinstance(errors, six.string_types):
@@ -540,7 +547,7 @@ class Job(Base):
             log_msg = [(level, self._get_log_msg())]
         for lvl, msg in log_msg:
             # noinspection PyProtectedMember
-            fmt_msg = get_log_fmt() % dict(asctime=now().strftime(get_log_datefmt()),
+            fmt_msg = get_log_fmt() % dict(asctime=stringify_datetime(fmt=get_log_datefmt()),
                                            levelname=logging.getLevelName(lvl),
                                            name=fully_qualified_name(self),
                                            message=msg)
@@ -556,9 +563,9 @@ class Job(Base):
 
     @task.setter
     def task(self, task):
-        # type: (Optional[UUID]) -> None
-        if not isinstance(task, six.string_types) or task is None:
-            raise TypeError("Type 'str' is required for '{}.task'".format(type(self)))
+        # type: (UUID) -> None
+        if not is_uuid(task):
+            raise TypeError("Type 'UUID' is required for '{}.task'".format(type(self)))
         self['task'] = task
 
     @property
@@ -568,9 +575,9 @@ class Job(Base):
 
     @service.setter
     def service(self, service):
-        # type: (Optional[UUID]) -> None
-        if not isinstance(service, six.string_types) or service is None:
-            raise TypeError("Type 'str' is required for '{}.service'".format(type(self)))
+        # type: (UUID) -> None
+        if not is_uuid(service):
+            raise TypeError("Type 'UUID' is required for '{}.service'".format(type(self)))
         self['service'] = service
 
     @property
@@ -580,9 +587,9 @@ class Job(Base):
 
     @process.setter
     def process(self, process):
-        # type: (Optional[UUID]) -> None
-        if not isinstance(process, six.string_types) or process is None:
-            raise TypeError("Type 'str' is required for '{}.process'".format(type(self)))
+        # type: (UUID) -> None
+        if not is_uuid(process):
+            raise TypeError("Type 'UUID' is required for '{}.process'".format(type(self)))
         self['process'] = process
 
     def _get_inputs(self):
@@ -615,7 +622,7 @@ class Job(Base):
     @property
     def status(self):
         # type: (...) -> AnyStr
-        return self.get('status', STATUS.UNKNOWN)
+        return self.get('status', STATUS.UNKNOWN.value)
 
     @status.setter
     def status(self, status):

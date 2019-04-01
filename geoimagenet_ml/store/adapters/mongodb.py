@@ -6,10 +6,10 @@ from geoimagenet_ml.store.constants import ORDER, SORT
 from geoimagenet_ml.store import exceptions as ex
 from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job
 from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
-from geoimagenet_ml.processes.status import STATUS, CATEGORY, job_status_categories
+from geoimagenet_ml.processes.status import STATUS, CATEGORY, job_status_categories, map_status
 from geoimagenet_ml.processes.types import PROCESS_WPS
 from geoimagenet_ml.processes.runners import ProcessRunner
-from geoimagenet_ml.utils import isclass, islambda, get_sane_name
+from geoimagenet_ml.utils import isclass, islambda, get_sane_name, is_uuid
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
 import pymongo
@@ -394,14 +394,18 @@ class MongodbJobStore(JobStore, MongodbStore):
             search_filters["tags"] = {"$all": tags}
 
         if isinstance(status, STATUS):
-            search_filters["status"] = {"$in": [status.value]}
+            search_filters["status"] = {"$in": [map_status(status).value]}
         elif isinstance(status, CATEGORY):
             search_filters["status"] = {"$in": [s.value for s in job_status_categories[status]]}
 
         if process is not None:
+            if not is_uuid(process):
+                raise ex.JobNotFoundError("Invalid process UUID: '{!s}'".format(process))
             search_filters["process"] = process
 
         if service is not None:
+            if not is_uuid(service):
+                raise ex.JobNotFoundError("Invalid service UUID: '{!s}'".format(service))
             search_filters["service"] = service
 
         if sort is None:
@@ -414,7 +418,7 @@ class MongodbJobStore(JobStore, MongodbStore):
             raise ex.JobNotFoundError("Invalid ordering method: '{}'".format(repr(order)))
 
         sort_order = pymongo.DESCENDING if order == ORDER.DESCENDING else pymongo.ASCENDING
-        sort_criteria = [(sort, sort_order)]
+        sort_criteria = [(sort.value, sort_order)]
         found = self.collection.find(search_filters)
         count = self.collection.count_documents(search_filters)
         items = [Job(item) for item in list(found.skip(page * limit).limit(limit).sort(sort_criteria))]

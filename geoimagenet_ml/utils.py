@@ -172,12 +172,18 @@ def localize_datetime(dt, tz_name='UTC'):
     return tz_aware_dt
 
 
-def stringify_datetime(dt, tz_name='UTC'):
-    # type: (datetime, AnyStr) -> AnyStr
+def stringify_datetime(dt=None, tz_name='UTC', fmt=None):
+    # type: (Optional[datetime], AnyStr, Optional[AnyStr]) -> AnyStr
     """
-    Obtain an ISO-8601 datetime string from a datetime object.
+    Obtain a localized and formatted datetime string from a datetime object.
+
+    If ``fmt`` is provided as a format string, it is applied, otherwise applies `ISO-8601` by default.
+    If ``dt`` is not provided, ``now()`` is employed.
     """
-    return parse(str(localize_datetime(dt, tz_name))).isoformat()
+    dt_fmt = parse(str(localize_datetime(dt or now(), tz_name)))
+    if fmt:
+        return dt_fmt.strftime(fmt)
+    return dt_fmt.isoformat()
 
 
 def get_log_fmt():

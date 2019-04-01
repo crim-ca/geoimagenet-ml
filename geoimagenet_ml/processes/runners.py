@@ -44,8 +44,8 @@ class ProcessRunner(ProcessBase):
         input_ids = [i["id"] for i in inputs]
         return list(set(required_input_ids) - set(input_ids))
 
-    def get_input(self, input_id, default=null, one=False):
-        # type: (AnyStr, Optional[Any], Optional[bool]) -> Union[List[Any], Any]
+    def get_input(self, input_id, default=null, one=False, required=False):
+        # type: (AnyStr, Optional[Any], bool, bool) -> Union[List[Any], Any]
         """
         Retrieves a flattened list of input values matching any number of occurrences of ``input_id``.
 
@@ -54,6 +54,8 @@ class ProcessRunner(ProcessBase):
             - if ``default`` is missing, but can be found in the process's ``input`` definition, it is used instead.
 
         If ``one=True``, the first element of any list from previous step is returned instead of the whole list.
+
+        If ``required=True`` and no value can be found either by process input or default value, raises immediately.
         """
         inputs = [job_input["value"] for job_input in self.job.inputs if job_input["id"] == input_id]
         flattened_inputs = []
@@ -67,15 +69,19 @@ class ProcessRunner(ProcessBase):
                 flattened_inputs = [default]
             else:
                 input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]  # type: JSON
+                if len(input_spec) < 1:
+                    raise ValueError("Missing input '{}' not resolvable from process definition.".format(input_id))
+                input_spec = input_spec[0]
                 if 'default' in input_spec:
                     flattened_inputs = [input_spec['default']]
                 else:
                     formats_defaults = [f['default'] for f in input_spec['formats'] if 'default' in f]
                     if formats_defaults:
                         flattened_inputs = [formats_defaults[0]]
-        if one:
-            return flattened_inputs[0]
-        return flattened_inputs
+
+        if required and len(flattened_inputs) < 1:
+            raise ValueError("Missing input '{}' not matched from literal process input nor defaults.".format(input_id))
+        return flattened_inputs[0] if one else flattened_inputs
 
     def __init__(self, task, registry, request, job_uuid):
         # type: (Task, Registry, Request, UUID) -> None
@@ -97,7 +103,7 @@ class ProcessRunner(ProcessBase):
     def setup_job(self, registry, request, job_uuid):
         # type: (Registry, Request, UUID) -> Job
         job = self.db.jobs_store.fetch_by_uuid(job_uuid, request=request)
-        job.task_uuid = request.id
+        job.task = request.id
         job.tags.append(self.type)
         job = self.db.jobs_store.update_job(job, request=request)
         return job
@@ -204,11 +210,11 @@ class ProcessRunnerModelTester(ProcessRunner):
             self.update_job_status(STATUS.STARTED, "initiation done", 1)
 
             self.update_job_status(STATUS.RUNNING, "retrieving dataset definition", 2)
-            dataset_uuid = self.get_input("dataset")[0]
+            dataset_uuid = self.get_input("dataset", one=True, required=True)
             dataset = self.db.datasets_store.fetch_by_uuid(dataset_uuid, request=self.request)
 
             self.update_job_status(STATUS.RUNNING, "loading model from definition", 3)
-            model_uuid = self.get_input("model")[0]
+            model_uuid = self.get_input("model", one=True, required=True)
             model = self.db.models_store.fetch_by_uuid(model_uuid, request=self.request)
             model_config = model.data  # calls loading method, raises failure accordingly
 
@@ -351,7 +357,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             self.update_job_status(STATUS.RUNNING, "initiation done", 1)
 
             self.update_job_status(STATUS.RUNNING, "creating dataset representation of patches", 2)
-            dataset_name = str(self.get_input("name")[0])
+            dataset_name = str(self.get_input("name", one=True))
             if not os.path.isdir(dataset_root):
                 raise RuntimeError("cannot find datasets root path")
             if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
@@ -366,7 +372,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type)
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
-            geojson_urls = self.get_input('geojson_urls')
+            geojson_urls = self.get_input('geojson_urls', required=True)
             raster_paths = str_2_path_list(self.registry.settings['geoimagenet_ml.ml.source_images_paths'])
             crop_fixed_size = self.get_input('crop_fixed_size', one=True)
             split_ratio = self.get_input('split_ratio', one=True)

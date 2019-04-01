@@ -70,20 +70,35 @@ def post_process_jobs_view(request):
     return create_process_job(request, process)
 
 
-@s.ProcessJobAPI.get(tags=[s.ProcessesTag],
-                     schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
-@s.ProcessJobCurrentAPI.get(tags=[s.ProcessesTag],
-                            schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
-@s.ProcessJobLatestAPI.get(tags=[s.ProcessesTag],
-                           schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
-def get_process_job_view(request):
-    """Get registered process job status."""
+def get_process_job_handler(request):
+    """Handles cases of Job UUID, latest and current."""
     process = get_process(request)
     job = get_job(request)
     ex.verify_param(job.process, paramCompare=process.uuid, isEqual=True, httpError=HTTPNotFound,
                     msgOnFail=s.ProcessJob_GET_NotFoundResponseSchema.description, request=request)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'job': job.json()},
                          detail=s.Process_GET_OkResponseSchema.description, request=request)
+
+
+@s.ProcessJobAPI.get(tags=[s.ProcessesTag],
+                     schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+def get_process_job_view(request):
+    """Get registered process job information."""
+    return get_process_job_handler(request)
+
+
+@s.ProcessJobCurrentAPI.get(tags=[s.ProcessesTag],
+                            schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+def get_process_job_current_view(request):
+    """Get currently running process job information."""
+    return get_process_job_handler(request)
+
+
+@s.ProcessJobLatestAPI.get(tags=[s.ProcessesTag],
+                           schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+def get_process_job_latest_view(request):
+    """Get latest successful process job execution."""
+    return get_process_job_handler(request)
 
 
 @s.ProcessJobResultAPI.get(tags=[s.ProcessesTag], renderer='json',

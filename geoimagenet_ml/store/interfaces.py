@@ -217,8 +217,8 @@ class JobStore(object):
     def find_jobs(self,
                   page=0,           # type: int
                   limit=10,         # type: int
-                  process=None,     # type: Optional[AnyStr]
-                  service=None,     # type: Optional[AnyStr]
+                  process=None,     # type: Optional[UUID]
+                  service=None,     # type: Optional[UUID]
                   tags=None,        # type: Optional[List[AnyStr]]
                   user=None,        # type: Optional[int]
                   status=None,      # type: Optional[Union[STATUS, CATEGORY]]
