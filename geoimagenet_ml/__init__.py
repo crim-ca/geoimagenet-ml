@@ -11,7 +11,7 @@ GEOIMAGENET_ML_CONFIG_INI = os.path.abspath(os.path.join(GEOIMAGENET_ML_SRC_DIR,
 
 
 def includeme(config):
-    logger.info('Adding geoimagenet_ml...')
+    logger.info('Adding GeoImageNet ML...')
     config.include('geoimagenet_ml.api')
     config.include('geoimagenet_ml.config')
     config.include('geoimagenet_ml.ml')

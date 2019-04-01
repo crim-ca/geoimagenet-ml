@@ -8,11 +8,9 @@ except ImportError:
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-# use 'src' on purpose because 'geoimagenet_ml' not yet installed
-from src import __meta__    # noqa
-
 CUR_DIR = os.path.dirname(__file__)
+sys.path.insert(0, os.path.abspath(CUR_DIR))
+from geoimagenet_ml import __meta__    # noqa
 
 with open(os.path.join(CUR_DIR, 'README.rst')) as readme_file:
     README = readme_file.read()
@@ -54,7 +52,7 @@ setup(
 
     # -- Package structure -------------------------------------------------
     packages=[__meta__.__package__],    # find_packages(),
-    package_dir={__meta__.__package__: 'src'},
+    package_dir={__meta__.__package__: __meta__.__package__},
     include_package_data=True,
     install_requires=REQUIREMENTS,
     zip_safe=False,

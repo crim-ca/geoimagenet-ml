@@ -55,7 +55,7 @@ def get_process_jobs_view(request):
                                 fallback=lambda: db.rollback(), httpError=HTTPForbidden, request=request,
                                 msgOnFail=s.ProcessJobs_GET_ForbiddenResponseSchema.description)
     process_jobs_json = ex.evaluate_call(lambda: [j.summary() for j in
-                                                  filter(lambda j: j.process_uuid == process.uuid, job_list)],
+                                                  filter(lambda j: j.process == process.uuid, job_list)],
                                          fallback=lambda: db.rollback(), httpError=HTTPInternalServerError,
                                          request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'jobs': process_jobs_json},
@@ -80,7 +80,7 @@ def get_process_job_view(request):
     """Get registered process job status."""
     process = get_process(request)
     job = get_job(request)
-    ex.verify_param(job.process_uuid, paramCompare=process.uuid, isEqual=True, httpError=HTTPNotFound,
+    ex.verify_param(job.process, paramCompare=process.uuid, isEqual=True, httpError=HTTPNotFound,
                     msgOnFail=s.ProcessJob_GET_NotFoundResponseSchema.description, request=request)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'job': job.json()},
                          detail=s.Process_GET_OkResponseSchema.description, request=request)
