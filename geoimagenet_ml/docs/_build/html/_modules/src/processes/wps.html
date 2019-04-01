@@ -1,0 +1,262 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>src.processes.wps &mdash; GeoImageNet Machine Learning 0.5.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.5.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="GeoImageNet Machine Learning 0.5.0 documentation" href="../../../index.html" />
+    <link rel="up" title="src.processes" href="../processes.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for src.processes.wps</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">pywps 4.x wrapper</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">src.typedefs</span> <span class="kn">import</span> <span class="n">AnyStr</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">SettingDict</span>
+<span class="kn">from</span> <span class="nn">src.processes.types</span> <span class="kn">import</span> <span class="n">PROCESS_WPS</span>
+<span class="kn">from</span> <span class="nn">src.processes.utils</span> <span class="kn">import</span> <span class="n">get_base_url</span>
+<span class="kn">from</span> <span class="nn">pyramid.wsgi</span> <span class="kn">import</span> <span class="n">wsgiapp2</span>
+<span class="kn">from</span> <span class="nn">pyramid.threadlocal</span> <span class="kn">import</span> <span class="n">get_current_request</span>
+<span class="kn">from</span> <span class="nn">pyramid.registry</span> <span class="kn">import</span> <span class="n">Registry</span>
+<span class="kn">from</span> <span class="nn">pyramid.httpexceptions</span> <span class="kn">import</span> <span class="n">HTTPInternalServerError</span>
+<span class="kn">from</span> <span class="nn">pyramid_celery</span> <span class="kn">import</span> <span class="n">celery_app</span> <span class="k">as</span> <span class="n">app</span>
+<span class="c1"># noinspection PyPackageRequirements</span>
+<span class="kn">from</span> <span class="nn">pywps</span> <span class="kn">import</span> <span class="n">configuration</span> <span class="k">as</span> <span class="n">pywps_config</span>
+<span class="c1"># noinspection PyPackageRequirements</span>
+<span class="kn">from</span> <span class="nn">pywps.app.Service</span> <span class="kn">import</span> <span class="n">Service</span>
+<span class="kn">from</span> <span class="nn">six.moves.configparser</span> <span class="kn">import</span> <span class="n">ConfigParser</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">six</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># can be overridden with &#39;settings.wps-cfg&#39;</span>
+<span class="n">DEFAULT_PYWPS_CFG</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)),</span> <span class="s1">&#39;wps.cfg&#39;</span><span class="p">)</span>
+<span class="n">PYWPS_CFG</span> <span class="o">=</span> <span class="bp">None</span>
+
+
+<span class="k">def</span> <span class="nf">_get_settings_or_wps_config</span><span class="p">(</span>
+        <span class="n">settings</span><span class="p">,</span>                   <span class="c1"># type: SettingDict</span>
+        <span class="n">GEOIMAGENET_ML_setting_name</span><span class="p">,</span>          <span class="c1"># type: AnyStr</span>
+        <span class="n">config_setting_section</span><span class="p">,</span>     <span class="c1"># type: AnyStr</span>
+        <span class="n">config_setting_name</span><span class="p">,</span>        <span class="c1"># type: AnyStr</span>
+        <span class="n">default_not_found</span><span class="p">,</span>          <span class="c1"># type: AnyStr</span>
+        <span class="n">message_not_found</span><span class="p">,</span>          <span class="c1"># type: AnyStr</span>
+        <span class="p">):</span>                          <span class="c1"># type: (...) -&gt; AnyStr</span>
+    <span class="n">wps_path</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">GEOIMAGENET_ML_setting_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">wps_path</span><span class="p">:</span>
+        <span class="n">wps_cfg</span> <span class="o">=</span> <span class="n">get_wps_cfg_path</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">ConfigParser</span><span class="p">()</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">wps_cfg</span><span class="p">)</span>
+        <span class="n">wps_path</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">config_setting_section</span><span class="p">,</span> <span class="n">config_setting_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">wps_path</span><span class="p">,</span> <span class="n">six</span><span class="o">.</span><span class="n">string_types</span><span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;{} not set in settings or WPS configuration, using default value.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">message_not_found</span><span class="p">))</span>
+        <span class="n">wps_path</span> <span class="o">=</span> <span class="n">default_not_found</span>
+    <span class="k">return</span> <span class="n">wps_path</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="get_wps_cfg_path"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.get_wps_cfg_path">[docs]</a><span class="k">def</span> <span class="nf">get_wps_cfg_path</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="c1"># type: (SettingDict) -&gt; AnyStr</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the WPS configuration file (`wps.cfg` by default or `src.wps_cfg` if specified).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;src.wps_cfg&#39;</span><span class="p">,</span> <span class="n">DEFAULT_PYWPS_CFG</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="get_wps_path"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.get_wps_path">[docs]</a><span class="k">def</span> <span class="nf">get_wps_path</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="c1"># type: (SettingDict) -&gt; AnyStr</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the WPS path (without hostname).</span>
+<span class="sd">    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">wps_path</span> <span class="o">=</span> <span class="n">_get_settings_or_wps_config</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="s1">&#39;src.wps_path&#39;</span><span class="p">,</span> <span class="s1">&#39;server&#39;</span><span class="p">,</span> <span class="s1">&#39;url&#39;</span><span class="p">,</span> <span class="s1">&#39;/wps&#39;</span><span class="p">,</span> <span class="s1">&#39;WPS path&#39;</span><span class="p">)</span>
+    <span class="n">GEOIMAGENET_ML_url</span> <span class="o">=</span> <span class="n">get_base_url</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">wps_path</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">GEOIMAGENET_ML_url</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">wps_path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">GEOIMAGENET_ML_url</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">wps_path</span>
+
+</div>
+<div class="viewcode-block" id="get_wps_url"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.get_wps_url">[docs]</a><span class="k">def</span> <span class="nf">get_wps_url</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="c1"># type: (SettingDict) -&gt; AnyStr</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the full WPS URL (hostname + WPS path).</span>
+<span class="sd">    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">get_base_url</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span> <span class="o">+</span> <span class="n">get_wps_path</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="get_wps_output_path"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.get_wps_output_path">[docs]</a><span class="k">def</span> <span class="nf">get_wps_output_path</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="c1"># type: (SettingDict) -&gt; AnyStr</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the WPS output path directory where to write XML and result files.</span>
+<span class="sd">    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_get_settings_or_wps_config</span><span class="p">(</span>
+        <span class="n">settings</span><span class="p">,</span> <span class="s1">&#39;src.wps_output_path&#39;</span><span class="p">,</span> <span class="s1">&#39;server&#39;</span><span class="p">,</span> <span class="s1">&#39;outputpath&#39;</span><span class="p">,</span> <span class="s1">&#39;/tmp&#39;</span><span class="p">,</span> <span class="s1">&#39;WPS output path&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="get_wps_output_url"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.get_wps_output_url">[docs]</a><span class="k">def</span> <span class="nf">get_wps_output_url</span><span class="p">(</span><span class="n">settings</span><span class="p">):</span>
+    <span class="c1"># type: (SettingDict) -&gt; AnyStr</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieves the WPS output URL that maps to WPS output path directory.</span>
+<span class="sd">    Searches directly in settings, then `src.wps_cfg` file, or finally, uses the default values if not found.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">wps_output_default</span> <span class="o">=</span> <span class="n">get_base_url</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;/wpsoutputs&#39;</span>
+    <span class="k">return</span> <span class="n">_get_settings_or_wps_config</span><span class="p">(</span>
+        <span class="n">settings</span><span class="p">,</span> <span class="s1">&#39;src.wps_output_url&#39;</span><span class="p">,</span> <span class="s1">&#39;server&#39;</span><span class="p">,</span> <span class="s1">&#39;outputurl&#39;</span><span class="p">,</span> <span class="n">wps_output_default</span><span class="p">,</span> <span class="s1">&#39;WPS output url&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="load_pywps_cfg"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.load_pywps_cfg">[docs]</a><span class="k">def</span> <span class="nf">load_pywps_cfg</span><span class="p">(</span><span class="n">registry</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="c1"># type: (Registry, Optional[Union[AnyStr, SettingDict]]) -&gt; None</span>
+    <span class="k">global</span> <span class="n">PYWPS_CFG</span>
+
+    <span class="k">if</span> <span class="n">PYWPS_CFG</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="c1"># get PyWPS config</span>
+        <span class="n">file_config</span> <span class="o">=</span> <span class="n">config</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">six</span><span class="o">.</span><span class="n">string_types</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="bp">None</span>
+        <span class="n">pywps_config</span><span class="o">.</span><span class="n">load_configuration</span><span class="p">(</span><span class="n">file_config</span> <span class="ow">or</span> <span class="n">get_wps_cfg_path</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">))</span>
+        <span class="n">PYWPS_CFG</span> <span class="o">=</span> <span class="n">pywps_config</span>
+
+    <span class="c1"># add additional config passed as dictionary of {&#39;section.key&#39;: &#39;value&#39;}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">section</span><span class="p">,</span> <span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
+            <span class="n">PYWPS_CFG</span><span class="o">.</span><span class="n">CONFIG</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">section</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="c1"># cleanup alternative dict &#39;PYWPS_CFG&#39; which is not expected elsewhere</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">),</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">del</span> <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">[</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="s1">&#39;src.wps_output_path&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">:</span>
+        <span class="c1"># ensure the output dir exists if specified</span>
+        <span class="n">out_dir_path</span> <span class="o">=</span> <span class="n">PYWPS_CFG</span><span class="o">.</span><span class="n">get_config_value</span><span class="p">(</span><span class="s1">&#39;server&#39;</span><span class="p">,</span> <span class="s1">&#39;outputpath&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">out_dir_path</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">out_dir_path</span><span class="p">)</span>
+        <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">[</span><span class="s1">&#39;src.wps_output_path&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">out_dir_path</span>
+
+    <span class="k">if</span> <span class="s1">&#39;src.wps_output_url&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">:</span>
+        <span class="n">output_url</span> <span class="o">=</span> <span class="n">PYWPS_CFG</span><span class="o">.</span><span class="n">get_config_value</span><span class="p">(</span><span class="s1">&#39;server&#39;</span><span class="p">,</span> <span class="s1">&#39;outputurl&#39;</span><span class="p">)</span>
+        <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">[</span><span class="s1">&#39;src.wps_output_url&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">output_url</span>
+
+
+<span class="c1"># @app.task(bind=True)</span></div>
+<span class="nd">@wsgiapp2</span>
+<div class="viewcode-block" id="pywps_view"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.pywps_view">[docs]</a><span class="k">def</span> <span class="nf">pywps_view</span><span class="p">(</span><span class="n">environ</span><span class="p">,</span> <span class="n">start_response</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;pywps env: </span><span class="si">%s</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">environ</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">registry</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">conf</span><span class="p">[</span><span class="s1">&#39;PYRAMID_REGISTRY&#39;</span><span class="p">]</span>
+
+        <span class="c1"># get config file</span>
+        <span class="n">pywps_cfg</span> <span class="o">=</span> <span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pywps_cfg</span><span class="p">:</span>
+            <span class="n">environ</span><span class="p">[</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;PYWPS_CFG&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">get_wps_cfg_path</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+        <span class="n">load_pywps_cfg</span><span class="p">(</span><span class="n">registry</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">pywps_cfg</span><span class="p">)</span>
+
+        <span class="c1"># call pywps application with processes filtered according to the adapter&#39;s definition</span>
+        <span class="kn">from</span> <span class="nn">src.store.factories</span> <span class="kn">import</span> <span class="n">database_factory</span>
+        <span class="n">process_store</span> <span class="o">=</span> <span class="n">database_factory</span><span class="p">(</span><span class="n">registry</span><span class="p">)</span><span class="o">.</span><span class="n">processes_store</span>
+        <span class="n">processes_wps</span> <span class="o">=</span> <span class="p">[</span><span class="n">process</span><span class="o">.</span><span class="n">wps</span><span class="p">()</span> <span class="k">for</span> <span class="n">process</span> <span class="ow">in</span>
+                         <span class="n">process_store</span><span class="o">.</span><span class="n">list_processes</span><span class="p">(</span><span class="n">request</span><span class="o">=</span><span class="n">get_current_request</span><span class="p">())</span>
+                         <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">PROCESS_WPS</span><span class="p">]</span>
+        <span class="n">service</span> <span class="o">=</span> <span class="n">Service</span><span class="p">(</span><span class="n">processes_wps</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">HTTPInternalServerError</span><span class="p">(</span><span class="s2">&quot;Failed setup of PyWPS Service and/or Processes. Error [{}]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">service</span><span class="p">(</span><span class="n">environ</span><span class="p">,</span> <span class="n">start_response</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="includeme"><a class="viewcode-back" href="../../../src.processes.html#src.processes.wps.includeme">[docs]</a><span class="k">def</span> <span class="nf">includeme</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;CCFB WPS enabled.&quot;</span><span class="p">)</span>
+    <span class="n">wps_path</span> <span class="o">=</span> <span class="n">get_wps_path</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">add_route</span><span class="p">(</span><span class="s1">&#39;wps&#39;</span><span class="p">,</span> <span class="n">wps_path</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">add_view</span><span class="p">(</span><span class="n">pywps_view</span><span class="p">,</span> <span class="n">route_name</span><span class="o">=</span><span class="s1">&#39;wps&#39;</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">add_request_method</span><span class="p">(</span><span class="k">lambda</span> <span class="n">req</span><span class="p">:</span> <span class="n">get_wps_cfg_path</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">settings</span><span class="p">),</span> <span class="s1">&#39;wps_cfg&#39;</span><span class="p">,</span> <span class="n">reify</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../../../index.html">
+              <img class="logo" src="../../../_static/logo_crim_FR.png" alt="Logo"/>
+            </a></p><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  <li><a href="../../src.html">src</a><ul>
+  <li><a href="../processes.html">src.processes</a><ul>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Francis Charette-Migneault.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

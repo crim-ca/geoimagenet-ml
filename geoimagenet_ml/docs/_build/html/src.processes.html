@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>src.processes package &mdash; GeoImageNet Machine Learning 0.5.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.5.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="GeoImageNet Machine Learning 0.5.0 documentation" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="src-processes-package">
+<h1>src.processes package<a class="headerlink" href="#src-processes-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-src.processes.config">
+<span id="src-processes-config-module"></span><h2>src.processes.config module<a class="headerlink" href="#module-src.processes.config" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="src.processes.config.includeme">
+<code class="descclassname">src.processes.config.</code><code class="descname">includeme</code><span class="sig-paren">(</span><em>config</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/config.html#includeme"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.config.includeme" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-src.processes.status">
+<span id="src-processes-status-module"></span><h2>src.processes.status module<a class="headerlink" href="#module-src.processes.status" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="src.processes.status.map_status">
+<code class="descclassname">src.processes.status.</code><code class="descname">map_status</code><span class="sig-paren">(</span><em>wps_status</em>, <em>compliant='STATUS_COMPLIANT_OGC'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/status.html#map_status"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.status.map_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Maps WPS statuses (twitcher.status, OWSLib or PyWPS) to OWSLib/PyWPS compatible values.
+For each compliant combination, unsupported statuses are changed to corresponding ones (with closest logical match).
+Statuses are returned with <cite>twitcher.status.job_status_values</cite> format (lowercase and not preceded by &#8216;Process&#8217;).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>wps_status</strong> &#8211; one of <cite>twitcher.status.job_status_values</cite> to map to <cite>compliant</cite> standard or PyWPS <cite>int</cite> status.</li>
+<li><strong>compliant</strong> &#8211; one of <cite>STATUS_COMPLIANT_[...]</cite> values.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">mapped status complying to the requested compliant category, or <cite>STATUS_UNKNOWN</cite> if no match found.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-src.processes.types">
+<span id="src-processes-types-module"></span><h2>src.processes.types module<a class="headerlink" href="#module-src.processes.types" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-src.processes.utils">
+<span id="src-processes-utils-module"></span><h2>src.processes.utils module<a class="headerlink" href="#module-src.processes.utils" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="src.processes.utils.get_base_url">
+<code class="descclassname">src.processes.utils.</code><code class="descname">get_base_url</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/utils.html#get_base_url"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.utils.get_base_url" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-src.processes.wps">
+<span id="src-processes-wps-module"></span><h2>src.processes.wps module<a class="headerlink" href="#module-src.processes.wps" title="Permalink to this headline">¶</a></h2>
+<p>pywps 4.x wrapper</p>
+<dl class="function">
+<dt id="src.processes.wps.get_wps_cfg_path">
+<code class="descclassname">src.processes.wps.</code><code class="descname">get_wps_cfg_path</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#get_wps_cfg_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.get_wps_cfg_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the WPS configuration file (<cite>wps.cfg</cite> by default or <cite>src.wps_cfg</cite> if specified).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.get_wps_output_path">
+<code class="descclassname">src.processes.wps.</code><code class="descname">get_wps_output_path</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#get_wps_output_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.get_wps_output_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the WPS output path directory where to write XML and result files.
+Searches directly in settings, then <cite>src.wps_cfg</cite> file, or finally, uses the default values if not found.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.get_wps_output_url">
+<code class="descclassname">src.processes.wps.</code><code class="descname">get_wps_output_url</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#get_wps_output_url"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.get_wps_output_url" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the WPS output URL that maps to WPS output path directory.
+Searches directly in settings, then <cite>src.wps_cfg</cite> file, or finally, uses the default values if not found.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.get_wps_path">
+<code class="descclassname">src.processes.wps.</code><code class="descname">get_wps_path</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#get_wps_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.get_wps_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the WPS path (without hostname).
+Searches directly in settings, then <cite>src.wps_cfg</cite> file, or finally, uses the default values if not found.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.get_wps_url">
+<code class="descclassname">src.processes.wps.</code><code class="descname">get_wps_url</code><span class="sig-paren">(</span><em>settings</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#get_wps_url"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.get_wps_url" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieves the full WPS URL (hostname + WPS path).
+Searches directly in settings, then <cite>src.wps_cfg</cite> file, or finally, uses the default values if not found.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.includeme">
+<code class="descclassname">src.processes.wps.</code><code class="descname">includeme</code><span class="sig-paren">(</span><em>config</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#includeme"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.includeme" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.load_pywps_cfg">
+<code class="descclassname">src.processes.wps.</code><code class="descname">load_pywps_cfg</code><span class="sig-paren">(</span><em>registry</em>, <em>config=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#load_pywps_cfg"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.load_pywps_cfg" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="src.processes.wps.pywps_view">
+<code class="descclassname">src.processes.wps.</code><code class="descname">pywps_view</code><span class="sig-paren">(</span><em>environ</em>, <em>start_response</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes/wps.html#pywps_view"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps.pywps_view" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-src.processes.wps_test">
+<span id="src-processes-wps-test-module"></span><h2>src.processes.wps_test module<a class="headerlink" href="#module-src.processes.wps_test" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="src.processes.wps_test.HelloWPS">
+<em class="property">class </em><code class="descclassname">src.processes.wps_test.</code><code class="descname">HelloWPS</code><a class="reference internal" href="_modules/src/processes/wps_test.html#HelloWPS"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.wps_test.HelloWPS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">pywps.app.Process.Process</span></code></p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-src.processes">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.processes" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="src.processes.includeme">
+<code class="descclassname">src.processes.</code><code class="descname">includeme</code><span class="sig-paren">(</span><em>config</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/processes.html#includeme"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.processes.includeme" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/logo_crim_FR.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">src.processes package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-src.processes.config">src.processes.config module</a></li>
+<li><a class="reference internal" href="#module-src.processes.status">src.processes.status module</a></li>
+<li><a class="reference internal" href="#module-src.processes.types">src.processes.types module</a></li>
+<li><a class="reference internal" href="#module-src.processes.utils">src.processes.utils module</a></li>
+<li><a class="reference internal" href="#module-src.processes.wps">src.processes.wps module</a></li>
+<li><a class="reference internal" href="#module-src.processes.wps_test">src.processes.wps_test module</a></li>
+<li><a class="reference internal" href="#module-src.processes">Module contents</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/src.processes.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Francis Charette-Migneault.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/src.processes.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>src.store package &mdash; GeoImageNet Machine Learning 0.5.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.5.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="GeoImageNet Machine Learning 0.5.0 documentation" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="src-store-package">
+<h1>src.store package<a class="headerlink" href="#src-store-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="src.store.adapters.html">src.store.adapters package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="src.store.adapters.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.adapters.html#src-store-adapters-memory-module">src.store.adapters.memory module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.adapters.html#src-store-adapters-mongodb-module">src.store.adapters.mongodb module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.adapters.html#src-store-adapters-postgres-module">src.store.adapters.postgres module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.adapters.html#module-src.store.adapters">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="src.store.databases.html">src.store.databases package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#module-src.store.databases.memory">src.store.databases.memory module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#src-store-databases-models-module">src.store.databases.models module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#src-store-databases-mongodb-module">src.store.databases.mongodb module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#src-store-databases-postgres-module">src.store.databases.postgres module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#module-src.store.databases.types">src.store.databases.types module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.store.databases.html#module-src.store.databases">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="src-store-datatypes-module">
+<h2>src.store.datatypes module<a class="headerlink" href="#src-store-datatypes-module" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-src.store.exceptions">
+<span id="src-store-exceptions-module"></span><h2>src.store.exceptions module<a class="headerlink" href="#module-src.store.exceptions" title="Permalink to this headline">¶</a></h2>
+<dl class="exception">
+<dt id="src.store.exceptions.DatasetConflictError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">DatasetConflictError</code><a class="reference internal" href="_modules/src/store/exceptions.html#DatasetConflictError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.DatasetConflictError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.DatasetStore</span></code>
+is conflicting with another process in the storage backend .</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.DatasetInstanceError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">DatasetInstanceError</code><a class="reference internal" href="_modules/src/store/exceptions.html#DatasetInstanceError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.DatasetInstanceError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance passed is not supported with
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.DatasetStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.DatasetNotFoundError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">DatasetNotFoundError</code><a class="reference internal" href="_modules/src/store/exceptions.html#DatasetNotFoundError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.DatasetNotFoundError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a dataset could not be read from the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.DatasetStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.DatasetRegistrationError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">DatasetRegistrationError</code><a class="reference internal" href="_modules/src/store/exceptions.html#DatasetRegistrationError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.DatasetRegistrationError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a dataset could not be registered in the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.DatasetStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.JobConflictError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">JobConflictError</code><a class="reference internal" href="_modules/src/store/exceptions.html#JobConflictError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.JobConflictError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.JobStore</span></code>
+is conflicting with another process in the storage backend .</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.JobInstanceError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">JobInstanceError</code><a class="reference internal" href="_modules/src/store/exceptions.html#JobInstanceError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.JobInstanceError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance passed is not supported with
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.JobStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.JobNotFoundError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">JobNotFoundError</code><a class="reference internal" href="_modules/src/store/exceptions.html#JobNotFoundError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.JobNotFoundError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a job could not be read from the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.JobStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.JobRegistrationError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">JobRegistrationError</code><a class="reference internal" href="_modules/src/store/exceptions.html#JobRegistrationError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.JobRegistrationError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a job could not be registered in the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.JobStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.JobUpdateError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">JobUpdateError</code><a class="reference internal" href="_modules/src/store/exceptions.html#JobUpdateError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.JobUpdateError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a job could not be updated in the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.JobStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ModelConflictError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ModelConflictError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ModelConflictError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ModelConflictError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ModelStore</span></code>
+is conflicting with another process in the storage backend .</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ModelInstanceError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ModelInstanceError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ModelInstanceError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ModelInstanceError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance passed is not supported with
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ModelStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ModelLoadingError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ModelLoadingError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ModelLoadingError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ModelLoadingError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that loading of the model data from the model definition failed.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ModelNotFoundError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ModelNotFoundError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ModelNotFoundError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ModelNotFoundError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a model could not be read from the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ModelStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ModelRegistrationError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ModelRegistrationError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ModelRegistrationError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ModelRegistrationError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a model could not be registered in the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ModelStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ProcessConflictError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ProcessConflictError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ProcessConflictError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ProcessConflictError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ProcessStore</span></code>
+is conflicting with another process in the storage backend .</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ProcessInstanceError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ProcessInstanceError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ProcessInstanceError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ProcessInstanceError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that the instance passed is not supported with
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ProcessStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ProcessNotFoundError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ProcessNotFoundError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ProcessNotFoundError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ProcessNotFoundError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a process could not be read from the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ProcessStore</span></code>.</p>
+</dd></dl>
+
+<dl class="exception">
+<dt id="src.store.exceptions.ProcessRegistrationError">
+<em class="property">exception </em><code class="descclassname">src.store.exceptions.</code><code class="descname">ProcessRegistrationError</code><a class="reference internal" href="_modules/src/store/exceptions.html#ProcessRegistrationError"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.exceptions.ProcessRegistrationError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">Exception</span></code></p>
+<p>Error indicating that a process could not be registered in the
+storage backend by an instance of <code class="xref py py-class docutils literal"><span class="pre">src.api.store.interfaces.ProcessStore</span></code>.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="src-store-factories-module">
+<h2>src.store.factories module<a class="headerlink" href="#src-store-factories-module" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-src.store.interfaces">
+<span id="src-store-interfaces-module"></span><h2>src.store.interfaces module<a class="headerlink" href="#module-src.store.interfaces" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="src.store.interfaces.DatabaseInterface">
+<em class="property">class </em><code class="descclassname">src.store.interfaces.</code><code class="descname">DatabaseInterface</code><span class="sig-paren">(</span><em>registry</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="attribute">
+<dt id="src.store.interfaces.DatabaseInterface.datasets_store">
+<code class="descname">datasets_store</code><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.datasets_store" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.get_information">
+<code class="descname">get_information</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.get_information"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.get_information" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">{&#8216;version&#8217;: version, &#8216;type&#8217;: db_type}</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.get_revision">
+<code class="descname">get_revision</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.get_revision"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.get_revision" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.get_session">
+<code class="descname">get_session</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.get_session"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.get_session" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.is_ready">
+<code class="descname">is_ready</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.is_ready"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.is_ready" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="src.store.interfaces.DatabaseInterface.jobs_store">
+<code class="descname">jobs_store</code><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.jobs_store" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="src.store.interfaces.DatabaseInterface.models_store">
+<code class="descname">models_store</code><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.models_store" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="src.store.interfaces.DatabaseInterface.processes_store">
+<code class="descname">processes_store</code><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.processes_store" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.rollback">
+<code class="descname">rollback</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.rollback"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.rollback" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rollback current database transaction.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatabaseInterface.run_migration">
+<code class="descname">run_migration</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatabaseInterface.run_migration"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatabaseInterface.run_migration" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="src.store.interfaces.DatasetStore">
+<em class="property">class </em><code class="descclassname">src.store.interfaces.</code><code class="descname">DatasetStore</code><a class="reference internal" href="_modules/src/store/interfaces.html#DatasetStore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatasetStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Storage for local datasets.</p>
+<dl class="method">
+<dt id="src.store.interfaces.DatasetStore.delete_dataset">
+<code class="descname">delete_dataset</code><span class="sig-paren">(</span><em>process_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatasetStore.delete_dataset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatasetStore.delete_dataset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes dataset from database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatasetStore.fetch_by_uuid">
+<code class="descname">fetch_by_uuid</code><span class="sig-paren">(</span><em>dataset_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatasetStore.fetch_by_uuid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatasetStore.fetch_by_uuid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get dataset for given <code class="docutils literal"><span class="pre">uuid</span></code> from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatasetStore.list_datasets">
+<code class="descname">list_datasets</code><span class="sig-paren">(</span><em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatasetStore.list_datasets"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatasetStore.list_datasets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists all datasets in database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.DatasetStore.save_dataset">
+<code class="descname">save_dataset</code><span class="sig-paren">(</span><em>dataset</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#DatasetStore.save_dataset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.DatasetStore.save_dataset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stores a dataset in storage.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="src.store.interfaces.JobStore">
+<em class="property">class </em><code class="descclassname">src.store.interfaces.</code><code class="descname">JobStore</code><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Storage for local jobs.</p>
+<dl class="method">
+<dt id="src.store.interfaces.JobStore.delete_job">
+<code class="descname">delete_job</code><span class="sig-paren">(</span><em>process_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore.delete_job"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore.delete_job" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes job from database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.JobStore.fetch_by_uuid">
+<code class="descname">fetch_by_uuid</code><span class="sig-paren">(</span><em>job_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore.fetch_by_uuid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore.fetch_by_uuid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get job for given <code class="docutils literal"><span class="pre">uuid</span></code> from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.JobStore.list_jobs">
+<code class="descname">list_jobs</code><span class="sig-paren">(</span><em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore.list_jobs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore.list_jobs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists all jobs in database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.JobStore.save_job">
+<code class="descname">save_job</code><span class="sig-paren">(</span><em>job</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore.save_job"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore.save_job" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stores a job in storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.JobStore.update_job">
+<code class="descname">update_job</code><span class="sig-paren">(</span><em>job</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#JobStore.update_job"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.JobStore.update_job" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates a job parameters in storage.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="src.store.interfaces.ModelStore">
+<em class="property">class </em><code class="descclassname">src.store.interfaces.</code><code class="descname">ModelStore</code><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Storage for local models.</p>
+<dl class="method">
+<dt id="src.store.interfaces.ModelStore.clear_models">
+<code class="descname">clear_models</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore.clear_models"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore.clear_models" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deletes all models from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ModelStore.delete_model">
+<code class="descname">delete_model</code><span class="sig-paren">(</span><em>process_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore.delete_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore.delete_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes model from database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ModelStore.fetch_by_uuid">
+<code class="descname">fetch_by_uuid</code><span class="sig-paren">(</span><em>model_uuid</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore.fetch_by_uuid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore.fetch_by_uuid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get model for given <code class="docutils literal"><span class="pre">uuid</span></code> from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ModelStore.list_models">
+<code class="descname">list_models</code><span class="sig-paren">(</span><em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore.list_models"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore.list_models" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists all models in database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ModelStore.save_model">
+<code class="descname">save_model</code><span class="sig-paren">(</span><em>model</em>, <em>data=None</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ModelStore.save_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ModelStore.save_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stores a model in storage.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="src.store.interfaces.ProcessStore">
+<em class="property">class </em><code class="descclassname">src.store.interfaces.</code><code class="descname">ProcessStore</code><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Storage for local WPS processes.</p>
+<dl class="method">
+<dt id="src.store.interfaces.ProcessStore.delete_process">
+<code class="descname">delete_process</code><span class="sig-paren">(</span><em>process_id</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore.delete_process"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore.delete_process" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes process from database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ProcessStore.fetch_by_identifier">
+<code class="descname">fetch_by_identifier</code><span class="sig-paren">(</span><em>process_identifier</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore.fetch_by_identifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore.fetch_by_identifier" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get process for given <code class="docutils literal"><span class="pre">identifier</span></code> from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ProcessStore.fetch_by_uuid">
+<code class="descname">fetch_by_uuid</code><span class="sig-paren">(</span><em>process_id</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore.fetch_by_uuid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore.fetch_by_uuid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get process for given <code class="docutils literal"><span class="pre">uuid</span></code> from storage.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ProcessStore.list_processes">
+<code class="descname">list_processes</code><span class="sig-paren">(</span><em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore.list_processes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore.list_processes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists all processes in database.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="src.store.interfaces.ProcessStore.save_process">
+<code class="descname">save_process</code><span class="sig-paren">(</span><em>process</em>, <em>overwrite=True</em>, <em>request=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store/interfaces.html#ProcessStore.save_process"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.interfaces.ProcessStore.save_process" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stores a WPS process in storage.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-src.store">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.store" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="src.store.includeme">
+<code class="descclassname">src.store.</code><code class="descname">includeme</code><span class="sig-paren">(</span><em>config</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/store.html#includeme"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#src.store.includeme" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the model for a Pyramid app.</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/logo_crim_FR.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">src.store package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#src-store-datatypes-module">src.store.datatypes module</a></li>
+<li><a class="reference internal" href="#module-src.store.exceptions">src.store.exceptions module</a></li>
+<li><a class="reference internal" href="#src-store-factories-module">src.store.factories module</a></li>
+<li><a class="reference internal" href="#module-src.store.interfaces">src.store.interfaces module</a></li>
+<li><a class="reference internal" href="#module-src.store">Module contents</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/src.store.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Francis Charette-Migneault.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/src.store.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
