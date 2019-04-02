@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     Number = Union[float, int]
     JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
-    JSON = Dict[JsonKey, Union[JsonValue, List[JsonValue], Dict[JsonKey, Union[JsonValue, 'JSON']]]]
+    JSON = Dict[JsonKey, Union[JsonValue, List['JSON'], Dict[JsonKey, 'JSON']]]
     SettingsType = Dict[AnyStr, JsonValue]
     OptionType = Dict[AnyStr, Any]
     InputType = OptionType

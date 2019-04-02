@@ -114,7 +114,7 @@ def get_job_special(request, job_type):
     """Retrieves a job based on the request using keyword specifiers input validation."""
     jobs_store = database_factory(request.registry).jobs_store
     proc = get_process(request)  # process required, raise if not specified
-    status = CATEGORY.RUNNING if job_type == "current" else map_status(STATUS.SUCCESS)
+    status = map_status(STATUS.RUNNING if job_type == "current" else STATUS.SUCCESS)
     sort = SORT.FINISHED if job_type == "latest" else SORT.CREATED
     jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort, limit=1)
     if count > 1:

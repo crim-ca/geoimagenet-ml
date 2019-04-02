@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional
+        Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional,
     )
 
 LOGGER = logging.getLogger(__name__)
@@ -144,22 +144,20 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
 
 
 def retrieve_annotations(geojson_urls):
-    annotations = dict()
+    # type: (List[AnyStr]) -> List[JSON]
+    annotations = list()
     for url in geojson_urls:
-        resp = requests.get(url, headers={'Accept': 'application/json'})
+        resp = requests.get(url, headers={"Accept": "application/json"})
         code = resp.status_code
         if code != 200:
             raise RuntimeError("Could not retrieve GeoJSON from [{}], server response was [{}]".format(url, code))
-        body = resp.json()
-        if annotations:
-            annotations = body
-        else:
-            annotations['features'].append(body['features'])
+        annotations.append(resp.json())
     if not annotations:
         raise RuntimeError("Could not find any annotation from URL(s): {}".format(geojson_urls))
+    return annotations
 
 
-def create_batch_patches(annotations_meta,      # type: JSON
+def create_batch_patches(annotations_meta,      # type: List[JSON]
                          raster_search_paths,   # type: List[AnyStr]
                          dataset_store,         # type: DatasetStore
                          dataset_container,     # type: Dataset
@@ -223,14 +221,19 @@ def create_batch_patches(annotations_meta,      # type: JSON
         chosen[1][class_id] -= 1
         return chosen[0]
 
+    # FIXME: although we support multiple GeoJSON URL as process input, functions below only expect 1
+    #   - need to combine features by ID to avoid duplicates
+    #   - need to handle different CRS for GeoTransform
+    if len(annotations_meta) != 1:
+        raise NotImplementedError("Multiple GeoJSON parsing not implemented.")
+    annotations_meta = annotations_meta[0]
+
     update_func("parsing raster files", start_percent)
     srs = parse_coordinate_system(annotations_meta)
     rasters_data, raster_global_coverage = parse_rasters(raster_search_paths, default_srs=srs)
 
     start_percent += 1
     update_func("parsing GeoJSON metadata", start_percent)
-    if not isinstance(annotations_meta, dict):
-        raise AssertionError("annotations should be passed in as dict obtained from geojson")
     features, category_counter = parse_geojson(annotations_meta, srs_destination=srs, roi=raster_global_coverage)
 
     start_percent += 1

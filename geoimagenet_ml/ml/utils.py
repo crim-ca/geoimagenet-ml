@@ -37,7 +37,7 @@ import shapely.ops
 import shapely.wkt
 
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import JSON
+    from geoimagenet_ml.typedefs import JSON, List, Tuple, Optional
 
 LOGGER = logging.getLogger(__name__)
 
@@ -128,22 +128,22 @@ def percent(count, total):
 
 def parse_coordinate_system(body):
     # type: (JSON) -> osr.SpatialReference
-    crs_body = body.get('crs') or body.get('srs')
-    crs_type = crs_body.get('type', '').upper()
-    crs_opts = list(crs_body.get('properties').values())
+    crs_body = body.get("crs") or body.get("srs")
+    crs_type = crs_body.get("type", "").upper()
+    crs_opts = list(crs_body.get("properties").values())
     srs = ogr.osr.SpatialReference()
     csr = None
-    if crs_type == 'EPSG':
+    if crs_type == "EPSG":
         csr = srs.ImportFromEPSG(*crs_opts)
-    if crs_type == 'EPSGA':
+    if crs_type == "EPSGA":
         csr = srs.ImportFromEPSGA(*crs_opts)
-    if crs_type == 'ERM':
+    if crs_type == "ERM":
         csr = srs.ImportFromERM(*crs_opts)
-    if crs_type == 'ESRI':
+    if crs_type == "ESRI":
         csr = srs.ImportFromESRI(*crs_opts)
-    if crs_type == 'ESRI':
+    if crs_type == "ESRI":
         csr = srs.ImportFromESRI(*crs_opts)
-    if crs_type == 'PCI':
+    if crs_type == "PCI":
         csr = srs.ImportFromPCI(*crs_opts)
     if not csr:
         LOGGER.error("Could not identify CRS/SRS type.")
@@ -151,7 +151,10 @@ def parse_coordinate_system(body):
     return csr
 
 
-def parse_geojson(geojson, srs_destination, roi=None):
+def parse_geojson(geojson,          # type: JSON
+                  srs_destination,  # type: osr.SpatialReference
+                  roi=None,         # type: Optional[shapely.geometry.base.BaseGeometry]
+                  ):                # type: (...) -> Tuple[List[JSON], ClassCounter]
     if geojson is None or not isinstance(geojson, dict):
         raise AssertionError("unexpected geojson type")
     if "features" not in geojson or not isinstance(geojson["features"], list):
@@ -320,7 +323,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
             raster_curr_srs.ImportFromWkt(raster_curr_srs_str)
         else:
             if default_srs is None:
-                raise AssertionError("raster did not provide an srs, and no default EPSG srs provided")
+                raise AssertionError("raster did not provide an SRS, and no default EPSG SRS provided")
             raster_curr_srs = default_srs
         LOGGER.debug("spatial ref:\n%s" % str(raster_curr_srs))
         px_width, px_height = raster_geotransform[1], raster_geotransform[5]
