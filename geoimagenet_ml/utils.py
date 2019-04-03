@@ -1,3 +1,4 @@
+from geoimagenet_ml.store.exceptions import InvalidIdentifierValue
 from geoimagenet_ml.processes.status import map_status
 from six.moves.configparser import ConfigParser
 from datetime import datetime
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 def get_base_url(settings):
     # type: (SettingsType) -> AnyStr
-    return settings.get('geoimagenet_ml.api.url').rstrip('/').strip()
+    return settings.get("geoimagenet_ml.api.url").rstrip('/').strip()
 
 
 def get_any_id(info):
@@ -26,7 +27,7 @@ def get_any_id(info):
     """Retrieves a dictionary 'id'-like key using multiple common variations [id, identifier, _id].
     :param info: dictionary that potentially contains an 'id'-like key.
     :returns: value of the matched 'id'-like key."""
-    return info.get('id', info.get('identifier', info.get('_id')))
+    return info.get("id", info.get("identifier", info.get("_id")))
 
 
 def get_any_value(info):
@@ -34,7 +35,7 @@ def get_any_value(info):
     """Retrieves a dictionary 'value'-like key using multiple common variations [href, value, reference].
     :param info: dictionary that potentially contains a 'value'-like key.
     :returns: value of the matched 'id'-like key."""
-    return info.get('href', info.get('value', info.get('reference', info.get('data'))))
+    return info.get("href", info.get("value", info.get("reference", info.get("data"))))
 
 
 def has_raw_value(info):
@@ -45,9 +46,9 @@ def has_raw_value(info):
     :returns: indication of the presence of raw data."""
     if not isinstance(info, dict):
         return None
-    if any([k in info for k in ['data', 'value']]):
+    if any([k in info for k in ["data", "value"]]):
         return True
-    if any([k in info for k in ['href', 'reference']]):
+    if any([k in info for k in ["href", "reference"]]):
         return False
     return None
 
@@ -60,19 +61,31 @@ def settings_from_ini(config_ini_file_path, ini_main_section_name):
     return settings
 
 
-def str_2_path_list(str_list):
-    # type: (Union[None, AnyStr]) -> List[AnyStr]
-    """Obtains a list of existing and validated paths from a comma-separated string of potential paths."""
+def str2paths(str_list=None, list_files=False):
+    # type: (Optional[AnyStr], bool) -> List[AnyStr]
+    """
+    Obtains a list of *existing* paths from a comma-separated string of *potential* paths.
+
+    If ``list_files=True``, recursively lists contained files under paths matching existing directories.
+    """
     if not isinstance(str_list, six.string_types) or not str_list:
         return []
     path_list = [p.strip() for p in str_list.split(',')]
-    path_list = [p for p in path_list if os.path.isdir(p) or os.path.isfile(p)]
+    path_list = [os.path.abspath(p) for p in path_list if os.path.isdir(p) or os.path.isfile(p)]
+    if list_files:
+        path_files = []
+        for path in path_list:
+            for root, _, file_name in os.walk(path, followlinks=True):
+                for fn in file_name:
+                    path_files.append(os.path.join(root, fn))
+        path_list = path_files
+    return list(sorted(set(path_list)))  # remove duplicates
 
 
 class null(object):
     """Represents a ``null`` value to differentiate from ``None`` when used as default value."""
     def __repr__(self):
-        return '<Null>'
+        return "<Null>"
 
 
 def isnull(item):
@@ -105,8 +118,28 @@ def is_uuid(item, version=4):
     return str(uuid_item) == item
 
 
-def get_sane_name(name, min_len=3, max_len=None, assert_invalid=True, replace_invalid=False):
-    # type: (AnyStr, Optional[int], Optional[int], Optional[bool], Optional[bool]) -> Union[AnyStr, None]
+REGEX_SEARCH_INVALID_CHARACTERS = re.compile(r"[^a-zA-Z0-9_\-]")
+REGEX_ASSERT_INVALID_CHARACTERS = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def get_sane_name(name, min_len=3, max_len=None, assert_invalid=True, replace_character='_'):
+    # type: (AnyStr, Optional[int], Optional[Union[int, None]], Optional[bool], Optional[AnyStr]) -> Union[AnyStr, None]
+    """
+    Returns a cleaned-up version of the input name, replacing invalid characters matched with
+    ``REGEX_SEARCH_INVALID_CHARACTERS`` by ``replace_character``.
+
+    :param name: value to clean
+    :param min_len:
+        Minimal length of ``name`` to be respected, raises or returns ``None`` on fail according to ``assert_invalid``.
+    :param max_len:
+        Maximum length of ``name`` to be respected, raises or returns trimmed ``name`` on fail according to
+        ``assert_invalid``. If ``None``, condition is ignored for assertion or full ``name`` is returned respectively.
+    :param assert_invalid: If ``True``, fail conditions or invalid characters will raise an error instead of replacing.
+    :param replace_character: Single character to use for replacement of invalid ones if ``assert_invalid=False``.
+    """
+    if not isinstance(replace_character, six.string_types) and not len(replace_character) == 1:
+        raise ValueError("Single replace character is expected, got invalid [{!s}]".format(replace_character))
+    max_len = max_len or len(name)
     if assert_invalid:
         assert_sane_name(name, min_len, max_len)
     if name is None:
@@ -114,24 +147,26 @@ def get_sane_name(name, min_len=3, max_len=None, assert_invalid=True, replace_in
     name = name.strip()
     if len(name) < min_len:
         return None
-    if replace_invalid:
-        max_len = max_len or 25
-        name = re.sub("[^a-z]", "_", name.lower()[:max_len])
+    name = re.sub(REGEX_SEARCH_INVALID_CHARACTERS, replace_character, name[:max_len])
     return name
 
 
 def assert_sane_name(name, min_len=3, max_len=None):
-    # type: (AnyStr, Optional[int], Optional[int]) -> None
+    """Asserts that the sane name respects conditions.
+
+    .. seealso::
+        - argument details in :function:`get_sane_name`
+    """
     if name is None:
-        raise ValueError('Invalid name : {0}'.format(name))
+        raise InvalidIdentifierValue("Invalid name : {0}".format(name))
     name = name.strip()
     if '--' in name \
-            or name.startswith('-') \
-            or name.endswith('-') \
-            or len(name) < min_len \
-            or (max_len is not None and len(name) > max_len) \
-            or not re.match(r"^[a-zA-Z0-9_\-]+$", name):
-        raise ValueError('Invalid name : {0}'.format(name))
+       or name.startswith('-') \
+       or name.endswith('-') \
+       or len(name) < min_len \
+       or (max_len is not None and len(name) > max_len) \
+       or not re.match(REGEX_ASSERT_INVALID_CHARACTERS, name):
+        raise InvalidIdentifierValue("Invalid name : {0}".format(name))
 
 
 def fully_qualified_name(obj):
@@ -156,19 +191,19 @@ def expires_at(hours=1):
     return now_secs() + hours * 3600
 
 
-def localize_datetime(dt, tz_name='UTC'):
+def localize_datetime(dt, tz_name="UTC"):
     # type: (datetime, AnyStr) -> datetime
     """
     Provide a timezone-aware object for a given datetime and timezone name.
     """
     tz_aware_dt = dt
     if dt.tzinfo is None:
-        utc = pytz.timezone('UTC')
+        utc = pytz.timezone("UTC")
         aware = utc.localize(dt)
         timezone = pytz.timezone(tz_name)
         tz_aware_dt = aware.astimezone(timezone)
     else:
-        Warning('tzinfo already set')
+        Warning("tzinfo already set")
     return tz_aware_dt
 
 
@@ -188,18 +223,18 @@ def stringify_datetime(dt=None, tz_name='UTC', fmt=None):
 
 def get_log_fmt():
     # type: (...) -> AnyStr
-    return '[%(asctime)s] %(levelname)-8s [%(name)s] %(message)s'
+    return "[%(asctime)s] %(levelname)-8s [%(name)s] %(message)s"
 
 
 def get_log_datefmt():
     # type: (...) -> AnyStr
-    return '%Y-%m-%d %H:%M:%S'
+    return "%Y-%m-%d %H:%M:%S"
 
 
 def get_job_log_msg(status, message, progress=0, duration=None):
     # type: (AnyStr, AnyStr, int, AnyStr) -> AnyStr
-    return '{d} {p:3d}% {s:10} {m}'.format(
-        d=duration or '',
+    return "{d} {p:3d}% {s:10} {m}".format(
+        d=duration or "",
         p=int(progress or 0),
         s=map_status(status).value,
         m=message

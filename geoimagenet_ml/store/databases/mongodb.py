@@ -17,7 +17,7 @@ class MongoDatabase(DatabaseInterface):
 
     def __init__(self, registry):
         super(MongoDatabase, self).__init__(registry)
-        self._database = mongodb(registry)
+        self._database = MongoDB.get(registry)
         self._settings = registry.settings
         self.run_migration()
 
@@ -31,8 +31,10 @@ class MongoDatabase(DatabaseInterface):
 
     @property
     def processes_store(self):
-        return MongodbProcessStore(collection=self._database.processes, settings=self._settings,
-                                   default_processes=process_mapping)
+        store = MongodbProcessStore(collection=self._database.processes, settings=self._settings,
+                                    default_processes=None if MongoDB.is_init() else process_mapping)
+        MongoDB.mark_init()
+        return store
 
     @property
     def jobs_store(self):
@@ -62,6 +64,15 @@ class MongoDatabase(DatabaseInterface):
 
 class MongoDB:
     __db = None
+    __init = False
+
+    @classmethod
+    def is_init(cls):
+        return cls.__init
+
+    @classmethod
+    def mark_init(cls):
+        cls.__init = True
 
     @classmethod
     def get(cls, registry):
@@ -77,13 +88,8 @@ class MongoDB:
                 password=password if password else None,
             )
             cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get('mongodb.db_name')]
+            cls.__db.datasets.create_index("uuid", unique=True)
+            cls.__db.models.create_index("uuid", unique=True)
+            cls.__db.processes.create_index("uuid", unique=True)
+            cls.__db.version.create_index("version", unique=True)
         return cls.__db
-
-
-def mongodb(registry):
-    db = MongoDB.get(registry)
-    db.datasets.create_index("uuid", unique=True)
-    db.models.create_index("uuid", unique=True)
-    db.processes.create_index("uuid", unique=True)
-    db.version.create_index("version", unique=True)
-    return db

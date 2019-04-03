@@ -1,4 +1,5 @@
-from geoimagenet_ml.utils import classproperty, null, isnull, str_2_path_list
+from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
+from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import map_status, STATUS
 from abc import abstractmethod
@@ -129,7 +130,6 @@ class ProcessRunnerModelTester(ProcessRunner):
     def type(self):
         return 'ml'
 
-    # TODO: make this cleaner
     @classproperty
     def inputs(self):
         return [
@@ -191,11 +191,6 @@ class ProcessRunnerModelTester(ProcessRunner):
             self.db.jobs_store.update_job(_job)
 
         try:
-            # FIXME:
-            #   imports that require libraries dynamically loaded
-            #   only celery running the process is setup to load them properly
-            from geoimagenet_ml.ml.impl import get_test_data_runner
-
             # note:
             #   for dataset loader using multiple worker sub-processes to load samples by batch,
             #   process needs to be non-daemonic to allow pool spawning of child processes since this
@@ -260,10 +255,13 @@ class ProcessRunnerBatchCreator(ProcessRunner):
         return 'batch-creation'
 
     @classproperty
+    def limit_single_job(self):
+        return True
+
+    @classproperty
     def type(self):
         return 'ml'
 
-    # TODO: make this cleaner
     @classproperty
     def inputs(self):
         return [
@@ -346,10 +344,6 @@ class ProcessRunnerBatchCreator(ProcessRunner):
         try:
             # imports to avoid circular references
             from geoimagenet_ml.store.datatypes import Dataset
-            # FIXME:
-            #   imports that require libraries dynamically loaded
-            #   only celery running the process is setup to load them properly
-            from geoimagenet_ml.ml.impl import create_batch_patches, retrieve_annotations
 
             self.update_job_status(STATUS.STARTED, 'initializing configuration settings', 0)
             dataset_root = str(self.registry.settings['geoimagenet_ml.ml.datasets_path'])
@@ -363,7 +357,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
                 raise RuntimeError("invalid batch dataset name")
             dataset_path = os.path.join(dataset_root, dataset_name)
-            dataset_overwrite = asbool(self.get_input('overwrite', one=True))
+            dataset_overwrite = asbool(self.get_input("overwrite", one=True))
             if dataset_overwrite and os.path.isdir(dataset_path):
                 self.update_job_status(STATUS.RUNNING, "removing old dataset [{}]".format(dataset_name), 2,
                                        level=logging.WARNING)
@@ -372,11 +366,11 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type)
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
-            geojson_urls = self.get_input('geojson_urls', required=True)
-            raster_paths = str_2_path_list(self.registry.settings['geoimagenet_ml.ml.source_images_paths'])
-            crop_fixed_size = self.get_input('crop_fixed_size', one=True)
-            split_ratio = self.get_input('split_ratio', one=True)
-            latest_batch = self.get_input('incremental_batch', one=True)
+            geojson_urls = self.get_input("geojson_urls", required=True)
+            raster_paths = str2paths(self.registry.settings["geoimagenet_ml.ml.source_images_paths"], list_files=True)
+            crop_fixed_size = self.get_input("crop_fixed_size", one=True)
+            split_ratio = self.get_input("split_ratio", one=True)
+            latest_batch = self.get_input("incremental_batch", one=True)
 
             self.update_job_status(STATUS.RUNNING, "fetching annotations using process job inputs", 4)
             annotations = retrieve_annotations(geojson_urls)

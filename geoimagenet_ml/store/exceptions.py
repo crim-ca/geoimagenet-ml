@@ -2,6 +2,14 @@
 # coding: utf-8
 
 
+class InvalidIdentifierValue(ValueError):
+    """
+    Error indicating that an id to be employed for following operations
+    is not considered as valid to allow further processed or usage.
+    """
+    pass
+
+
 class DatasetNotFoundError(Exception):
     """
     Error indicating that a dataset could not be read from the

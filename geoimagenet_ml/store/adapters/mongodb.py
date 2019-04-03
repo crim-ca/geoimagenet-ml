@@ -57,14 +57,14 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
 
     def delete_dataset(self, dataset_uuid, request=None):
         dataset_uuid = str(dataset_uuid)
-        result = self.collection.delete_one({'uuid': dataset_uuid})
+        result = self.collection.delete_one({"uuid": dataset_uuid})
         return result.deleted_count == 1
 
     def fetch_by_uuid(self, dataset_uuid, request=None):
         dataset_uuid = str(dataset_uuid)
         dataset = None
         try:
-            dataset = self.collection.find_one({'uuid': dataset_uuid})
+            dataset = self.collection.find_one({"uuid": dataset_uuid})
         except Exception:
             ex.DatasetNotFoundError("Dataset `{}` could not be found.".format(dataset_uuid))
         if not dataset:
@@ -78,7 +78,7 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
     def list_datasets(self, request=None):
         datasets = []
         try:
-            for dataset in self.collection.find().sort('name', pymongo.ASCENDING):
+            for dataset in self.collection.find().sort("name", pymongo.ASCENDING):
                 datasets.append(Dataset(dataset))
         except Exception:
             raise ex.DatasetInstanceError("Dataset could not be generated.")
@@ -95,9 +95,9 @@ class MongodbModelStore(ModelStore, MongodbStore):
     # noinspection PyUnusedLocal
     def __init__(self, collection, settings):
         super(MongodbModelStore, self).__init__(collection=collection)
-        if not isinstance(settings, dict) or 'geoimagenet_ml.api.models_path' not in settings:
+        if not isinstance(settings, dict) or "geoimagenet_ml.api.models_path" not in settings:
             raise LookupError("Settings with 'geoimagenet_ml.api.models_path' is mandatory.")
-        self.models_path = settings.get('geoimagenet_ml.api.models_path')
+        self.models_path = settings.get("geoimagenet_ml.api.models_path")
         os.makedirs(self.models_path, exist_ok=True)
 
     def save_model(self, model, data=None, request=None):
@@ -112,11 +112,11 @@ class MongodbModelStore(ModelStore, MongodbStore):
                     data.seek(0)
                     model_file.write(data.read())
                     data.close()
-                model['data'] = None        # force reload from stored file when calling `model.data` retrieved from db
-                model['file'] = model_path
+                model["data"] = None        # force reload from stored file when calling `model.data` retrieved from db
+                model["file"] = model_path
             elif isinstance(data, dict):
-                model['data'] = data
-                model['file'] = None
+                model["data"] = data
+                model["file"] = None
             else:
                 raise ex.ModelInstanceError("Model data is expected to be a buffer or dict, got {!r}.".format(data))
             result = self.collection.insert_one(model)
@@ -135,14 +135,14 @@ class MongodbModelStore(ModelStore, MongodbStore):
             os.remove(model.file)
         except Exception:
             pass
-        result = self.collection.delete_one({'uuid': model_uuid})
+        result = self.collection.delete_one({"uuid": model_uuid})
         return result.deleted_count == 1
 
     def fetch_by_uuid(self, model_uuid, request=None):
         model_uuid = str(model_uuid)
         model = None
         try:
-            model = self.collection.find_one({'uuid': model_uuid})
+            model = self.collection.find_one({"uuid": model_uuid})
         except Exception:
             ex.ModelNotFoundError("Model `{}` could not be found.".format(model_uuid))
         if not model:
@@ -156,7 +156,7 @@ class MongodbModelStore(ModelStore, MongodbStore):
     def list_models(self, request=None):
         models = []
         try:
-            for model in self.collection.find().sort('name', pymongo.ASCENDING):
+            for model in self.collection.find().sort("name", pymongo.ASCENDING):
                 models.append(Model(model))
         except Exception:
             raise ex.ModelInstanceError("Model could not be generated.")
@@ -176,16 +176,17 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
     def __init__(self, collection, settings, default_processes=None):
         from geoimagenet_ml.api.schemas import ProcessJobsAPI
         super(MongodbProcessStore, self).__init__(collection=collection)
-        self.default_host = settings.get('geoimagenet_ml.api.url')
-        self.default_wps_endpoint_template = '{host}{path}'.format(host=self.default_host, path=ProcessJobsAPI.path)
+        self.default_host = settings.get("geoimagenet_ml.api.url")
+        self.default_wps_endpoint_template = "{host}{path}".format(host=self.default_host, path=ProcessJobsAPI.path)
         if default_processes:
             registered_processes = [process.identifier for process in self.list_processes()]
             for process in default_processes:
                 if isinstance(default_processes, dict):
                     process = default_processes[process]
                 sane_name = self._get_process_id(process)
-                if sane_name not in registered_processes:
-                    self._add_process(process)
+                if sane_name in registered_processes:
+                    self.delete_process(sane_name)
+                self._add_process(process)
 
     @staticmethod
     def _from_runner(runner_process, **extra_params):
@@ -193,12 +194,13 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         # NOTE:
         #   don't instantiate process because of missing init arguments, use class properties only
         process = {
-            'type': runner_process.type,
-            'identifier': runner_process.identifier,
-            'inputs': runner_process.inputs,
-            'abstract': runner_process.__doc__,
-            'package': None,
-            'reference': None,
+            "type": runner_process.type,
+            "identifier": runner_process.identifier,
+            "inputs": runner_process.inputs,
+            "abstract": runner_process.__doc__,
+            "package": None,
+            "reference": None,
+            "limit_single_job": runner_process.limit_single_job,
         }
         process.update(**extra_params)
         return Process(process)
@@ -212,9 +214,9 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             wps_process = wps_process()
         process = wps_process.json
         process.update({
-            'type': PROCESS_WPS,
-            'package': None,
-            'reference': None,
+            "type": PROCESS_WPS,
+            "package": None,
+            "reference": None,
         })
         process.update(**extra_params)
         return Process(process)
@@ -230,11 +232,11 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             raise ex.ProcessInstanceError("Unsupported process type `{}`.".format(type(process)))
 
         process_name = self._get_process_id(process)
-        process_exec = self.default_wps_endpoint_template.replace('{process_uuid}', new_process.uuid)
+        process_exec = self.default_wps_endpoint_template.replace("{process_uuid}", new_process.uuid)
         try:
-            new_process['identifier'] = process_name
-            new_process['type'] = self._get_process_type(process)
-            new_process['executeEndpoint'] = process_exec
+            new_process["identifier"] = process_name
+            new_process["type"] = self._get_process_type(process)
+            new_process["executeEndpoint"] = process_exec
             self.collection.insert_one(new_process)
         except Exception as exc:
             raise ex.ProcessRegistrationError(
@@ -275,9 +277,9 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Stores a WPS process in storage.
         """
         sane_name = self._get_process_id(process)
-        if self.collection.count({'identifier': sane_name}) > 0:
+        if self.collection.count({"identifier": sane_name}) > 0:
             if overwrite:
-                self.collection.delete_one({'identifier': sane_name})
+                self.collection.delete_one({"identifier": sane_name})
             else:
                 raise ex.ProcessConflictError("Process `{}` already registered.".format(sane_name))
         self._add_process(process)
@@ -288,7 +290,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Removes process from database.
         """
         sane_name = get_sane_name(process_id)
-        result = self.collection.delete_one({'identifier': sane_name})
+        result = self.collection.delete_one({"identifier": sane_name})
         return result.deleted_count == 1
 
     def list_processes(self, request=None):
@@ -296,7 +298,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Lists all processes in database.
         """
         db_processes = []
-        for process in self.collection.find().sort('identifier', pymongo.ASCENDING):
+        for process in self.collection.find().sort("identifier", pymongo.ASCENDING):
             db_processes.append(Process(process))
         return db_processes
 
@@ -305,7 +307,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Get process for given ``uuid`` from storage.
         """
         sane_name = get_sane_name(process_uuid)
-        process = self.collection.find_one({'uuid': sane_name})
+        process = self.collection.find_one({"uuid": sane_name})
         if not process:
             raise ex.ProcessNotFoundError("Process `{}` could not be found.".format(sane_name))
         return Process(process)
@@ -315,7 +317,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Get process for given ``identifier`` from storage.
         """
         sane_name = get_sane_name(process_identifier)
-        process = self.collection.find_one({'identifier': sane_name})
+        process = self.collection.find_one({"identifier": sane_name})
         if not process:
             raise ex.ProcessNotFoundError("Process `{}` could not be found.".format(sane_name))
         return Process(process)
@@ -347,7 +349,7 @@ class MongodbJobStore(JobStore, MongodbStore):
 
     def update_job(self, job, request=None):
         try:
-            result = self.collection.update_one({'uuid': job.uuid}, {'$set': job.params})
+            result = self.collection.update_one({"uuid": job.uuid}, {"$set": job.params})
             if result.acknowledged and result.modified_count == 1:
                 return self.fetch_by_uuid(job.uuid)
         except Exception as exc:
@@ -356,14 +358,14 @@ class MongodbJobStore(JobStore, MongodbStore):
 
     def delete_job(self, job_uuid, request=None):
         job_uuid = str(job_uuid)
-        result = self.collection.delete_one({'uuid': job_uuid})
+        result = self.collection.delete_one({"uuid": job_uuid})
         return result.deleted_count == 1
 
     def fetch_by_uuid(self, job_uuid, request=None):
         job_uuid = str(job_uuid)
         job = None
         try:
-            job = self.collection.find_one({'uuid': job_uuid})
+            job = self.collection.find_one({"uuid": job_uuid})
         except Exception:
             ex.JobNotFoundError("Job `{}` could not be found.".format(job_uuid))
         if not job:

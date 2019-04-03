@@ -6,7 +6,7 @@ from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store.constants import SORT
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
-from geoimagenet_ml.processes.status import map_status, STATUS, CATEGORY
+from geoimagenet_ml.processes.status import map_status, STATUS
 from geoimagenet_ml.utils import get_base_url, is_uuid
 from pyramid.httpexceptions import (
     HTTPCreated,
@@ -116,11 +116,10 @@ def get_job_special(request, job_type):
     proc = get_process(request)  # process required, raise if not specified
     status = map_status(STATUS.RUNNING if job_type == "current" else STATUS.SUCCESS)
     sort = SORT.FINISHED if job_type == "latest" else SORT.CREATED
-    jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort, limit=1)
+    jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort)
     if count > 1:
         ex.raise_http(httpError=HTTPInternalServerError, request=request,
-                      detail="Found too many jobs ({}). Should only find one.".format(count),
-                      content={"jobs": [j.uuid for j in jobs]})
+                      detail="Found too many jobs ({}). Should only find one.".format(count))
     if count == 1:
         return jobs[0]
     return None
@@ -161,6 +160,15 @@ def create_process_job(request, process):
     if process.identifier not in process_mapping or process.type == PROCESS_WPS:
         raise HTTPNotImplemented("Process job execution not implemented for '{}' of type '{}'."
                                  .format(process.identifier, process.type))
+
+    if process.limit_single_job:
+        job = None
+        try:
+            job = get_job_special(request, "current")
+        except exc.JobNotFoundError:
+            pass
+        if job is not None:
+            raise HTTPForbidden("Multiple jobs not allowed for [{!s}]. Job submission aborted.".format(process))
 
     # validation for specific processes, create job and dispatch it to corresponding runner
     runner_key = process.identifier

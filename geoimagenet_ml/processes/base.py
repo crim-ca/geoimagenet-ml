@@ -14,3 +14,8 @@ class ProcessBase(object):
     def type(self):
         # type: () -> AnyStr
         raise NotImplementedError
+
+    @classproperty
+    def limit_single_job(self):
+        # type: () -> bool
+        return False

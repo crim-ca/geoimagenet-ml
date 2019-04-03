@@ -1,19 +1,10 @@
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# FIXME:
-#   Because of unresolved reference caused by GDAL, only `geoimagenet_ml.ml.utils` should import
-#   it directly. Otherwise, any method in `geoimagenet_ml.ml.impl` should import GDAL inside the
-#   corresponding function using it to avoid import error from elsewhere, and should be executed
-#   only form a celery worker that knows how to map the library without breaking other imports.
-#   |
-#   see about unresolved reference error:
-#       - https://github.com/conda-forge/libgdal-feedstock/pull/33
-#       - https://github.com/conda-forge/fiona-feedstock/issues/68
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 from geoimagenet_ml.utils import ClassCounter
+from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
+import osgeo.gdal
 import requests
 import logging
 import random
@@ -28,13 +19,14 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
         Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional,
+        FeatureType, RasterDataType
     )
 
 LOGGER = logging.getLogger(__name__)
 
 
 def load_model(model_file):
-    # type: (Union[Any, AnyStr]) -> Tuple[bool, OptionType, Union[BytesIO, None], Union[Exception, None]]
+    # type: (Union[Any, AnyStr]) -> Tuple[bool, OptionType, Optional[BytesIO], Optional[Exception]]
     """
     Tries to load a model checkpoint file from the file-like object, file path or URL.
     :return: tuple of (success, data, buffer, exception) accordingly.
@@ -69,7 +61,7 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
     save_dir = os.path.join(settings.get('geoimagenet_ml.api.models_path'), model.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
-    task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])   # enforce model task instead of dataset
+    task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
@@ -145,6 +137,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
 
 def retrieve_annotations(geojson_urls):
     # type: (List[AnyStr]) -> List[JSON]
+    """Fetches GeoJSON structured feature(s) data for each of the provided URL."""
     annotations = list()
     for url in geojson_urls:
         resp = requests.get(url, headers={"Accept": "application/json"})
@@ -155,6 +148,39 @@ def retrieve_annotations(geojson_urls):
     if not annotations:
         raise RuntimeError("Could not find any annotation from URL(s): {}".format(geojson_urls))
     return annotations
+
+
+def find_best_match_raster(rasters, feature):
+    # type: (List[RasterDataType], FeatureType) -> RasterDataType
+    """
+    Attempts to find the best matching raster with the specified ``feature``.
+    Search includes fuzzy matching of file name and overlapping geometry alignment.
+
+    :raises RuntimeError: if no raster can be matched.
+    """
+    def fix_raster_search_name(name):
+        return name.replace("8bits", "xbits").replace("16bits", "xbits")
+
+    raster_data = None
+    if "properties" in feature and "image_name" in feature["properties"]:
+        raster_name = fix_raster_search_name(feature["properties"]["image_name"])
+        for data in rasters:
+            feature_path = fix_raster_search_name(data["file_path"])
+            if raster_name in feature_path:
+                LOGGER.info("matched raster/feature by filename: [{}, {}]".format(raster_name, feature_path))
+                raster_data = data
+                break
+    if raster_data is None:
+        for data in rasters:
+            raster_geom = data["global_roi"]
+            feature_geom = feature["geometry"]
+            if raster_geom.contains(feature_geom):
+                LOGGER.info("matched raster/feature by geometry: [{}, {}]".format(raster_geom, feature_geom))
+                raster_data = data
+                break
+    if raster_data is None:
+        raise RuntimeError("could not find proper raster for feature '{}'".format(feature["id"]))
+    return raster_data
 
 
 def create_batch_patches(annotations_meta,      # type: List[JSON]
@@ -188,21 +214,13 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     :returns: updated ``dataset_container`` with metadata of created patches.
     """
-    # FIXME:
-    #   imports that require libraries dynamically loaded
-    #   only celery running the process is setup to load them properly
-    from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature
-    import osgeo.gdal
-
-    def fix_raster_search_name(name):
-        return name.replace("8bits", "xbits").replace("16bits", "xbits")
 
     def select_split(splits, class_id, name=None):
         # type: (List[Tuple[AnyStr, ClassCounter]], Union[int, AnyStr], Optional[AnyStr]) -> AnyStr
         """
         Selects a split set from ``splits`` and decreases ``class_id`` in its corresponding counter
         if any 'instance' is left for selection within that class (counter didn't reach 0).
-        Otherwise, the counter of the other split decreased and its name is returned instead.
+        Otherwise, the counter of the other split is decreased and its name is returned instead.
 
         :param splits: list of tuple with 'train'/'test' and its corresponding counter.
         :param class_id: class for which to update the selected split counter.
@@ -242,18 +260,18 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         update_func("resolving incremental batch patches on top of [{!s}]".format(dataset_latest), start_percent)
         provided_features = set([feature["id"] for feature in features])
         mapped_features = {patch["feature"]: patch for patch in dataset_latest.data.get("patches", [])}
-        new_features = list(provided_features - set(mapped_features.keys()))
+        matched_features = list(provided_features & set(mapped_features.keys()))
     else:
         update_func("creating batch patches from new dataset (not incremental)", start_percent)
         mapped_features = dict()
-        new_features = []
+        matched_features = []
 
     train_counter, test_counter = category_counter.split(train_test_ratio)
-    train_test_splits = [('train', train_counter), ('test', test_counter)]
-    patches_crop = [(None, 'raw')]
+    train_test_splits = [("train", train_counter), ("test", test_counter)]
+    patches_crop = [(None, "raw")]
     if isinstance(crop_fixed_size, int):
         update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
-        patches_crop.append((crop_fixed_size, 'fixed'))
+        patches_crop.append((crop_fixed_size, "fixed"))
 
     last_progress_offset, progress_scale = 0, int(patch_percent - start_percent / len(features))
     dataset_container.data["patches"] = list()
@@ -264,7 +282,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
             update_func("extracting patches for batch creation", progress_offset)
 
         # transfer patch data from previous batch, preserve selected split
-        if feature["id"] not in new_features:
+        if feature["id"] in matched_features:
             patch_info = mapped_features.get(feature["id"])
             if not patch_info:
                 raise RuntimeError("Failed to retrieve presumably existing patch from previous batch (feature: {})"
@@ -275,36 +293,20 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
         # new patch creation from feature specification, generate metadata and randomly select split
         else:
-            feature_geometry = feature["geometry"]
-            raster_data = None
-            if "properties" in feature and "image_name" in feature["properties"]:
-                raster_name = fix_raster_search_name(feature["properties"]["image_name"])
-                for data in rasters_data:
-                    target_path = fix_raster_search_name(data["filepath"])
-                    if raster_name in target_path:
-                        raster_data = data
-                        break
-            if raster_data is None:
-                for data in rasters_data:
-                    if data["global_roi"].contains(feature_geometry):
-                        raster_data = data
-                        break
-                if raster_data is None:
-                    raise AssertionError("could not find proper raster for feature '{}'".format(feature["id"]))
-
+            raster_data = find_best_match_raster(rasters_data, feature)
             crop_class_id = feature.get("properties", {}).get("taxonomy_class_id")
             dataset_container.data["patches"].append({
                 "crops": [],  # updated gradually after
-                "image": feature.get("properties", {}).get("image_name"),
+                "image": raster_data["file_path"],
                 "class": crop_class_id,
                 "split": select_split(train_test_splits, crop_class_id),
                 "feature": feature.get("id"),
             })
 
             for crop_size, crop_name in patches_crop:
-                crop, crop_inv, bbox = process_feature(feature_geometry, srs, raster_data, crop_size)
+                crop, _, bbox = process_feature_crop(feature["geometry"], srs, raster_data, crop_size)
                 if crop is not None:
-                    if crop.ndim < 3 or crop.shape[2] != raster_data["bandcount"]:
+                    if crop.ndim < 3 or crop.shape[2] != raster_data["band_count"]:
                         raise AssertionError("bad crop channel size")
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
@@ -316,7 +318,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                         update_func(msg + " Removing...", logging.WARNING)
                         os.remove(output_path)  # gdal raster creation fails if file already exists
                     output_dataset = output_driver.Create(output_path, crop.shape[1], crop.shape[0],
-                                                          crop.shape[2], raster_data["datatype"])
+                                                          crop.shape[2], raster_data["data_type"])
                     for raster_band_idx in range(crop.shape[2]):
                         output_dataset.GetRasterBand(raster_band_idx + 1).SetNoDataValue(0)
                         output_dataset.GetRasterBand(raster_band_idx + 1).WriteArray(crop.data[:, :, raster_band_idx])
@@ -328,7 +330,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                         "type": crop_name,
                         "path": output_path,
                         "shape": list(crop.shape),
-                        "datatype": raster_data["datatype"],
+                        "data_type": raster_data["data_type"],
                         "coordinates": output_geotransform,
                     })
         if feature_idx // dataset_update_count:
