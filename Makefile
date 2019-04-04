@@ -17,7 +17,7 @@ SRC_DIR := $(CURDIR)/geoimagenet_ml
 
 # Anaconda
 ANACONDA_HOME ?= $(HOME)/anaconda
-CONDA_ENV ?= $(APP_NAME)
+CONDA_ENV ?= geoimagenet-ml
 CONDA_ENVS_DIR ?= $(HOME)/.conda/envs
 CONDA_ENV_PATH := $(CONDA_ENVS_DIR)/$(CONDA_ENV)
 DOWNLOAD_CACHE := $(APP_ROOT)/downloads
@@ -42,6 +42,9 @@ all: help
 
 .PHONY: help
 help:
+	@echo "bump             bump version using version specified as user input"
+	@echo "bump-dry         bump version using version specified as user input (dry-run)"
+	@echo "bump-tag         bump version using version specified as user input, tags it and commits change in git"
 	@echo "clean            remove all build, test, coverage and Python artifacts"
 	@echo "clean-build      remove build artifacts"
 	@echo "clean-env        remove package environment"
@@ -57,7 +60,7 @@ help:
 	@echo "install          install the package to the active Python's site-packages"
 	@echo "install-api      install API related components"
 	@echo "install-ml       install ML related components"
-	@echo "install-test     install test related components"
+	@echo "install-dev      install test related components"
 	@echo "pep8             check code style"
 	@echo "release          package and upload a release"
 	@echo "start            start the installed application"
@@ -66,6 +69,30 @@ help:
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "version          retrive the application version"
+
+.PHONY: bump
+bump:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --no-tag --new-version $$VERSION_PART patch;')
+
+.PHONY: bump-dry
+bump-dry:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --dry-run --tag --new-version $$VERSION_PART patch;')
+
+.PHONY: bump-tag
+bump-tag:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f $(CONDA_ENV_PATH)/bin/bumpversion || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --tag --new-version $$VERSION_PART patch;')
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test clean-ml
@@ -107,17 +134,17 @@ pep8:
 	@bash -c 'flake8 geoimagenet_ml && echo "All good!"'
 
 .PHONY: test
-test: install-test
+test: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv -m "not online"'
 
 .PHONY: test-all
-test-all: install-test
+test-all: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv'
 
 .PHONY: test-tox
-test-tox: install-test
+test-tox: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		tox'
 
@@ -176,8 +203,8 @@ install-ml: clean conda-env
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-ml.txt"'
 	$(MAKE) clean-ml
 
-.PHONY: install-test
-install-test: install
+.PHONY: install-dev
+install-dev: install
 	@echo "Installing test dependencies..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-dev.txt"'
 
