@@ -39,7 +39,7 @@ def get_database_type(specification):
         return specification.settings.get('geoimagenet_ml.api.db_factory')
     elif isinstance(specification, dict):
         return specification.get('geoimagenet_ml.api.db_factory')
-    raise NotImplementedError("Unknown type `{}` to retrieve database type.".format(type(specification)))
+    raise NotImplementedError("Unknown type '{}' to retrieve database type.".format(type(specification)))
 
 
 def database_factory(registry):
@@ -51,7 +51,7 @@ def database_factory(registry):
         return MongoDatabase(registry)
     if db_type == POSTGRES_TYPE:
         return PostgresDatabase(registry)
-    raise NotImplementedError("Unknown db_factory type: `{}`.".format(db_type))
+    raise NotImplementedError("Unknown db_factory type: '{}'.".format(db_type))
 
 
 def migrate_database_when_ready(specification):

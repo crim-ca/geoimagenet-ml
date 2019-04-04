@@ -77,7 +77,7 @@ class DatasetStore(object):
         """
         raise NotImplementedError
 
-    def delete_dataset(self, process_uuid, request=None):
+    def delete_dataset(self, dataset_uuid, request=None):
         # type: (UUID, Optional[Request]) -> bool
         """
         Removes dataset from database.

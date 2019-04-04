@@ -33,11 +33,11 @@ LOGGER = logging.getLogger(__name__)
 def create_process(request):
     # type: (Request) -> Process
     """Creates the process based on the request after body inputs validation."""
-    process_name = r.get_multiformat_post(request, 'process_name')
-    process_type = r.get_multiformat_post(request, 'process_type')
-    ex.verify_param(process_name, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='process_name',
+    process_name = r.get_multiformat_post(request, "process_name")
+    process_type = r.get_multiformat_post(request, "process_type")
+    ex.verify_param(process_name, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="process_name",
                     msgOnFail=s.Processes_POST_BadRequestResponseSchema.description, request=request)
-    ex.verify_param(process_type, isIn=True, httpError=HTTPBadRequest, paramName='process_type',
+    ex.verify_param(process_type, isIn=True, httpError=HTTPBadRequest, paramName="process_type",
                     paramCompare=list(process_categories) + [None],  # allow None to use default value
                     msgOnFail=s.Processes_POST_BadRequestResponseSchema.description, request=request)
     if process_type is None:
@@ -133,7 +133,7 @@ def get_job_status_location(request, process, job):
     else:
         proc_id = process.uuid
     proc_job_path = s.ProcessJobAPI.path.replace(s.ProcessVariableUUID, proc_id).replace(s.JobVariableUUID, job.uuid)
-    return '{base}{path}'.format(base=get_base_url(request.registry.settings), path=proc_job_path)
+    return "{base}{path}".format(base=get_base_url(request.registry.settings), path=proc_job_path)
 
 
 def create_process_job(request, process):
@@ -141,16 +141,16 @@ def create_process_job(request, process):
     """Creates a job for the requested process and dispatches it to the celery runner."""
 
     # validate body with expected JSON content and schema
-    if 'application/json' not in request.content_type:
+    if "application/json" not in request.content_type:
         raise HTTPBadRequest("Request 'Content-Type' header other than 'application/json' not supported.")
     try:
         json_body = request.json_body
     except Exception as e:
         raise HTTPBadRequest("Invalid JSON body cannot be decoded for job submission. [{}]".format(e))
 
-    if 'inputs' not in json_body:
+    if "inputs" not in json_body:
         raise HTTPBadRequest("Missing 'inputs' form JSON body.")
-    job_inputs = json_body['inputs']
+    job_inputs = json_body["inputs"]
 
     for i in job_inputs:
         if not isinstance(i, dict):
@@ -183,14 +183,14 @@ def create_process_job(request, process):
     LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
     result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)
 
-    LOGGER.debug("Celery task `{}` for `{!s}`.".format(result.id, job))
+    LOGGER.debug("Celery task '{}' for `{!s}`.".format(result.id, job))
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
     job.status_location = get_job_status_location(request, process, job)
     job = jobs_store.update_job(job)
     body_data = {
-        'jobID': job.uuid,
-        'status': job.status,
-        'location': job.status_location
+        "jobID": job.uuid,
+        "status": job.status,
+        "location": job.status_location
     }
     return HTTPCreated(location=job.status_location, json=body_data)
 
@@ -198,7 +198,7 @@ def create_process_job(request, process):
 @app.task(bind=True)
 def process_job_runner(task, job_uuid, runner_key):
     # type: (Task, UUID, AnyStr) -> AnyStr
-    LOGGER.debug('Celery task for job `{}` [{}] received.'.format(job_uuid, runner_key))
-    registry = app.conf['PYRAMID_REGISTRY']
+    LOGGER.debug("Celery task for job '{}' [{}] received.".format(job_uuid, runner_key))
+    registry = app.conf["PYRAMID_REGISTRY"]
     runner = process_mapping[runner_key]
     return runner(task, registry, task.request, job_uuid)()

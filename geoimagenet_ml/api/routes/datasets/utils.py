@@ -4,7 +4,7 @@ from geoimagenet_ml.store.datatypes import Dataset
 from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
-from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict
+from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from pyramid.request import Request
 import six
 
@@ -30,7 +30,7 @@ def create_dataset(request):
     new_dataset = None
     try:
         tmp_dataset = Dataset(name=dataset_name, path=dataset_path, type=dataset_type, params=dataset_params)
-        new_dataset = database_factory(request.registry).datasets_store.save_dataset(tmp_dataset)
+        new_dataset = database_factory(request.registry).datasets_store.save_dataset(tmp_dataset, request=request)
         if not new_dataset:
             raise exc.DatasetRegistrationError
     except (exc.DatasetRegistrationError, exc.DatasetInstanceError):
@@ -52,7 +52,7 @@ def get_dataset(request):
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:
-        dataset = database_factory(request.registry).datasets_store.fetch_by_uuid(dataset_uuid)
+        dataset = database_factory(request.registry).datasets_store.fetch_by_uuid(dataset_uuid, request=request)
         if not dataset:
             raise exc.DatasetNotFoundError
     except exc.DatasetInstanceError:
@@ -62,3 +62,21 @@ def get_dataset(request):
         ex.raise_http(httpError=HTTPNotFound, request=request,
                       detail=s.Dataset_GET_NotFoundResponseSchema.description)
     return dataset
+
+
+def delete_dataset(request):
+    # type: (Request) -> None
+    dataset_uuid = request.matchdict.get("dataset_uuid")
+    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="dataset_uuid",
+                    msgOnFail=s.Dataset_DELETE_BadRequestResponseSchema.description, request=request)
+    dataset = None
+    try:
+        is_deleted = database_factory(request.registry).datasets_store.delete_dataset(dataset_uuid, request=request)
+        if not is_deleted:
+            raise exc.DatasetNotFoundError
+    except exc.DatasetInstanceError:
+        ex.raise_http(httpError=HTTPInternalServerError, request=request,
+                      detail=s.InternalServerErrorResponseSchema.description)
+    except exc.DatasetNotFoundError:
+        ex.raise_http(httpError=HTTPNotFound, request=request,
+                      detail=s.Dataset_DELETE_NotFoundResponseSchema.description)

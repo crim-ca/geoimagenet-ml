@@ -1,12 +1,8 @@
 from geoimagenet_ml.api import exceptions as ex, schemas as s
-from geoimagenet_ml.api.routes.datasets.utils import create_dataset, get_dataset
+from geoimagenet_ml.api.routes.datasets.utils import create_dataset, get_dataset, delete_dataset
 from geoimagenet_ml.store.factories import database_factory
 from pyramid.response import FileResponse
 from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInternalServerError
-from zipfile import ZipFile
-from tempfile import gettempprefix
-import json
-import os
 
 
 @s.DatasetsAPI.get(tags=[s.DatasetsTag], response_schemas=s.Datasets_GET_responses)
@@ -38,7 +34,16 @@ def get_dataset_view(request):
     """Get registered dataset information."""
     dataset = get_dataset(request)
     return ex.valid_http(httpSuccess=HTTPOk, content={u'datasets': dataset.json()},
-                         detail=s.Datasets_GET_OkResponseSchema.description, request=request)
+                         detail=s.Dataset_GET_OkResponseSchema.description, request=request)
+
+
+@s.DatasetAPI.get(tags=[s.DatasetsTag],
+                  schema=s.DatasetEndpoint(), response_schemas=s.Dataset_DELETE_responses)
+def delete_dataset_view(request):
+    """Get registered dataset information."""
+    delete_dataset(request)
+    return ex.valid_http(httpSuccess=HTTPOk, content={},
+                         detail=s.Dataset_DELETE_OkResponseSchema.description, request=request)
 
 
 @s.DatasetDownloadAPI.get(tags=[s.DatasetsTag],
@@ -46,21 +51,8 @@ def get_dataset_view(request):
 def download_dataset_view(request):
     """Download registered dataset file."""
     dataset = get_dataset(request)
-    dataset_name = 'dataset-{}-{}.zip'.format(dataset.name, dataset.uuid)
-    dataset_meta = os.path.join(dataset.path, 'meta.json')
-    dataset_zip = os.path.join(gettempprefix(), dataset_name)
-    if not os.path.isfile(dataset_zip):
-        if os.path.isfile(dataset_meta):
-            os.remove(dataset_meta)
-        meta_str = json.dumps(dataset.data, indent=4)
-        meta_str = meta_str.replace(dataset.path + '/', '')  # substitute all server save paths
-        with open(dataset_meta, 'w') as f_meta:
-            f_meta.write(meta_str)
-        with ZipFile(dataset_zip, 'w') as f_zip:
-            f_zip.write(dataset_meta)
-            for f in dataset.files:
-                f_zip.write(f)
-
-    response = FileResponse(dataset_zip, content_type="application/octet-stream")
-    response.content_disposition = "attachment; filename={}".format(dataset_name)
+    dataset_zip_path = dataset.zip()
+    dataset_zip_name = "dataset-{}-{}.zip".format(dataset.name, dataset.uuid)
+    response = FileResponse(dataset_zip_path, content_type="application/octet-stream")
+    response.content_disposition = "attachment; filename={}".format(dataset_zip_name)
     return response

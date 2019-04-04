@@ -65,7 +65,8 @@ class Base(dict):
     """
     def __init__(self, *args, **kwargs):
         super(Base, self).__init__(*args, **kwargs)
-        self["uuid"] = self.get("uuid", str(uuid.uuid4()))
+        if "uuid" not in self:
+            setattr(self, "uuid", uuid.uuid4())
 
     def __setattr__(self, item, value):
         # use the existing property setter if defined
@@ -284,6 +285,13 @@ class Dataset(Base):
         # type: () -> List[AnyStr]
         """All files referenced by the dataset."""
         return self["files"]
+
+    @files.setter
+    def files(self, files):
+        # type: (List[AnyStr]) -> None
+        if not isinstance(files, list):
+            raise TypeError("Type 'list' required.")
+        self["files"] = files
 
     @property
     def params(self):

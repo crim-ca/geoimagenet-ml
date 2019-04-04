@@ -362,6 +362,25 @@ class Dataset_GET_NotFoundResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
+class Dataset_DELETE_BodyResponseSchema(BaseBodyResponseSchema):
+    data = colander.MappingSchema()
+
+
+class Dataset_DELETE_OkResponseSchema(BaseResponseSchema):
+    description = "Delete dataset successful."
+    body = Dataset_DELETE_BodyResponseSchema(code=HTTPOk.code, description=description)
+
+
+class Dataset_DELETE_BadRequestResponseSchema(BaseResponseSchema):
+    description = "Invalid parameter specified to retrieve dataset."
+    body = ErrorBodyResponseSchema(code=HTTPBadRequest.code, description=description)
+
+
+class Dataset_DELETE_NotFoundResponseSchema(BaseResponseSchema):
+    description = "Dataset could not be found in db."
+    body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
+
+
 class DatasetDownloadEndpoint(BaseRequestSchema):
     dataset_uuid = dataset_uuid
 
@@ -831,124 +850,130 @@ class Versions_GET_OkResponseSchema(BaseResponseSchema):
 
 # view responses
 SwaggerJSON_GET_responses = {
-    '200': SwaggerJSON_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": SwaggerJSON_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 SwaggerAPI_GET_responses = {
-    '200': SwaggerAPI_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": SwaggerAPI_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Base_GET_responses = {
-    '200': Base_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Base_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Datasets_GET_responses = {
-    '200': Datasets_GET_OkResponseSchema(),
-    '403': Datasets_GET_ForbiddenResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Datasets_GET_OkResponseSchema(),
+    "403": Datasets_GET_ForbiddenResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Datasets_POST_responses = {
-    '201': Datasets_POST_CreatedResponseSchema(),
-    '400': Datasets_POST_BadRequestResponseSchema(),
-    '403': Datasets_POST_ForbiddenResponseSchema(),
-    '404': Datasets_POST_NotFoundResponseSchema(),
-    '409': Datasets_POST_ConflictResponseSchema(),
-    '422': UnprocessableEntityResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "201": Datasets_POST_CreatedResponseSchema(),
+    "400": Datasets_POST_BadRequestResponseSchema(),
+    "403": Datasets_POST_ForbiddenResponseSchema(),
+    "404": Datasets_POST_NotFoundResponseSchema(),
+    "409": Datasets_POST_ConflictResponseSchema(),
+    "422": UnprocessableEntityResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Dataset_GET_responses = {
-    '200': Dataset_GET_OkResponseSchema(),
-    '400': Dataset_GET_BadRequestResponseSchema(),
-    '403': Dataset_GET_ForbiddenResponseSchema(),
-    '404': Dataset_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Dataset_GET_OkResponseSchema(),
+    "400": Dataset_GET_BadRequestResponseSchema(),
+    "403": Dataset_GET_ForbiddenResponseSchema(),
+    "404": Dataset_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
+}
+Dataset_DELETE_responses = {
+    "200": Dataset_DELETE_OkResponseSchema(),
+    "400": Dataset_DELETE_BadRequestResponseSchema(),
+    "404": Dataset_DELETE_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 DatasetDownload_GET_responses = {
-    '200': DatasetDownload_GET_OkResponseSchema(),
-    '404': DatasetDownload_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": DatasetDownload_GET_OkResponseSchema(),
+    "404": DatasetDownload_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Models_GET_responses = {
-    '200': Models_GET_OkResponseSchema(),
-    '403': Models_GET_ForbiddenResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Models_GET_OkResponseSchema(),
+    "403": Models_GET_ForbiddenResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Models_POST_responses = {
-    '201': Models_POST_CreatedResponseSchema(),
-    '400': Models_POST_BadRequestResponseSchema(),
-    '403': Models_POST_ForbiddenResponseSchema(),
-    '404': Models_POST_NotFoundResponseSchema(),
-    '409': Models_POST_ConflictResponseSchema(),
-    '422': Models_POST_UnprocessableEntityResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "201": Models_POST_CreatedResponseSchema(),
+    "400": Models_POST_BadRequestResponseSchema(),
+    "403": Models_POST_ForbiddenResponseSchema(),
+    "404": Models_POST_NotFoundResponseSchema(),
+    "409": Models_POST_ConflictResponseSchema(),
+    "422": Models_POST_UnprocessableEntityResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Model_GET_responses = {
-    '200': Model_GET_OkResponseSchema(),
-    '400': Model_GET_BadRequestResponseSchema(),
-    '403': Model_GET_ForbiddenResponseSchema(),
-    '404': Model_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Model_GET_OkResponseSchema(),
+    "400": Model_GET_BadRequestResponseSchema(),
+    "403": Model_GET_ForbiddenResponseSchema(),
+    "404": Model_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ModelDownload_GET_responses = {
-    '200': ModelDownload_GET_OkResponseSchema(),
-    '404': ModelDownload_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ModelDownload_GET_OkResponseSchema(),
+    "404": ModelDownload_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Processes_GET_responses = {
-    '200': Processes_GET_OkResponseSchema(),
-    '403': Processes_GET_ForbiddenResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Processes_GET_OkResponseSchema(),
+    "403": Processes_GET_ForbiddenResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Processes_POST_responses = {
-    '201': Processes_POST_CreatedResponseSchema(),
-    '400': Processes_POST_BadRequestResponseSchema(),
-    '403': Processes_POST_ForbiddenResponseSchema(),
-    '404': Processes_POST_NotFoundResponseSchema(),
-    '409': Processes_POST_ConflictResponseSchema(),
-    '422': UnprocessableEntityResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "201": Processes_POST_CreatedResponseSchema(),
+    "400": Processes_POST_BadRequestResponseSchema(),
+    "403": Processes_POST_ForbiddenResponseSchema(),
+    "404": Processes_POST_NotFoundResponseSchema(),
+    "409": Processes_POST_ConflictResponseSchema(),
+    "422": UnprocessableEntityResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Process_GET_responses = {
-    '200': Process_GET_OkResponseSchema(),
-    '400': Process_GET_BadRequestResponseSchema(),
-    '403': Process_GET_ForbiddenResponseSchema(),
-    '404': Process_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Process_GET_OkResponseSchema(),
+    "400": Process_GET_BadRequestResponseSchema(),
+    "403": Process_GET_ForbiddenResponseSchema(),
+    "404": Process_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobs_GET_responses = {
-    '200': ProcessJobs_GET_OkResponseSchema(),
-    '403': ProcessJobs_GET_ForbiddenResponseSchema(),
-    '404': ProcessJobs_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJobs_GET_OkResponseSchema(),
+    "403": ProcessJobs_GET_ForbiddenResponseSchema(),
+    "404": ProcessJobs_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobs_POST_responses = {
-    '200': ProcessJobs_POST_OkResponseSchema(),
-    '400': ProcessJobs_POST_BadRequestResponseSchema(),
-    '403': ProcessJobs_POST_ForbiddenResponseSchema(),
-    '404': ProcessJobs_POST_NotFoundResponseSchema(),
-    '422': UnprocessableEntityResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJobs_POST_OkResponseSchema(),
+    "400": ProcessJobs_POST_BadRequestResponseSchema(),
+    "403": ProcessJobs_POST_ForbiddenResponseSchema(),
+    "404": ProcessJobs_POST_NotFoundResponseSchema(),
+    "422": UnprocessableEntityResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJob_GET_responses = {
-    '200': ProcessJob_GET_OkResponseSchema(),
-    '400': ProcessJob_GET_BadRequestResponseSchema(),
-    '403': ProcessJob_GET_ForbiddenResponseSchema(),
-    '404': ProcessJob_GET_NotFoundResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJob_GET_OkResponseSchema(),
+    "400": ProcessJob_GET_BadRequestResponseSchema(),
+    "403": ProcessJob_GET_ForbiddenResponseSchema(),
+    "404": ProcessJob_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobResult_GET_responses = {
-    '200': ProcessJobResult_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJobResult_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobLogs_GET_responses = {
-    '200': ProcessJobLogs_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJobLogs_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobExceptions_GET_responses = {
-    '200': ProcessJobExceptions_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": ProcessJobExceptions_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }
 Versions_GET_responses = {
-    '200': Versions_GET_OkResponseSchema(),
-    '500': InternalServerErrorResponseSchema(),
+    "200": Versions_GET_OkResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
 }

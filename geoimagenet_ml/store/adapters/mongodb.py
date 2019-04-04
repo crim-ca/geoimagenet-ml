@@ -13,6 +13,7 @@ from geoimagenet_ml.utils import isclass, islambda, get_sane_name, is_uuid
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
 import pymongo
+import shutil
 import os
 import io
 import logging
@@ -43,22 +44,41 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
 
     def save_dataset(self, dataset, request=None):
         if not isinstance(dataset, Dataset):
-            raise ex.DatasetInstanceError("Unsupported dataset type `{}`".format(type(dataset)))
+            raise ex.DatasetInstanceError("Unsupported dataset type '{}'".format(type(dataset)))
+        if not len(dataset.files) or not len(dataset.data):
+            raise ex.DatasetInstanceError("Incomplete dataset generation not allowed.")
         try:
             result = self.collection.insert_one(dataset.params)
             if not result.acknowledged:
                 raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
-            raise ex.DatasetConflictError("Dataset `{}` conflicts with an existing dataset.".format(dataset.name))
+            raise ex.DatasetConflictError("Dataset '{}' conflicts with an existing dataset.".format(dataset.name))
         except Exception as exc:
-            LOGGER.exception("Dataset `{}` registration generated error: [{!r}].".format(dataset.name, exc))
-            raise ex.DatasetRegistrationError("Dataset `{}` could not be registered.".format(dataset.name))
+            LOGGER.exception("Dataset '{}' registration generated error: [{!r}].".format(dataset.name, exc))
+            raise ex.DatasetRegistrationError("Dataset '{}' could not be registered.".format(dataset.name))
         return self.fetch_by_uuid(dataset.uuid)
 
     def delete_dataset(self, dataset_uuid, request=None):
         dataset_uuid = str(dataset_uuid)
+        dataset = self.fetch_by_uuid(dataset_uuid)
+        dataset_path = dataset.path
         result = self.collection.delete_one({"uuid": dataset_uuid})
-        return result.deleted_count == 1
+        if result.deleted_count != 1:
+            return False
+        try:
+            if os.path.isdir(dataset_path):
+                dataset_base_dir = os.path.dirname(dataset_path)
+                dataset_paths = [os.path.join(dataset_base_dir, p) for p in os.listdir(dataset_base_dir)
+                                 if os.path.join(dataset_base_dir, p).startswith(dataset_path)]
+                for path in dataset_paths:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path, ignore_errors=True)
+                    elif os.path.isfile(path):
+                        os.remove(path)
+        except Exception as exc:
+            LOGGER.exception("Dataset '{}' deletion generated error: [{!r}].".format(dataset.name, exc))
+            raise ex.DatasetInstanceError("Dataset '{}' files could not be deleted.".format(dataset.name))
+        return True
 
     def fetch_by_uuid(self, dataset_uuid, request=None):
         dataset_uuid = str(dataset_uuid)
@@ -66,19 +86,19 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
         try:
             dataset = self.collection.find_one({"uuid": dataset_uuid})
         except Exception:
-            ex.DatasetNotFoundError("Dataset `{}` could not be found.".format(dataset_uuid))
+            ex.DatasetNotFoundError("Dataset '{}' could not be found.".format(dataset_uuid))
         if not dataset:
-            raise ex.DatasetNotFoundError("Dataset `{}` could not be found.".format(dataset_uuid))
+            raise ex.DatasetNotFoundError("Dataset '{}' could not be found.".format(dataset_uuid))
         try:
             dataset = Dataset(dataset)
         except Exception:
-            raise ex.DatasetInstanceError("Dataset `{}` could not be generated.".format(dataset_uuid))
+            raise ex.DatasetInstanceError("Dataset '{}' could not be generated.".format(dataset_uuid))
         return dataset
 
     def list_datasets(self, request=None):
         datasets = []
         try:
-            for dataset in self.collection.find().sort("name", pymongo.ASCENDING):
+            for dataset in self.collection.find().sort("uuid", pymongo.ASCENDING):
                 datasets.append(Dataset(dataset))
         except Exception:
             raise ex.DatasetInstanceError("Dataset could not be generated.")
@@ -102,7 +122,7 @@ class MongodbModelStore(ModelStore, MongodbStore):
 
     def save_model(self, model, data=None, request=None):
         if not isinstance(model, Model):
-            raise ex.ModelInstanceError("Unsupported model type `{}`".format(type(model)))
+            raise ex.ModelInstanceError("Unsupported model type '{}'".format(type(model)))
         data = data or model.data
         try:
             if isinstance(data, io.BufferedIOBase):
@@ -123,10 +143,10 @@ class MongodbModelStore(ModelStore, MongodbStore):
             if not result.acknowledged:
                 raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
-            raise ex.ModelConflictError("Model `{}` conflicts with an existing model.".format(model.name))
+            raise ex.ModelConflictError("Model '{}' conflicts with an existing model.".format(model.name))
         except Exception as exc:
-            LOGGER.exception("Model `{}` registration generated error: [{!r}].".format(model.name, exc))
-            raise ex.ModelRegistrationError("Model `{}` could not be registered.".format(model.name))
+            LOGGER.exception("Model '{}' registration generated error: [{!r}].".format(model.name, exc))
+            raise ex.ModelRegistrationError("Model '{}' could not be registered.".format(model.name))
         return self.fetch_by_uuid(model.uuid)
 
     def delete_model(self, model_uuid, request=None):
@@ -144,13 +164,13 @@ class MongodbModelStore(ModelStore, MongodbStore):
         try:
             model = self.collection.find_one({"uuid": model_uuid})
         except Exception:
-            ex.ModelNotFoundError("Model `{}` could not be found.".format(model_uuid))
+            ex.ModelNotFoundError("Model '{}' could not be found.".format(model_uuid))
         if not model:
-            raise ex.ModelNotFoundError("Model `{}` could not be found.".format(model_uuid))
+            raise ex.ModelNotFoundError("Model '{}' could not be found.".format(model_uuid))
         try:
             model = Model(model)
         except Exception:
-            raise ex.ModelInstanceError("Model `{}` could not be generated.".format(model_uuid))
+            raise ex.ModelInstanceError("Model '{}' could not be generated.".format(model_uuid))
         return model
 
     def list_models(self, request=None):
@@ -229,7 +249,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         else:
             new_process = process
         if not isinstance(new_process, Process):
-            raise ex.ProcessInstanceError("Unsupported process type `{}`.".format(type(process)))
+            raise ex.ProcessInstanceError("Unsupported process type '{}'.".format(type(process)))
 
         process_name = self._get_process_id(process)
         process_exec = self.default_wps_endpoint_template.replace("{process_uuid}", new_process.uuid)
@@ -240,7 +260,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             self.collection.insert_one(new_process)
         except Exception as exc:
             raise ex.ProcessRegistrationError(
-                "Process `{}` could not be registered. [{!r}]".format(process_name, exc))
+                "Process '{}' could not be registered. [{!r}]".format(process_name, exc))
 
     @staticmethod
     def _get_process_field(process, function_dict):
@@ -252,7 +272,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         # allow using class instances or direct class references
         process_type = process if isclass(process) else type(process)
         if not issubclass(process_type, (Process, ProcessWPS, ProcessRunner)):
-            raise ex.ProcessInstanceError("Unsupported process type `{}`".format(process_type))
+            raise ex.ProcessInstanceError("Unsupported process type '{}'".format(process_type))
         if islambda(function_dict):
             return function_dict()
         # fix keys to use base class of derived ones
@@ -281,7 +301,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             if overwrite:
                 self.collection.delete_one({"identifier": sane_name})
             else:
-                raise ex.ProcessConflictError("Process `{}` already registered.".format(sane_name))
+                raise ex.ProcessConflictError("Process '{}' already registered.".format(sane_name))
         self._add_process(process)
         return self.fetch_by_identifier(sane_name)
 
@@ -309,7 +329,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         sane_name = get_sane_name(process_uuid)
         process = self.collection.find_one({"uuid": sane_name})
         if not process:
-            raise ex.ProcessNotFoundError("Process `{}` could not be found.".format(sane_name))
+            raise ex.ProcessNotFoundError("Process '{}' could not be found.".format(sane_name))
         return Process(process)
 
     def fetch_by_identifier(self, process_identifier, request=None):
@@ -319,7 +339,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         sane_name = get_sane_name(process_identifier)
         process = self.collection.find_one({"identifier": sane_name})
         if not process:
-            raise ex.ProcessNotFoundError("Process `{}` could not be found.".format(sane_name))
+            raise ex.ProcessNotFoundError("Process '{}' could not be found.".format(sane_name))
         return Process(process)
 
 
@@ -335,16 +355,16 @@ class MongodbJobStore(JobStore, MongodbStore):
 
     def save_job(self, job, request=None):
         if not isinstance(job, Job):
-            raise ex.JobInstanceError("Unsupported job type `{}`".format(type(job)))
+            raise ex.JobInstanceError("Unsupported job type '{}'".format(type(job)))
         try:
             result = self.collection.insert_one(job)
             if not result.acknowledged:
                 raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
-            raise ex.JobConflictError("Job `{}` conflicts with an existing job.".format(job.uuid))
+            raise ex.JobConflictError("Job '{}' conflicts with an existing job.".format(job.uuid))
         except Exception as exc:
-            LOGGER.exception("Job `{}` registration generated error: [{!r}].".format(job.uuid, exc))
-            raise ex.JobRegistrationError("Job `{}` could not be registered.".format(job.uuid))
+            LOGGER.exception("Job '{}' registration generated error: [{!r}].".format(job.uuid, exc))
+            raise ex.JobRegistrationError("Job '{}' could not be registered.".format(job.uuid))
         return self.fetch_by_uuid(job.uuid)
 
     def update_job(self, job, request=None):
@@ -354,7 +374,7 @@ class MongodbJobStore(JobStore, MongodbStore):
                 return self.fetch_by_uuid(job.uuid)
         except Exception as exc:
             raise ex.JobUpdateError("Error occurred during job update: [{}]".format(repr(exc)))
-        raise ex.JobUpdateError("Failed to update specified job: `{}`".format(str(job)))
+        raise ex.JobUpdateError("Failed to update specified job: '{}'".format(str(job)))
 
     def delete_job(self, job_uuid, request=None):
         job_uuid = str(job_uuid)
@@ -367,13 +387,13 @@ class MongodbJobStore(JobStore, MongodbStore):
         try:
             job = self.collection.find_one({"uuid": job_uuid})
         except Exception:
-            ex.JobNotFoundError("Job `{}` could not be found.".format(job_uuid))
+            ex.JobNotFoundError("Job '{}' could not be found.".format(job_uuid))
         if not job:
-            raise ex.JobNotFoundError("Job `{}` could not be found.".format(job_uuid))
+            raise ex.JobNotFoundError("Job '{}' could not be found.".format(job_uuid))
         try:
             job = Job(job)
         except Exception:
-            raise ex.JobInstanceError("Job `{}` could not be generated.".format(job_uuid))
+            raise ex.JobInstanceError("Job '{}' could not be generated.".format(job_uuid))
         return job
 
     def list_jobs(self, request=None):

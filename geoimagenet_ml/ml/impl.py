@@ -8,6 +8,7 @@ import osgeo.gdal
 import requests
 import logging
 import random
+import shutil
 import six
 import ssl
 import os
@@ -289,11 +290,21 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
         # transfer patch data from previous batch, preserve selected split
         if feature["id"] in matched_features:
-            patch_info = mapped_features.get(feature["id"])
-            if not patch_info:
+            patch_info = deepcopy(mapped_features.get(feature["id"]))
+            if not isinstance(patch_info, dict) or "crops" not in patch_info:
                 raise RuntimeError("Failed to retrieve presumably existing patch from previous batch (feature: {})"
                                    .format(feature["id"]))
-            dataset_container.data["patches"].append(deepcopy(patch_info))
+            # copy information, but replace patch copies
+            for i_crop, _ in enumerate(patch_info["crops"]):
+                old_patch_path = patch_info["crops"][i_crop]["path"]
+                new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
+                if not new_patch_path.startswith(dataset_container.path):
+                    raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
+                                       .format(dataset_container.path, new_patch_path))
+                patch_info["crops"][i_crop]["path"] = new_patch_path
+                shutil.copy(old_patch_path, new_patch_path)
+                dataset_container.files.append(new_patch_path)
+            dataset_container.data["patches"].append(patch_info)
             # update counter with previously selected split set
             select_split(train_test_splits, patch_info["class"], name=patch_info["split"])
 
