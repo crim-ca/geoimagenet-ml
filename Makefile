@@ -153,10 +153,9 @@ test-tox: install-dev
 .PHONY: coverage
 coverage:
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		coverage run --source api setup.py test; \
+		coverage run "$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests; \
 		coverage report -m; \
-		coverage html -d coverage; \
-		"$(BROWSER)" coverage/index.html;'
+		coverage html -d coverage;'
 
 .PHONY: migrate
 migrate:
