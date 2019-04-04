@@ -7,7 +7,6 @@ from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
 import os
 import six
-import shutil
 import numpy
 import logging
 import multiprocessing
@@ -35,6 +34,34 @@ class ProcessRunner(ProcessBase):
         Is returned as the `inputs` section of a `ProcessDescription` response.
         """
         raise NotImplementedError
+
+    @classproperty
+    @abstractmethod
+    def outputs(self):
+        # type: () -> List[JSON]
+        """
+        Expected outputs of the class defined as list of ``{"id": '', <other-params>}``.
+        Is returned as the `outputs` section of a `ProcessDescription` response.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        """Process execution definition."""
+        raise NotImplementedError
+
+    def __init__(self, task, registry, request, job_uuid):
+        # type: (Task, Registry, Request, UUID) -> None
+
+        # imports to avoid circular references
+        from geoimagenet_ml.store.factories import database_factory
+
+        self.task = task
+        self.logger = get_task_logger(self.identifier)
+        self.request = request
+        self.registry = registry
+        self.db = database_factory(self.registry)
+        self.job = self.setup_job(self.registry, self.request, job_uuid)
 
     @classmethod
     def check_inputs(cls, inputs):
@@ -84,22 +111,27 @@ class ProcessRunner(ProcessBase):
             raise ValueError("Missing input '{}' not matched from literal process input nor defaults.".format(input_id))
         return flattened_inputs[0] if one else flattened_inputs
 
-    def __init__(self, task, registry, request, job_uuid):
-        # type: (Task, Registry, Request, UUID) -> None
+    def save_results(self, outputs, status_message=None, status_progress=None):
+        # type: (List[Dict[AnyStr, JSON]], Optional[AnyStr], Optional[Number]) -> None
+        """
+        Job output results to be saved to the database on successful process execution.
 
-        # imports to avoid circular references
-        from geoimagenet_ml.store.factories import database_factory
-
-        self.task = task
-        self.logger = get_task_logger(self.identifier)
-        self.request = request
-        self.registry = registry
-        self.db = database_factory(self.registry)
-        self.job = self.setup_job(self.registry, self.request, job_uuid)
-
-    @abstractmethod
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError
+        Parameter ``outputs`` expects a list of ``{"id": "<output>", "value": <JSON>}`` to save.
+        All output values must be JSON serializable.
+        """
+        optional_outputs = set(o["id"] for o in self.outputs if o.get("minOccurs", 1) == 0)
+        required_outputs = set(o["id"] for o in self.outputs) - optional_outputs
+        provided_outputs = set(o["id"] for o in outputs)
+        missing_outputs = required_outputs - provided_outputs
+        unknown_outputs = provided_outputs - (required_outputs | optional_outputs)
+        if missing_outputs:
+            raise ValueError("Missing required outputs. [{}]".format(missing_outputs))
+        if unknown_outputs:
+            raise ValueError("Unknown outputs specified. [{}]".format(unknown_outputs))
+        self.job.results = outputs
+        self.job.status_message = "{} {}.".format(str(self.job), status_message or "Updating output results.")
+        self.job.progress = status_progress if status_progress is not None else self.job.progress
+        self.db.jobs_store.update_job(self.job, request=self.request)
 
     def setup_job(self, registry, request, job_uuid):
         # type: (Registry, Request, UUID) -> Job
@@ -124,11 +156,11 @@ class ProcessRunnerModelTester(ProcessRunner):
 
     @classproperty
     def identifier(self):
-        return 'model-tester'
+        return "model-tester"
 
     @classproperty
     def type(self):
-        return 'ml'
+        return "ml"
 
     @classproperty
     def inputs(self):
@@ -146,6 +178,24 @@ class ProcessRunnerModelTester(ProcessRunner):
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
+            }
+        ]
+
+    @classproperty
+    def outputs(self):
+        return [
+            {
+                # FIXME: valid types?
+                "id": "predictions",
+                "type": "float",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "classes",
+                "type": "string",
+                "minOccurs": 0,
+                "maxOccurs": "unbounded",
             }
         ]
 
@@ -180,12 +230,12 @@ class ProcessRunnerModelTester(ProcessRunner):
 
             # update job results and add important fields
             _job.results = [{
-                "identifier": "predictions",
+                "id": "predictions",
                 "value": metric.predictions,
             }]
             if hasattr(test_runner, "class_names"):
                 _job.results.insert(0, {
-                    "identifier": "classes",
+                    "id": "classes",
                     "value": test_runner.class_names
                 })
             self.db.jobs_store.update_job(_job)
@@ -222,11 +272,14 @@ class ProcessRunnerModelTester(ProcessRunner):
 
             # link the predictions with a callback for progress update during evaluation
             pred_metric = test_runner.test_metrics["predictions"]
-            pred_metric.callback = lambda: _update_job_eval_progress(self.job, batch_iter,
-                                                                     start_percent=5, final_percent=99)
+            pred_metric.callback = lambda: \
+                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=98)
             self.update_job_status(STATUS.RUNNING, "starting test data prediction evaluation", 5)
-            test_runner.eval()
-
+            results = test_runner.eval()
+            # TODO:
+            #   check if these results correspond to the ones updated gradually with the callback method
+            #   (see: _update_job_eval_progress)
+            self.save_results([{"id": "predictions", "value": results}], status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
 
         except Exception as task_exc:
@@ -248,11 +301,11 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
     @classproperty
     def dataset_type(self):
-        return 'geoimagenet-batch-patches'
+        return "geoimagenet-batch-patches"
 
     @classproperty
     def identifier(self):
-        return 'batch-creation'
+        return "batch-creation"
 
     @classproperty
     def limit_single_job(self):
@@ -260,7 +313,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
     @classproperty
     def type(self):
-        return 'ml'
+        return "ml"
 
     @classproperty
     def inputs(self):
@@ -319,6 +372,18 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             },
         ]
 
+    @classproperty
+    def outputs(self):
+        return [
+            {
+                "id": "dataset",
+                "type": "string",
+                "abstract": "Dataset UUID corresponding to the generated batch of patches.",
+                "minOccurs": 1,
+                "maxOccurs": 1,
+            }
+        ]
+
     def find_batch(self, batch_id):
         if batch_id is None:
             dataset = sorted(filter(lambda d: d.type == self.dataset_type and d.finished is not None,
@@ -345,25 +410,18 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             # imports to avoid circular references
             from geoimagenet_ml.store.datatypes import Dataset
 
-            self.update_job_status(STATUS.STARTED, 'initializing configuration settings', 0)
-            dataset_root = str(self.registry.settings['geoimagenet_ml.ml.datasets_path'])
-            dataset_update_count = int(self.registry.settings.get('geoimagenet_ml.ml.datasets_update_patch_count', 32))
+            self.update_job_status(STATUS.STARTED, "initializing configuration settings", 0)
+            dataset_update_count = int(self.registry.settings.get("geoimagenet_ml.ml.datasets_update_patch_count", 32))
             self.update_job_status(STATUS.RUNNING, "initiation done", 1)
 
-            self.update_job_status(STATUS.RUNNING, "creating dataset representation of patches", 2)
+            self.update_job_status(STATUS.RUNNING, "creating dataset container for patches", 2)
             dataset_name = str(self.get_input("name", one=True))
-            if not os.path.isdir(dataset_root):
-                raise RuntimeError("cannot find datasets root path")
-            if not len(dataset_name) or '/' in dataset_name or dataset_name.startswith('.'):
-                raise RuntimeError("invalid batch dataset name")
-            dataset_path = os.path.join(dataset_root, dataset_name)
+            dataset = Dataset(name=dataset_name, type=self.dataset_type, status=STATUS.RUNNING)
             dataset_overwrite = asbool(self.get_input("overwrite", one=True))
-            if dataset_overwrite and os.path.isdir(dataset_path):
-                self.update_job_status(STATUS.RUNNING, "removing old dataset [{}]".format(dataset_name), 2,
-                                       level=logging.WARNING)
-                shutil.rmtree(dataset_path)
-            os.makedirs(dataset_path, exist_ok=False, mode=0o644)
-            dataset = Dataset(name=dataset_name, path=dataset_path, type=self.dataset_type)
+            if dataset_overwrite and os.path.isdir(dataset.path) and len(os.listdir(dataset.path)):
+                self.update_job_status(STATUS.RUNNING, "removing old dataset [{}] as required (override=True)"
+                                       .format(dataset.uuid), 2, level=logging.WARNING)
+                dataset.reset_path()
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
             geojson_urls = self.get_input("geojson_urls", required=True)
@@ -382,8 +440,9 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             dataset = create_batch_patches(annotations, raster_paths, self.db.datasets_store, dataset, latest_batch,
                                            dataset_update_count, crop_fixed_size,
                                            lambda s, p=None: self.update_job_status(STATUS.RUNNING, s, p),
-                                           start_percent=7, final_percent=99, train_test_ratio=split_ratio)
+                                           start_percent=7, final_percent=98, train_test_ratio=split_ratio)
 
+            self.save_results([{"id": "dataset", "value": dataset.uuid}], status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
 
         except Exception as task_exc:

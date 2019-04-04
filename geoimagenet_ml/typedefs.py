@@ -1,8 +1,13 @@
 # noinspection PyUnresolvedReferences
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Process as ProcessDB                                         # noqa: F401
-    from geoimagenet_ml.processes.runners import ProcessRunner                                              # noqa: F401
+    from geoimagenet_ml.store.datatypes import Process as ProcessDB
+    from geoimagenet_ml.processes.status import STATUS
+    from geoimagenet_ml.processes.runners import ProcessRunner
+    from pyramid.config import Configurator
+    from pyramid.registry import Registry
+    from pyramid.request import Request
+    from pyramid_celery import Celery
     # noinspection PyUnresolvedReferences
     from typing import Any, AnyStr, Callable, Dict, Iterable, List, Tuple, Optional, Union, Type            # noqa: F401
     # noinspection PyPackageRequirements
@@ -18,13 +23,19 @@ if TYPE_CHECKING:
     JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
     JSON = Dict[JsonKey, Union[JsonValue, List['JSON'], Dict[JsonKey, 'JSON']]]
-    SettingsType = Dict[AnyStr, JsonValue]
     OptionType = Dict[AnyStr, Any]
-    InputType = OptionType
-    OutputType = OptionType
+    InputType = Dict[AnyStr, JSON]
+    OutputType = Dict[AnyStr, JSON]
     LoggerType = _loggerClass
     ErrorType = Union[AnyStr, Exception, List[WPSException]]
     LevelType = Union[AnyStr, int]
+    AnyStatus = Union[STATUS, int, AnyStr]
+
+    AnyContainer = Union[Configurator, Registry, Request, Celery]
+    SettingValue = Union[AnyStr, Number, bool, None]
+    SettingsType = Dict[AnyStr, SettingValue]
+    AnySettingsContainer = Union[AnyContainer, SettingsType]
+    AnyRegistryContainer = AnyContainer
 
     # ML impl/utils types
     # noinspection PyPackageRequirements

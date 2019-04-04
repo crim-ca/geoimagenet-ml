@@ -110,42 +110,40 @@ def test_str2paths_multi_walk_files(tmp_path):
     assert p[2] == str(f2)
 
 
-def get_status_variations(status_value):
-    return [status_value.lower(),
-            status_value.upper(),
-            status_value.capitalize(),
-            "Process" + status_value.capitalize()]
+statuses_except_unknown = set(status.STATUS.__members__.values()) - {status.STATUS.UNKNOWN}
+
+
+def get_status_variations(test_status):
+    return [test_status.value.lower(),
+            test_status.value.upper(),
+            test_status.value.capitalize(),
+            "Process" + test_status.value.capitalize()]
 
 
 def test_map_status_ogc_compliant():
-    for sv in status.STATUS.__members__:
+    for sv in statuses_except_unknown:
         for s in get_status_variations(sv):
             assert status.map_status(s, status.COMPLIANT.OGC) in \
                    status.job_status_categories[status.COMPLIANT.OGC]
 
 
 def test_map_status_pywps_compliant():
-    for sv in status.STATUS.__members__:
+    for sv in statuses_except_unknown:
         for s in get_status_variations(sv):
             assert status.map_status(s, status.COMPLIANT.PYWPS) in \
                    status.job_status_categories[status.COMPLIANT.PYWPS]
 
 
 def test_map_status_owslib_compliant():
-    for sv in status.STATUS.__members__:
+    for sv in statuses_except_unknown:
         for s in get_status_variations(sv):
             assert status.map_status(s, status.COMPLIANT.OWSLIB) in \
                    status.job_status_categories[status.COMPLIANT.OWSLIB]
 
 
-def test_map_status_back_compatibility_and_special_cases():
-    for c in [status.COMPLIANT.OGC, status.COMPLIANT.PYWPS, status.COMPLIANT.OWSLIB]:
-        assert status.map_status("successful", c) == status.STATUS.SUCCEEDED
-
-
 def test_map_status_pywps_compliant_as_int_statuses():
     for s in range(len(status.WPS_STATUS)):
-        if status.STATUS_PYWPS_MAP[s] != status.STATUS.UNKNOWN:
+        if status.STATUS_PYWPS_MAP[s] != status.STATUS.UNKNOWN.value:
             assert status.map_status(s, status.COMPLIANT.PYWPS) in \
                    status.job_status_categories[status.COMPLIANT.PYWPS]
 

@@ -1,37 +1,42 @@
 from enum import Enum
-from typing import AnyStr, Union  # noqa: F401
 # noinspection PyProtectedMember
 from pywps.response.status import _WPS_STATUS, WPS_STATUS
+from typing import TYPE_CHECKING
 import six
+if TYPE_CHECKING:
+    from geoimagenet_ml.typedefs import AnyStatus  # noqa: F401
+    from typing import AnyStr, Union  # noqa: F401
 
 
 class COMPLIANT(Enum):
-    OGC = 'STATUS_COMPLIANT_OGC'
-    PYWPS = 'STATUS_COMPLIANT_PYWPS'
-    OWSLIB = 'STATUS_COMPLIANT_OWSLIB'
-    CELERY = 'STATUS_COMPLIANT_CELERY'
+    LITERAL = "STATUS_COMPLIANT_LITERAL"
+    OGC = "STATUS_COMPLIANT_OGC"
+    PYWPS = "STATUS_COMPLIANT_PYWPS"
+    OWSLIB = "STATUS_COMPLIANT_OWSLIB"
+    CELERY = "STATUS_COMPLIANT_CELERY"
 
 
 class CATEGORY(Enum):
-    FINISHED = 'STATUS_CATEGORY_FINISHED'
-    RUNNING = 'STATUS_CATEGORY_RUNNING'
-    FAILED = 'STATUS_CATEGORY_FAILED'
+    FINISHED = "STATUS_CATEGORY_FINISHED"
+    RUNNING = "STATUS_CATEGORY_RUNNING"
+    FAILED = "STATUS_CATEGORY_FAILED"
 
 
 class STATUS(Enum):
-    ACCEPTED = 'accepted'
-    STARTED = 'started'
-    PAUSED = 'paused'
-    SUCCESS = 'success'
-    SUCCEEDED = 'succeeded'
-    FAILED = 'failed'
-    FAILURE = 'failure'
-    RUNNING = 'running'
-    DISMISSED = 'dismissed'
-    EXCEPTION = 'exception'
-    RETRY = 'retry'
-    PENDING = 'pending'
-    UNKNOWN = 'unknown'  # don't include in any below collections
+    ACCEPTED = "accepted"
+    STARTED = "started"
+    PAUSED = "paused"
+    SUCCESS = "success"
+    SUCCEEDED = "succeeded"
+    FINISHED = "finished"
+    FAILED = "failed"
+    FAILURE = "failure"
+    RUNNING = "running"
+    DISMISSED = "dismissed"
+    EXCEPTION = "exception"
+    RETRY = "retry"
+    PENDING = "pending"
+    UNKNOWN = "unknown"  # don't include in any below collections
 
 
 job_status_categories = {
@@ -59,7 +64,7 @@ STATUS_PYWPS_IDS = {k.lower(): v for v, k in STATUS_PYWPS_MAP.items()}          
 
 
 def map_status(wps_status, compliant=COMPLIANT.OGC):
-    # type: (Union[STATUS, AnyStr, int], COMPLIANT) -> STATUS
+    # type: (AnyStatus, COMPLIANT) -> STATUS
     """
     Maps WPS statuses (``STATUS``, ``OWSLib`` or ``PyWPS``) to ``OWSLib``/``PyWPS`` compatible values.
     For each compliant combination, unsupported statuses are changed to corresponding ones (with closest logical match).
@@ -76,37 +81,39 @@ def map_status(wps_status, compliant=COMPLIANT.OGC):
 
     if isinstance(wps_status, six.string_types):
         # remove 'Process' from OWSLib statuses and lower for every compliant
-        wps_status = wps_status.upper().replace('PROCESS', '')
+        wps_status = wps_status.upper().replace("PROCESS", "")
         wps_status = STATUS[wps_status]
 
     job_status = wps_status
 
-    # celery to any WPS conversions
-    if job_status == STATUS.FAILURE:
-        job_status = STATUS.FAILED
-    elif job_status in [STATUS.RETRY, STATUS.PENDING]:
-        job_status = STATUS.ACCEPTED
-    elif job_status == STATUS.SUCCESS:
-        job_status = STATUS.SUCCEEDED
+    if compliant != COMPLIANT.LITERAL:
 
-    if compliant == COMPLIANT.OGC:
-        if job_status in job_status_categories[CATEGORY.RUNNING]:
-            if job_status in [STATUS.STARTED, STATUS.PAUSED]:
+        # celery to any WPS conversions
+        if job_status == STATUS.FAILURE:
+            job_status = STATUS.FAILED
+        elif job_status in [STATUS.RETRY, STATUS.PENDING]:
+            job_status = STATUS.ACCEPTED
+        elif job_status in [STATUS.SUCCESS, STATUS.FINISHED]:
+            job_status = STATUS.SUCCEEDED
+
+        if compliant == COMPLIANT.OGC:
+            if job_status in job_status_categories[CATEGORY.RUNNING]:
+                if job_status in [STATUS.STARTED, STATUS.PAUSED]:
+                    job_status = STATUS.RUNNING
+            elif job_status in job_status_categories[CATEGORY.FAILED] and job_status != STATUS.FAILED:
+                job_status = STATUS.FAILED
+
+        elif compliant == COMPLIANT.PYWPS:
+            if job_status == STATUS.RUNNING:
+                job_status = STATUS.STARTED
+            elif job_status == STATUS.DISMISSED:
+                job_status = STATUS.FAILED
+
+        elif compliant == COMPLIANT.OWSLIB:
+            if job_status == STATUS.STARTED:
                 job_status = STATUS.RUNNING
-        elif job_status in job_status_categories[CATEGORY.FAILED] and job_status != STATUS.FAILED:
-            job_status = STATUS.FAILED
-
-    elif compliant == COMPLIANT.PYWPS:
-        if job_status == STATUS.RUNNING:
-            job_status = STATUS.STARTED
-        elif job_status == STATUS.DISMISSED:
-            job_status = STATUS.FAILED
-
-    elif compliant == COMPLIANT.OWSLIB:
-        if job_status == STATUS.STARTED:
-            job_status = STATUS.RUNNING
-        elif job_status in job_status_categories[CATEGORY.FAILED] and job_status != STATUS.FAILED:
-            job_status = STATUS.FAILED
+            elif job_status in job_status_categories[CATEGORY.FAILED] and job_status != STATUS.FAILED:
+                job_status = STATUS.FAILED
 
     if str(job_status.value).upper() not in STATUS.__members__:
         job_status = STATUS.UNKNOWN

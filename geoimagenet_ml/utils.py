@@ -1,5 +1,9 @@
 from geoimagenet_ml.store.exceptions import InvalidIdentifierValue
 from geoimagenet_ml.processes.status import map_status
+from pyramid.config import Configurator
+from pyramid.request import Request
+from pyramid.registry import Registry
+from pyramid_celery import Celery
 from six.moves.configparser import ConfigParser
 from datetime import datetime
 # noinspection PyPackageRequirements
@@ -14,7 +18,9 @@ import re
 import os
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Dict, List, Optional, Union, SettingsType  # noqa: F401
+    from geoimagenet_ml.typedefs import (  # noqa: F401
+        Any, AnyStr, Dict, List, Optional, Union, SettingsType, AnySettingsContainer, AnyRegistryContainer
+    )
 
 
 def get_base_url(settings):
@@ -53,12 +59,36 @@ def has_raw_value(info):
     return None
 
 
-def settings_from_ini(config_ini_file_path, ini_main_section_name):
+def get_settings_from_ini(config_ini_file_path, ini_main_section_name):
     # type: (AnyStr, AnyStr) -> Dict[AnyStr, AnyStr]
     parser = ConfigParser()
     parser.read([config_ini_file_path])
     settings = dict(parser.items(ini_main_section_name))
     return settings
+
+
+def get_registry(container):
+    # type: (AnyRegistryContainer) -> Registry
+    """Retrieves the application ``registry`` from various containers referencing to it."""
+    if isinstance(container, Celery):
+        return container.conf["PYRAMID_REGISTRY"]
+    if isinstance(container, (Configurator, Request)):
+        return container.registry
+    if isinstance(container, Registry):
+        return container
+    raise TypeError("Could not retrieve registry from container object of type [{}].".format(type(container)))
+
+
+def get_settings(container):
+    # type: (AnySettingsContainer) -> SettingsType
+    """Retrieves the application ``settings`` from various containers referencing to it."""
+    if isinstance(container, (Celery, Configurator, Request)):
+        container = get_registry(container)
+    if isinstance(container, Registry):
+        return container.settings
+    if isinstance(container, dict):
+        return container
+    raise TypeError("Could not retrieve settings from container object of type [{}]".format(type(container)))
 
 
 def str2paths(str_list=None, list_files=False):
@@ -175,12 +205,12 @@ def fully_qualified_name(obj):
 
 
 def now():
-    # type: (...) -> datetime
+    # type: () -> datetime
     return localize_datetime(datetime.utcnow())
 
 
 def now_secs():
-    # type: (...) -> int
+    # type: () -> int
     """
     Return the current time in seconds since the Epoch.
     """
@@ -207,7 +237,13 @@ def localize_datetime(dt, tz_name="UTC"):
     return tz_aware_dt
 
 
-def stringify_datetime(dt=None, tz_name='UTC', fmt=None):
+def str2datetime(dt_str=None):
+    # type: (AnyStr) -> datetime
+    """Obtains a datetime instance from a datetime string representation."""
+    return parse(dt_str or datetime2str())
+
+
+def datetime2str(dt=None, tz_name='UTC', fmt=None):
     # type: (Optional[datetime], AnyStr, Optional[AnyStr]) -> AnyStr
     """
     Obtain a localized and formatted datetime string from a datetime object.
@@ -215,19 +251,19 @@ def stringify_datetime(dt=None, tz_name='UTC', fmt=None):
     If ``fmt`` is provided as a format string, it is applied, otherwise applies `ISO-8601` by default.
     If ``dt`` is not provided, ``now()`` is employed.
     """
-    dt_fmt = parse(str(localize_datetime(dt or now(), tz_name)))
+    dt_fmt = localize_datetime(dt or now(), tz_name)
     if fmt:
         return dt_fmt.strftime(fmt)
     return dt_fmt.isoformat()
 
 
 def get_log_fmt():
-    # type: (...) -> AnyStr
+    # type: () -> AnyStr
     return "[%(asctime)s] %(levelname)-8s [%(name)s] %(message)s"
 
 
 def get_log_datefmt():
-    # type: (...) -> AnyStr
+    # type: () -> AnyStr
     return "%Y-%m-%d %H:%M:%S"
 
 
@@ -242,7 +278,7 @@ def get_job_log_msg(status, message, progress=0, duration=None):
 
 
 def get_error_fmt():
-    # type: (...) -> AnyStr
+    # type: () -> AnyStr
     return '{0.text} - code={0.code} - locator={0.locator}'
 
 

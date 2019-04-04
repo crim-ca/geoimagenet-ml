@@ -1,5 +1,5 @@
 from geoimagenet_ml import __meta__, GEOIMAGENET_ML_CONFIG_INI
-from geoimagenet_ml.utils import settings_from_ini, null, isnull
+from geoimagenet_ml.utils import get_settings_from_ini, null, isnull
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -44,7 +44,7 @@ def setup_config_from_settings(settings=None, config=None):
         raise ValueError(f"API configuration file required for testing, please set '{config_var_name}'.")
     if not os.path.isfile(config_ini_path):
         raise ValueError("API configuration file cannot be retrieved for testing: [{!s}].".format(config_ini_path))
-    settings_ini = settings_from_ini(config_ini_path, "app:geoimagenet_ml_app")
+    settings_ini = get_settings_from_ini(config_ini_path, "app:geoimagenet_ml_app")
     if settings:
         settings_ini.update(settings)
     if config:

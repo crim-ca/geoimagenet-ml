@@ -45,7 +45,7 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
         if not isinstance(dataset, Dataset):
             raise ex.DatasetInstanceError("Unsupported dataset type `{}`".format(type(dataset)))
         try:
-            result = self.collection.insert_one(dataset)
+            result = self.collection.insert_one(dataset.params)
             if not result.acknowledged:
                 raise Exception("insertion not acknowledged")
         except DuplicateKeyError:
@@ -184,9 +184,8 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
                 if isinstance(default_processes, dict):
                     process = default_processes[process]
                 sane_name = self._get_process_id(process)
-                if sane_name in registered_processes:
-                    self.delete_process(sane_name)
-                self._add_process(process)
+                if sane_name not in registered_processes:
+                    self._add_process(process)
 
     @staticmethod
     def _from_runner(runner_process, **extra_params):
@@ -197,6 +196,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             "type": runner_process.type,
             "identifier": runner_process.identifier,
             "inputs": runner_process.inputs,
+            "outputs": runner_process.outputs,
             "abstract": runner_process.__doc__,
             "package": None,
             "reference": None,

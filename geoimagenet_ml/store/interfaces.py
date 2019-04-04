@@ -18,50 +18,50 @@ class DatabaseInterface(object):
 
     @property
     def datasets_store(self):
-        # type: (...) -> DatasetStore
+        # type: () -> DatasetStore
         raise NotImplementedError
 
     @property
     def models_store(self):
-        # type: (...) -> ModelStore
+        # type: () -> ModelStore
         raise NotImplementedError
 
     @property
     def processes_store(self):
-        # type: (...) -> ProcessStore
+        # type: () -> ProcessStore
         raise NotImplementedError
 
     @property
     def jobs_store(self):
-        # type: (...) -> JobStore
+        # type: () -> JobStore
         raise NotImplementedError
 
     def is_ready(self):
-        # type: (...) -> bool
+        # type: () -> bool
         raise NotImplementedError
 
     def run_migration(self):
-        # type: (...) -> None
+        # type: () -> None
         raise NotImplementedError
 
     def rollback(self):
-        # type: (...) -> None
+        # type: () -> None
         """Rollback current database transaction."""
         raise NotImplementedError
 
     def get_session(self):
-        # type: (...) -> Any
+        # type: () -> Any
         raise NotImplementedError
 
     def get_information(self):
-        # type: (...) -> OptionType
+        # type: () -> OptionType
         """
         :returns: {'version': version, 'type': db_type}
         """
         raise NotImplementedError
 
     def get_revision(self):
-        # type: (...) -> AnyStr
+        # type: () -> AnyStr
         return self.get_information().get('version')
 
 
@@ -133,7 +133,7 @@ class ModelStore(object):
         raise NotImplementedError
 
     def clear_models(self):
-        # type: (...) -> bool
+        # type: () -> bool
         """
         Deletes all models from storage.
         """

@@ -11,21 +11,21 @@ import six
 
 def create_dataset(request):
     # type: (Request) -> Dataset
-    dataset_name = r.get_multiformat_post(request, 'dataset_name')
-    dataset_path = r.get_multiformat_post(request, 'dataset_path')
-    dataset_type = r.get_multiformat_post(request, 'dataset_type')
-    dataset_params = r.get_multiformat_post(request, 'dataset_params')
+    dataset_name = r.get_multiformat_post(request, "dataset_name")
+    dataset_path = r.get_multiformat_post(request, "dataset_path")
+    dataset_type = r.get_multiformat_post(request, "dataset_type")
+    dataset_params = r.get_multiformat_post(request, "dataset_params")
     ex.verify_param(dataset_name, notNone=True, notEmpty=True, ofType=six.string_types,
-                    httpError=HTTPBadRequest, paramName='dataset_name',
+                    httpError=HTTPBadRequest, paramName="dataset_name",
                     msgOnFail=s.Datasets_POST_BadRequestResponseSchema.description, request=request)
     ex.verify_param(dataset_path, notNone=True, notEmpty=True, ofType=six.string_types,
-                    httpError=HTTPBadRequest, paramName='dataset_path',
+                    httpError=HTTPBadRequest, paramName="dataset_path",
                     msgOnFail=s.Datasets_POST_BadRequestResponseSchema.description, request=request)
     ex.verify_param(dataset_type, notNone=True, notEmpty=True, ofType=six.string_types,
-                    httpError=HTTPBadRequest, paramName='dataset_type',
+                    httpError=HTTPBadRequest, paramName="dataset_type",
                     msgOnFail=s.Datasets_POST_BadRequestResponseSchema.description, request=request)
     ex.verify_param(dataset_params, notNone=True, notEmpty=True, ofType=dict,
-                    httpError=HTTPBadRequest, paramName='dataset_params',
+                    httpError=HTTPBadRequest, paramName="dataset_params",
                     msgOnFail=s.Datasets_POST_BadRequestResponseSchema.description, request=request)
     new_dataset = None
     try:
@@ -47,8 +47,8 @@ def create_dataset(request):
 
 def get_dataset(request):
     # type: (Request) -> Dataset
-    dataset_uuid = request.matchdict.get('dataset_uuid')
-    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='dataset_uuid',
+    dataset_uuid = request.matchdict.get("dataset_uuid")
+    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="dataset_uuid",
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:

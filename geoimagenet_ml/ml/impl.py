@@ -1,4 +1,4 @@
-from geoimagenet_ml.utils import ClassCounter
+from geoimagenet_ml.utils import ClassCounter, get_sane_name
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
@@ -21,6 +21,9 @@ if TYPE_CHECKING:
         Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional,
         FeatureType, RasterDataType
     )
+
+# enforce GDAL exceptions (otherwise functions return None)
+osgeo.gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -246,6 +249,9 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         raise NotImplementedError("Multiple GeoJSON parsing not implemented.")
     annotations_meta = annotations_meta[0]
 
+    if not isinstance(dataset_update_count, int) or dataset_update_count < 1:
+        raise AssertionError("invalid dataset update count value: {!s}".format(dataset_update_count))
+
     update_func("parsing raster files", start_percent)
     srs = parse_coordinate_system(annotations_meta)
     rasters_data, raster_global_coverage = parse_rasters(raster_search_paths, default_srs=srs)
@@ -273,7 +279,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
         patches_crop.append((crop_fixed_size, "fixed"))
 
-    last_progress_offset, progress_scale = 0, int(patch_percent - start_percent / len(features))
+    last_progress_offset, progress_scale = 0, int((patch_percent - start_percent) / len(features))
     dataset_container.data["patches"] = list()
     for feature_idx, feature in enumerate(features):
         progress_offset = int(start_percent + feature_idx * progress_scale)
@@ -311,7 +317,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
                     output_driver = osgeo.gdal.GetDriverByName("GTiff")
-                    output_name = "{}_{}".format(feature["id"], crop_name)
+                    output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
