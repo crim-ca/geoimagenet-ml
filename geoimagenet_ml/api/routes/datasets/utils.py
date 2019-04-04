@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
-from geoimagenet_ml.store.datatypes import Dataset
 from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
+from geoimagenet_ml.store.datatypes import Dataset
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
+from geoimagenet_ml.store.constants import SORT, ORDER
+from geoimagenet_ml.processes.status import STATUS
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from pyramid.request import Request
 import six
@@ -52,7 +54,20 @@ def get_dataset(request):
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:
-        dataset = database_factory(request.registry).datasets_store.fetch_by_uuid(dataset_uuid, request=request)
+        datasets_store = database_factory(request.registry).datasets_store
+        if dataset_uuid == "latest":
+            datasets, count = datasets_store.find_datasets(
+                name=r.get_multiformat_any(request, "dataset_name"),
+                type=r.get_multiformat_any(request, "dataset_type"),
+                sort=SORT.FINISHED,
+                order=ORDER.DESCENDING,
+                status=STATUS.FINISHED,
+                limit=1,
+            )
+            if len(datasets):
+                dataset = datasets[0]
+        else:
+            dataset = datasets_store.fetch_by_uuid(dataset_uuid, request=request)
         if not dataset:
             raise exc.DatasetNotFoundError
     except exc.DatasetInstanceError:

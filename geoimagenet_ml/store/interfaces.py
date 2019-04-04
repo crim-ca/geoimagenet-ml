@@ -91,6 +91,21 @@ class DatasetStore(object):
         """
         raise NotImplementedError
 
+    # noinspection PyShadowingBuiltins
+    def find_datasets(self,
+                      name=None,        # type: Optional[AnyStr]
+                      type=None,        # type: Optional[AnyStr]
+                      status=None,      # type: Optional[Union[STATUS, CATEGORY]]
+                      sort=None,        # type: Optional[SORT]
+                      order=None,       # type: Optional[ORDER]
+                      limit=None,       # type: Optional[int]
+                      request=None,     # type: Optional[Request]
+                      ):                # type: (...) -> Tuple[List[Dataset], int]
+        """
+        Finds all datasets in database matching search filters.
+        """
+        raise NotImplementedError
+
     def fetch_by_uuid(self, dataset_uuid, request=None):
         # type: (UUID, Optional[Request]) -> Dataset
         """

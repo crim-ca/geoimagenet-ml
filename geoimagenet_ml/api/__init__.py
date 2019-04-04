@@ -19,9 +19,9 @@ except (ImportError, ModuleNotFoundError):
 
 
 def includeme(config):
-    logger.info('Adding API config modules...')
-    config.include('cornice')
-    config.include('cornice_swagger')
-    config.include('pyramid_chameleon')
-    config.include('pyramid_mako')
-    config.include('geoimagenet_ml.api.routes')
+    logger.info("Adding API config modules...")
+    config.include("cornice")
+    config.include("cornice_swagger")
+    config.include("pyramid_chameleon")
+    config.include("pyramid_mako")
+    config.include("geoimagenet_ml.api.routes")

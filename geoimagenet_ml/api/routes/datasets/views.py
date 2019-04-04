@@ -15,7 +15,7 @@ def get_datasets_view(request):
     datasets_json = ex.evaluate_call(lambda: [d.summary() for d in datasets_list],
                                      fallback=lambda: db.rollback(), httpError=HTTPInternalServerError,
                                      request=request, msgOnFail=s.InternalServerErrorResponseSchema.description)
-    return ex.valid_http(httpSuccess=HTTPOk, content={u'datasets': datasets_json},
+    return ex.valid_http(httpSuccess=HTTPOk, content={u"datasets": datasets_json},
                          detail=s.Datasets_GET_OkResponseSchema.description, request=request)
 
 
@@ -24,21 +24,32 @@ def get_datasets_view(request):
 def post_datasets_view(request):
     """Register a new dataset."""
     dataset = create_dataset(request)
-    return ex.valid_http(httpSuccess=HTTPCreated, content={u'dataset': dataset.json()},
+    return ex.valid_http(httpSuccess=HTTPCreated, content={u"dataset": dataset.json()},
                          detail=s.Datasets_POST_CreatedResponseSchema.description, request=request)
+
+
+def get_dataset_handler(request):
+    dataset = get_dataset(request)
+    return ex.valid_http(httpSuccess=HTTPOk, content={u"datasets": dataset.json()},
+                         detail=s.Dataset_GET_OkResponseSchema.description, request=request)
 
 
 @s.DatasetAPI.get(tags=[s.DatasetsTag],
                   schema=s.DatasetEndpoint(), response_schemas=s.Dataset_GET_responses)
 def get_dataset_view(request):
     """Get registered dataset information."""
-    dataset = get_dataset(request)
-    return ex.valid_http(httpSuccess=HTTPOk, content={u'datasets': dataset.json()},
-                         detail=s.Dataset_GET_OkResponseSchema.description, request=request)
+    return get_dataset_handler(request)
 
 
-@s.DatasetAPI.get(tags=[s.DatasetsTag],
-                  schema=s.DatasetEndpoint(), response_schemas=s.Dataset_DELETE_responses)
+@s.DatasetLatestAPI.get(tags=[s.DatasetsTag],
+                        schema=s.DatasetLatestEndpoint(), response_schemas=s.Dataset_GET_responses)
+def get_dataset_latest_view(request):
+    """Get latest dataset information matching criterion."""
+    return get_dataset_handler(request)
+
+
+@s.DatasetAPI.delete(tags=[s.DatasetsTag],
+                     schema=s.DatasetEndpoint(), response_schemas=s.Dataset_DELETE_responses)
 def delete_dataset_view(request):
     """Get registered dataset information."""
     delete_dataset(request)

@@ -2,6 +2,7 @@ from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
 from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.processes.status import map_status, STATUS
+from geoimagenet_ml.store.constants import SORT, ORDER
 from abc import abstractmethod
 from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
@@ -386,16 +387,21 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
     def find_batch(self, batch_id):
         if batch_id is None:
-            dataset = sorted(filter(lambda d: d.type == self.dataset_type and d.finished is not None,
-                                    self.db.datasets_store.list_datasets()), key=lambda d: d.finished)
-            if not dataset:
+            datasets, count = self.db.datasets_store.find_datasets(
+                type=self.dataset_type,
+                sort=SORT.FINISHED,
+                order=ORDER.DESCENDING,
+                status=STATUS.FINISHED,
+                limit=1,
+            )
+            if not datasets:
                 self.update_job_status(
                     STATUS.RUNNING,
                     "Could not find latest dataset with [{!s}]. Building from scratch...".format(batch_id),
                     level=logging.WARNING,
                 )
                 return None
-            return dataset[-1]
+            return datasets[-1]
         elif isinstance(batch_id, six.string_types):
             dataset = self.db.datasets_store.fetch_by_uuid(batch_id)  # raises not found
             if dataset.type != self.dataset_type:

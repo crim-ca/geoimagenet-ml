@@ -88,14 +88,14 @@ def get_process_job_view(request):
 
 
 @s.ProcessJobCurrentAPI.get(tags=[s.ProcessesTag],
-                            schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+                            schema=s.ProcessJobCurrentEndpoint(), response_schemas=s.ProcessJob_GET_responses)
 def get_process_job_current_view(request):
     """Get currently running process job information."""
     return get_process_job_handler(request)
 
 
 @s.ProcessJobLatestAPI.get(tags=[s.ProcessesTag],
-                           schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+                           schema=s.ProcessJobLatestEndpoint(), response_schemas=s.ProcessJob_GET_responses)
 def get_process_job_latest_view(request):
     """Get latest successful process job execution."""
     return get_process_job_handler(request)

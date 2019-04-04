@@ -6,14 +6,14 @@ from pyramid.httpexceptions import HTTPUnprocessableEntity, HTTPInternalServerEr
 
 def get_request_method_content(request):
     # 'request' object stores GET content into 'GET' property, while other methods are in 'POST' property
-    method_property = 'GET' if request.method == 'GET' else 'POST'
+    method_property = "GET" if request.method == "GET" else "POST"
     return getattr(request, method_property)
 
 
 def get_multiformat_any(request, key):
-    msg = "Key `{key}` could not be extracted from {method} of type `{type}`" \
+    msg = "Key '{key}' could not be extracted from {method} of type '{type}'" \
           .format(key=repr(key), method=request.method, type=request.content_type)
-    if request.content_type == 'application/json':
+    if request.content_type == "application/json":
         return ex.evaluate_call(lambda: request.json.get(key),
                                 httpError=HTTPInternalServerError, msgOnFail=msg)
     return ex.evaluate_call(lambda: get_request_method_content(request).get(key),

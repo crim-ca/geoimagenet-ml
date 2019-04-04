@@ -95,6 +95,36 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
             raise ex.DatasetInstanceError("Dataset '{}' could not be generated.".format(dataset_uuid))
         return dataset
 
+    # noinspection PyShadowingBuiltins
+    def find_datasets(self, name=None, type=None, status=None, sort=None, order=None, limit=None, request=None):
+        search_filters = {}
+
+        if isinstance(status, STATUS):
+            search_filters["status"] = {"$in": [status.value]}
+        elif isinstance(status, CATEGORY):
+            search_filters["status"] = {"$in": [s.value for s in job_status_categories[status]]}
+
+        if name is not None:
+            search_filters["name"] = name
+        if type is not None:
+            search_filters["type"] = type
+
+        if sort is None:
+            sort = SORT.FINISHED
+        if order is None:
+            order = ORDER.DESCENDING if sort == SORT.FINISHED or sort == SORT.CREATED else ORDER.ASCENDING
+        if not isinstance(sort, SORT):
+            raise ex.DatasetNotFoundError("Invalid sorting method: '{}'".format(repr(sort)))
+        if not isinstance(order, ORDER):
+            raise ex.DatasetNotFoundError("Invalid ordering method: '{}'".format(repr(order)))
+
+        sort_order = pymongo.DESCENDING if order == ORDER.DESCENDING else pymongo.ASCENDING
+        sort_criteria = [(sort.value, sort_order)]
+        found = self.collection.find(search_filters)
+        count = self.collection.count_documents(search_filters)
+        items = [Dataset(item) for item in list(found.limit(limit or count).sort(sort_criteria))]
+        return items, count
+
     def list_datasets(self, request=None):
         datasets = []
         try:

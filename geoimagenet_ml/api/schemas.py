@@ -61,80 +61,83 @@ JobVariableUUID = "{job_uuid}"
 
 # Service Routes
 BaseAPI = Service(
-    path='/',
+    path="/",
     name=__meta__.__title__,
     description="GeoImageNet ML REST API information. Base path of the API.")
 SwaggerJSON = Service(
-    path=BaseAPI.path + 'json',
+    path=BaseAPI.path + "json",
     name=__meta__.__title__ + "swagger_schemas",
     description="Schemas of {}".format(__meta__.__title__))
 SwaggerAPI = Service(
-    path=BaseAPI.path + 'api',
+    path=BaseAPI.path + "api",
     name="swagger",
     description="Swagger of {}".format(__meta__.__title__))
 DatasetsAPI = Service(
-    path=BaseAPI.path + 'datasets',
-    name='Datasets')
+    path=BaseAPI.path + "datasets",
+    name="Datasets")
+DatasetLatestAPI = Service(
+    path=BaseAPI.path + "datasets/latest",
+    name="DatasetLatest")
 DatasetAPI = Service(
-    path=BaseAPI.path + 'datasets/' + DatasetVariableUUID,
-    name='Dataset')
+    path=BaseAPI.path + "datasets/" + DatasetVariableUUID,
+    name="Dataset")
 DatasetDownloadAPI = Service(
-    path=BaseAPI.path + 'datasets/' + DatasetVariableUUID + '/download',
-    name='DatasetDownload')
+    path=BaseAPI.path + "datasets/" + DatasetVariableUUID + "/download",
+    name="DatasetDownload")
 ModelsAPI = Service(
-    path=BaseAPI.path + 'models',
-    name='Models')
+    path=BaseAPI.path + "models",
+    name="Models")
 ModelAPI = Service(
-    path=BaseAPI.path + 'models/' + ModelVariableUUID,
-    name='Model')
+    path=BaseAPI.path + "models/" + ModelVariableUUID,
+    name="Model")
 ModelDownloadAPI = Service(
-    path=BaseAPI.path + 'models/' + ModelVariableUUID + '/download',
-    name='ModelDownload')
+    path=BaseAPI.path + "models/" + ModelVariableUUID + "/download",
+    name="ModelDownload")
 ProcessesAPI = Service(
-    path=BaseAPI.path + 'processes',
-    name='Processes')
+    path=BaseAPI.path + "processes",
+    name="Processes")
 ProcessAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID,
-    name='Process')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID,
+    name="Process")
 ProcessJobsAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs',
-    name='ProcessJobs')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs",
+    name="ProcessJobs")
 ProcessJobCurrentAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/current',
-    name='ProcessJobCurrent')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/current",
+    name="ProcessJobCurrent")
 ProcessJobLatestAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/latest',
-    name='ProcessJobLatest')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/latest",
+    name="ProcessJobLatest")
 ProcessJobAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/' + JobVariableUUID,
-    name='ProcessJob')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID,
+    name="ProcessJob")
 ProcessJobResultAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/' + JobVariableUUID + '/result',
-    name='ProcessJobResult')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/result",
+    name="ProcessJobResult")
 ProcessJobLogsAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/' + JobVariableUUID + '/logs',
-    name='ProcessJobLogs')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/logs",
+    name="ProcessJobLogs")
 ProcessJobExceptionsAPI = Service(
-    path=BaseAPI.path + 'processes/' + ProcessVariableUUID + '/jobs/' + JobVariableUUID + '/exceptions',
-    name='ProcessJobExceptions')
+    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/exceptions",
+    name="ProcessJobExceptions")
 VersionsAPI = Service(
-    path=BaseAPI.path + 'versions',
-    name='Versions')
+    path=BaseAPI.path + "versions",
+    name="Versions")
 
 
 # Security
-SecurityDefinitionAPI = {'securityDefinitions': {'cookieAuth': {'type': 'apiKey', 'in': 'cookie', 'name': 'auth_tkt'}}}
-SecurityAdministratorAPI = [{'cookieAuth': []}]
+SecurityDefinitionAPI = {"securityDefinitions": {"cookieAuth": {"type": "apiKey", "in": "cookie", "name": "auth_tkt"}}}
+SecurityAdministratorAPI = [{"cookieAuth": []}]
 SecurityEveryoneAPI = []
 
 # Content
-ContentTypeJSON = 'application/json'
-ContentTypeHTML = 'text/html'
+ContentTypeJSON = "application/json"
+ContentTypeHTML = "text/html"
 
 
 # Service Routes Utility
 def service_api_route_info(service_api):
-    return {'name': service_api.name, 'pattern': service_api.path}
+    return {"name": service_api.name, "pattern": service_api.path}
 
 
 def get_security(service, method):
@@ -144,17 +147,17 @@ def get_security(service, method):
         met, view, args = definition
         if met == method:
             break
-    return SecurityAdministratorAPI if 'security' not in args else args['security']
+    return SecurityAdministratorAPI if "security" not in args else args["security"]
 
 
 class HeaderSchemaJSON(colander.MappingSchema):
     content_type = colander.SchemaNode(colander.String(), example=ContentTypeJSON, default=ContentTypeJSON)
-    content_type.name = 'Content-Type'
+    content_type.name = "Content-Type"
 
 
 class HeaderSchemaHTML(colander.MappingSchema):
     content_type = colander.SchemaNode(colander.String(), example=ContentTypeHTML, default=ContentTypeHTML)
-    content_type.name = 'Content-Type'
+    content_type.name = "Content-Type"
 
 
 class AcceptHeader(colander.MappingSchema):
@@ -196,18 +199,18 @@ class BaseBodyResponseSchema(colander.MappingSchema):
         self.__desc = description
 
         # update the values
-        child_nodes = getattr(self, 'children')
+        child_nodes = getattr(self, "children")
         for node in child_nodes:
-            if node.name == 'meta':
-                for meta_node in getattr(node, 'children'):
-                    if meta_node.name == 'code':
+            if node.name == "meta":
+                for meta_node in getattr(node, "children"):
+                    if meta_node.name == "code":
                         meta_node.example = self.__code
-                    if meta_node.name == 'detail':
+                    if meta_node.name == "detail":
                         meta_node.example = self.__desc
 
 
 class BaseResponseSchema(colander.MappingSchema):
-    description = 'UNDEFINED'
+    description = "UNDEFINED"
     header = AcceptHeader()
     body = BaseBodyResponseSchema(code=HTTPOk.code, description=description)
 
@@ -379,6 +382,17 @@ class Dataset_DELETE_BadRequestResponseSchema(BaseResponseSchema):
 class Dataset_DELETE_NotFoundResponseSchema(BaseResponseSchema):
     description = "Dataset could not be found in db."
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
+
+
+class DatasetLatest_GET_BodyRequestSchema(colander.MappingSchema):
+    dataset_name = colander.SchemaNode(colander.String(), missing=colander.drop,
+                                       description="Filter search only to datasets matching the specified name.")
+    dataset_type = colander.SchemaNode(colander.String(), missing=colander.drop,
+                                       description="Filter search only to datasets matching the specified type.")
+
+
+class DatasetLatestEndpoint(BaseRequestSchema):
+    body = DatasetLatest_GET_BodyRequestSchema()
 
 
 class DatasetDownloadEndpoint(BaseRequestSchema):
@@ -643,6 +657,14 @@ class InputOutputList(colander.SequenceSchema):
 class ProcessJobEndpoint(BaseRequestSchema):
     process_uuid = process_uuid
     job_uuid = job_uuid
+
+
+class ProcessJobCurrentEndpoint(BaseRequestSchema):
+    process_uuid = process_uuid
+
+
+class ProcessJobLatestEndpoint(BaseRequestSchema):
+    process_uuid = process_uuid
 
 
 class Tags(colander.SequenceSchema):
