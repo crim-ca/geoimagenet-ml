@@ -23,6 +23,8 @@ CONDA_ENV_PATH := $(CONDA_ENVS_DIR)/$(CONDA_ENV)
 DOWNLOAD_CACHE := $(APP_ROOT)/downloads
 PYTHON_VERSION := 3.6
 
+DOCKER_REPO := docker-registry.crim.ca/geoimagenet/ml
+
 # choose anaconda installer depending on your OS
 ANACONDA_URL = https://repo.continuum.io/miniconda
 OS_NAME := $(shell uname -s 2>/dev/null || echo "unknown")
