@@ -13,19 +13,17 @@ BROWSER := python -c "$$BROWSER_PYSCRIPT"
 CUR_DIR := $(abspath $(lastword $(MAKEFILE_LIST))/..)
 APP_ROOT := $(CURDIR)
 APP_NAME := geoimagenet-ml
-SRC_DIR := $(CURDIR)/src
+SRC_DIR := $(CURDIR)/geoimagenet_ml
 
 # Anaconda
 ANACONDA_HOME ?= $(HOME)/anaconda
-CONDA_ENV ?= $(APP_NAME)
+CONDA_ENV ?= geoimagenet-ml
 CONDA_ENVS_DIR ?= $(HOME)/.conda/envs
 CONDA_ENV_PATH := $(CONDA_ENVS_DIR)/$(CONDA_ENV)
 DOWNLOAD_CACHE := $(APP_ROOT)/downloads
 PYTHON_VERSION := 3.6
 
-# thelper
-THELPER_BRANCH ?= master
-DOCKER_REPO ?= docker-registry.crim.ca/geoimagenet/ml
+DOCKER_REPO := docker-registry.crim.ca/geoimagenet/ml
 
 # choose anaconda installer depending on your OS
 ANACONDA_URL = https://repo.continuum.io/miniconda
@@ -46,6 +44,9 @@ all: help
 
 .PHONY: help
 help:
+	@echo "bump             bump version using version specified as user input"
+	@echo "bump-dry         bump version using version specified as user input (dry-run)"
+	@echo "bump-tag         bump version using version specified as user input, tags it and commits change in git"
 	@echo "clean            remove all build, test, coverage and Python artifacts"
 	@echo "clean-build      remove build artifacts"
 	@echo "clean-env        remove package environment"
@@ -61,7 +62,7 @@ help:
 	@echo "install          install the package to the active Python's site-packages"
 	@echo "install-api      install API related components"
 	@echo "install-ml       install ML related components"
-	@echo "install-test     install test related components"
+	@echo "install-dev      install test related components"
 	@echo "pep8             check code style"
 	@echo "release          package and upload a release"
 	@echo "start            start the installed application"
@@ -69,8 +70,31 @@ help:
 	@echo "test-all         run tests with every marker enabled"
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
-	@echo "update-thelper   retrieve latest version of thelper"
 	@echo "version          retrive the application version"
+
+.PHONY: bump
+bump:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --no-tag --new-version $$VERSION_PART patch;')
+
+.PHONY: bump-dry
+bump-dry:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --dry-run --tag --new-version $$VERSION_PART patch;')
+
+.PHONY: bump-tag
+bump-tag:
+	$(shell bash -c 'read -p "Version: " VERSION_PART; \
+		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+		test -f $(CONDA_ENV_PATH)/bin/bumpversion || pip install bumpversion; \
+		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
+			--verbose --allow-dirty --tag --new-version $$VERSION_PART patch;')
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test clean-ml
@@ -105,36 +129,33 @@ clean-test:
 .PHONY: clean-ml
 clean-ml:
 	# clean thelper sources left over from build
-	@-rm -fr "$(CUR_DIR)/geoimagenet_ml" || true
+	@-rm -fr "$(CUR_DIR)/src" || true
 
 .PHONY: pep8
 pep8:
-	@bash -c 'flake8 src && echo "All good!"'
+	@bash -c 'flake8 geoimagenet_ml && echo "All good!"'
 
 .PHONY: test
-test: install-test
+test: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		export LD_PRELOAD="$(CONDA_ENV_PATH)/lib/libgdal.so" && \
-		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" -v -m "not online"'
+		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv -m "not online"'
 
 .PHONY: test-all
-test-all: install-test
+test-all: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		export LD_PRELOAD="$(CONDA_ENV_PATH)/lib/libgdal.so" && \
-		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest"'
+		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv'
 
 .PHONY: test-tox
-test-tox: install-test
+test-tox: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		tox'
 
 .PHONY: coverage
 coverage:
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		coverage run --source api setup.py test; \
+		coverage run "$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests; \
 		coverage report -m; \
-		coverage html -d coverage; \
-		"$(BROWSER)" coverage/index.html;'
+		coverage html -d coverage;'
 
 .PHONY: migrate
 migrate:
@@ -142,12 +163,12 @@ migrate:
 
 .PHONY: docs
 docs:
-	@-rm -f "$(CUR_DIR)/src/docs/api.rst"
-	@-rm -f "$(CUR_DIR)/src/docs/modules.rst"
-	sphinx-apidoc -o "$(CUR_DIR)/src/docs/" "$(CUR_DIR)/src"
-	@"$(MAKE)" -C "$(CUR_DIR)/src/docs" clean
-	@"$(MAKE)" -C "$(CUR_DIR)/src/docs" html
-	@"$(BROWSER)" "$(CUR_DIR)/src/docs/_build/html/index.html"
+	@-rm -f "$(SRC_DIR)/docs/api.rst"
+	@-rm -f "$(SRC_DIR)/docs/modules.rst"
+	sphinx-apidoc -o "$(SRC_DIR)/docs/" "$(SRC_DIR)"
+	@"$(MAKE)" -C "$(SRC_DIR)/docs" clean
+	@"$(MAKE)" -C "$(SRC_DIR)/docs" html
+	@"$(BROWSER)" "$(SRC_DIR)/docs/_build/html/index.html"
 
 .PHONY: servedocs
 servedocs: docs
@@ -169,29 +190,22 @@ install: install-ml install-api
 	@echo "Installing all packages..."
 
 .PHONY: install-api
-install-api: clean conda-env $(SRC_DIR)
+install-api: clean conda-env
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements.txt"'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py" install'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
 .PHONY: install-ml
-install-ml: update-thelper install-ml-base
+install-ml: clean conda-env
 	@echo "Installing ML packages..."
-
-.PHONY: install-ml-base
-install-ml-base: clean conda-env $(CUR_DIR)/thelper
-	@echo "Installing thelper package..."
-	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)/thelper"'
 	@echo "Installing packages that fail with pip using conda instead"
 	@bash -c '"$(ANACONDA_HOME)/bin/conda" install -y -n "$(CONDA_ENV)" \
 		--file "$(CUR_DIR)/requirements-gdal.txt" -c conda-forge'
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-ml.txt"'
-	# @echo "Enforcing pip install using cloned repo"
-	# @-bash -c "source $(ANACONDA_HOME)/bin/activate $(CONDA_ENV); pip install $(CUR_DIR)/src/thelper --no-deps"
 	$(MAKE) clean-ml
 
-.PHONY: install-test
-install-test: install
+.PHONY: install-dev
+install-dev: install
 	@echo "Installing test dependencies..."
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements-dev.txt"'
 
@@ -199,37 +213,26 @@ install-test: install
 update: clean
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
-.PHONY: update-thelper
-update-thelper:
-	@test -d "$(CUR_DIR)/thelper" || echo "Retrieving thelper on '$(THELPER_BRANCH)' branch..."
-	@test -d "$(CUR_DIR)/thelper" || git clone ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
-	@echo "Updating thelper..."
-	@bash -c 'cd "$(CUR_DIR)/thelper" && \
-		git fetch && \
-		git checkout -f "$(THELPER_BRANCH)" && \
-		git pull -f && cd "$(CUR_DIR)"'
-
 .PHONY: version
 version:
 	@echo "GeoImageNet ML version: $(APP_VERSION)"
-	@python -c 'from src.__meta__ import __version__; print(__version__)'
+	@python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'
 
 ## Docker targets
-# we use 'src' instead of 'geoimagenet_ml' to allow fetching the info without installation of conda env
 
 .PHONY: docker-info
 docker-info:
 	@echo "Will be built, tagged and pushed as: \
-		$(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+		$(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: docker-build
-docker-build: update-thelper
+docker-build:
 	@bash -c "docker build $(CUR_DIR) \
-		-t $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+		-t $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 .PHONY: docker-push
 docker-push:
-	@bash -c "docker push $(DOCKER_REPO):`python -c 'from src.__meta__ import __version__; print(__version__)'`"
+	@bash -c "docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 ## Supervisor targets
 
