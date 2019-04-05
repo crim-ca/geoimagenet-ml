@@ -4,8 +4,8 @@ include HISTORY.rst
 include LICENSE
 include README.rst
 
-recursive-include src *
-recursive-include src/alembic/version/ *
+recursive-include geoimagenet_ml *
+recursive-include geoimagenet_ml/alembic/version/ *
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

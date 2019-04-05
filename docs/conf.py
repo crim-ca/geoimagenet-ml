@@ -17,7 +17,7 @@ import sys
 import os
 SRC_ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, SRC_ROOT)
-import __meta__    # noqa
+from geoimagenet_ml import __meta__    # noqa
 
 # -- General configuration ---------------------------------------------
 
@@ -73,7 +73,12 @@ language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build']
+exclude_patterns = [
+    '_build',
+    'docs',
+    'tests',
+    'setup',
+]
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
