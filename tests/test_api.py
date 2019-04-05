@@ -28,10 +28,22 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.databases.mongodb import MongoDatabase
 
 
+class TestImportApi(unittest.TestCase):
+    """Validate API startup with working imports.
+
+    .. seealso::
+        - :module:`geoimagenet_ml.ml.impl` for details.
+    """
+    def test_import_api(self):
+        """No ``ImportError`` should occur on any import from :module:`geoimagenet_ml.ml.impl`."""
+        try:
+            from geoimagenet_ml.ml.impl import load_model
+        except ImportError as ex:
+            self.fail("Could not import API due to import error by ML modules. [{!r}]".format(ex))
+
+
 class TestGenericApi(unittest.TestCase):
-    """
-    Test Generic API operations.
-    """
+    """Test Generic API operations."""
 
     @classmethod
     def setUpClass(cls):
@@ -69,9 +81,7 @@ class TestGenericApi(unittest.TestCase):
 
 
 class TestModelApi(unittest.TestCase):
-    """
-    Test Model API operations.
-    """
+    """Test Model API operations."""
 
     @classmethod
     def setUpClass(cls):

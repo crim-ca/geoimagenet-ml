@@ -1,6 +1,5 @@
 # --- ml ---
-# git+ssh://git@sp-pelee.corpo.crim.ca:7999/visi/thelper.git
-thelper
+thelper==0.2.8
 scipy
 shapely
 affine
