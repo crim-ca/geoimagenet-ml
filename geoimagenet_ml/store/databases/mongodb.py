@@ -51,12 +51,12 @@ class MongoDatabase(DatabaseInterface):
 
     def get_information(self):
         result = list(self._database.version.find().limit(1))[0]
-        db_version = result['version_num']
-        return {'version': db_version, 'type': MONGODB_TYPE}
+        db_version = result["version_num"]
+        return {"version": db_version, "type": MONGODB_TYPE}
 
     def run_migration(self):
         if self._database.version.count_documents({}) < 1:
-            self._database.version.insert_one({'version_num': "2"})
+            self._database.version.insert_one({"version_num": "3"})
         else:
             # TODO: do migration according to found version
             pass
@@ -78,18 +78,18 @@ class MongoDB:
     def get(cls, registry):
         if not cls.__db:
             settings = registry.settings
-            username = os.getenv("MONGODB_USER") or settings.get('mongodb.user')
-            password = os.getenv("MONGODB_PASSWORD") or settings.get('mongodb.password')
+            username = os.getenv("MONGODB_USER") or settings.get("mongodb.user")
+            password = os.getenv("MONGODB_PASSWORD") or settings.get("mongodb.password")
             client = pymongo.MongoClient(
-                os.getenv("MONGODB_HOST") or settings.get('mongodb.host'),
-                int(os.getenv("MONGODB_PORT") or settings.get('mongodb.port')),
+                os.getenv("MONGODB_HOST") or settings.get("mongodb.host"),
+                int(os.getenv("MONGODB_PORT") or settings.get("mongodb.port")),
                 # avoid empty string causing an error
                 username=username if username else None,
                 password=password if password else None,
             )
-            cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get('mongodb.db_name')]
+            cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get("mongodb.db_name")]
             cls.__db.datasets.create_index("uuid", unique=True)
             cls.__db.models.create_index("uuid", unique=True)
             cls.__db.processes.create_index("uuid", unique=True)
-            cls.__db.version.create_index("version", unique=True)
+            cls.__db.version.create_index("version_num", unique=True)
         return cls.__db
