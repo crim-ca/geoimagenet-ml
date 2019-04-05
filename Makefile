@@ -68,6 +68,7 @@ help:
 	@echo "start            start the installed application"
 	@echo "test             run basic unit tests (not online)"
 	@echo "test-all         run tests with every marker enabled"
+	@echo "test-req         run test to validate no missing requirement for any package"
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "version          retrive the application version"
@@ -139,6 +140,13 @@ pep8:
 test: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv -m "not online"'
+
+.PHONY: test-req
+test-req:
+	# list requirements check, then evalute it
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+	 	pip check; \
+	 	pip check | grep "requirements found";'
 
 .PHONY: test-all
 test-all: install-dev

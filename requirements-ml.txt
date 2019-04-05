@@ -1,4 +1,3 @@
-# --- ml ---
 thelper==0.2.8
 scipy
 shapely
