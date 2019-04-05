@@ -68,6 +68,7 @@ help:
 	@echo "start            start the installed application"
 	@echo "test             run basic unit tests (not online)"
 	@echo "test-all         run tests with every marker enabled"
+	@echo "test-req         run test to validate no missing requirement for any package"
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "version          retrive the application version"
@@ -140,6 +141,13 @@ test: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv -m "not online"'
 
+.PHONY: test-req
+test-req:
+	# list requirements check, then evalute it
+	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
+	 	pip check; \
+	 	pip check | grep "requirements found";'
+
 .PHONY: test-all
 test-all: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
@@ -163,12 +171,10 @@ migrate:
 
 .PHONY: docs
 docs:
-	@-rm -f "$(SRC_DIR)/docs/api.rst"
-	@-rm -f "$(SRC_DIR)/docs/modules.rst"
-	sphinx-apidoc -o "$(SRC_DIR)/docs/" "$(SRC_DIR)"
-	@"$(MAKE)" -C "$(SRC_DIR)/docs" clean
-	@"$(MAKE)" -C "$(SRC_DIR)/docs" html
-	@"$(BROWSER)" "$(SRC_DIR)/docs/_build/html/index.html"
+	@-rm -f "$(CUR_DIR)/docs/modules.rst"
+	sphinx-apidoc -o "$(CUR_DIR)/docs/" "$(CUR_DIR)" "$(CUR_DIR)/docs" "$(CUR_DIR)/tests" "$(CUR_DIR)/setup.py"
+	@"$(MAKE)" -C "$(CUR_DIR)/docs" clean
+	@"$(MAKE)" -C "$(CUR_DIR)/docs" html
 
 .PHONY: servedocs
 servedocs: docs

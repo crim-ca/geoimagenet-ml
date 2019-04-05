@@ -18,12 +18,8 @@ SUPERVISORD="/usr/bin/supervisord"
 SUPERVISORCTL="/usr/bin/supervisorctl"
 LOGFILE="/var/log/geoimagenet/supervisor/supervisord.log"
 PIDFILE="/var/run/geoimagenet/supervisor/supervisord.pid"
-CONFIGFILE="src/config/supervisor/supervisord.conf"
+CONFIGFILE="geoimagenet_ml/config/supervisor/supervisord.conf"
 DAEMON_OPTS="--configuration $CONFIGFILE ${DAEMON_OPTS}"
-
-# fix gdal unresolved symbols
-# set here to avoid segfault on supervisord import
-LD_PRELOAD="${CONDA_ENVS_DIR}/geoimagenet-ml/lib/libgdal.so"
 
 # Exit if the package is not installed
 [[ -x "${SUPERVISORD}" ]] || exit 0

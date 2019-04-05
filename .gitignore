@@ -66,6 +66,8 @@ instance/
 
 ### Sphinx documentation
 docs/_build/
+docs/modules.rst
+docs/geoimagenet_ml*.rst
 
 ### PyBuilder
 target/
@@ -112,7 +114,6 @@ env.local
 .mypy_cache/
 
 ### project api, model checkpoints & data
-/docs/
 /geoimagenet_ml.egg-info/
 /build/
 /dist/
@@ -123,6 +124,4 @@ env.local
 /models/
 /output/
 /saved/
-/src/docs/_build/
-/src/docs/src*.rst
 /docker-compose.override.yml

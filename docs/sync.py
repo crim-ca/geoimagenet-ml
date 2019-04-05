@@ -12,7 +12,7 @@ import sys
 import os
 SRC_ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, SRC_ROOT)
-import __meta__    # noqa
+from geoimagenet_ml import __meta__    # noqa
 
 
 DOC_DESTINATION = None  # TODO: Edit this
