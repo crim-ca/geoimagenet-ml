@@ -3,9 +3,9 @@
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from geoimagenet_ml.constants import SORT, ORDER, OPERATION                                             # noqa: F401
+    from geoimagenet_ml.status import STATUS, CATEGORY                                                      # noqa: F401
     from geoimagenet_ml.store.datatypes import Base, Dataset, Process, Model, Job, Action                   # noqa: F401
-    from geoimagenet_ml.processes.status import STATUS, CATEGORY                                            # noqa: F401
-    from geoimagenet_ml.store.constants import SORT, ORDER, OPERATION                                       # noqa: F401
     from geoimagenet_ml.typedefs import OptionType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
     from datetime import datetime                                                                           # noqa: F401
     from pyramid.request import Request                                                                     # noqa: F401
@@ -249,6 +249,9 @@ class JobStore(object):
                   ):                # type: (...) -> Tuple[List[Job], int]
         """
         Finds all jobs in database matching search filters.
+
+        Returns a tuple of filtered ``items`` and their ``count``, where ``items`` can have paging and be limited
+        to a maximum per page, but ``count`` always indicate the `total` number of matches.
         """
         raise NotImplementedError
 
@@ -269,9 +272,8 @@ class ActionStore(object):
         """Stores a new action in storage."""
         raise NotImplementedError
 
-    # noinspection PyShadowingBuiltins
     def find_actions(self,
-                     type=None,         # type: Optional[AnyStr]
+                     item_type=None,    # type: Optional[Any]
                      item=None,         # type: Optional[UUID]
                      operation=None,    # type: Optional[OPERATION]
                      user=None,         # type: Optional[int]
@@ -279,8 +281,13 @@ class ActionStore(object):
                      end=None,          # type: Optional[datetime]
                      sort=None,         # type: Optional[SORT]
                      order=None,        # type: Optional[ORDER]
-                     page=0,            # type: int
-                     limit=10,          # type: int
-                     ):                 # type: (...) -> List[Action]
-        """Get all matching actions from storage."""
+                     page=None,         # type: Optional[int]
+                     limit=None,        # type: Optional[int]
+                     ):                 # type: (...) -> Tuple[List[Action], int]
+        """
+        Get all matching actions from storage.
+
+        Returns a tuple of filtered ``items`` and their ``count``, where ``items`` can have paging and be limited
+        to a maximum per page, but ``count`` always indicate the `total` number of matches.
+        """
         raise NotImplementedError

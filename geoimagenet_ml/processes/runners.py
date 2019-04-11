@@ -1,8 +1,8 @@
+from geoimagenet_ml.constants import SORT, ORDER
 from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
 from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
 from geoimagenet_ml.processes.base import ProcessBase
-from geoimagenet_ml.processes.status import map_status, STATUS
-from geoimagenet_ml.store.constants import SORT, ORDER
+from geoimagenet_ml.status import map_status, STATUS
 from abc import abstractmethod
 from pyramid.settings import asbool
 from celery.utils.log import get_task_logger

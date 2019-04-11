@@ -1,6 +1,6 @@
 from geoimagenet_ml.api import exceptions as ex, schemas as s
 from geoimagenet_ml.api.routes.datasets.utils import create_dataset, get_dataset, delete_dataset
-from geoimagenet_ml.store.constants import OPERATION
+from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.store.datatypes import Dataset
 from geoimagenet_ml.store.factories import database_factory
 from pyramid.response import FileResponse

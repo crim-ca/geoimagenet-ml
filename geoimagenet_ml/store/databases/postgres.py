@@ -5,6 +5,7 @@ from geoimagenet_ml import GEOIMAGENET_ML_API_DIR
 from geoimagenet_ml.store.databases import models
 from geoimagenet_ml.store.databases.types import POSTGRES_TYPE
 from geoimagenet_ml.store.interfaces import DatabaseInterface
+from geoimagenet_ml.utils import isclass
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm import sessionmaker, configure_mappers
 from sqlalchemy import engine_from_config
@@ -129,7 +130,7 @@ def is_database_ready(settings):
     table_names = inspector.get_table_names()
 
     for name, obj in inspect.getmembers(models):
-        if inspect.isclass(obj):
+        if isclass(obj):
             # noinspection PyBroadException
             try:
                 curr_table_name = obj.__tablename__

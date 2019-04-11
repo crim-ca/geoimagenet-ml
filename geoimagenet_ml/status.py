@@ -1,3 +1,4 @@
+from geoimagenet_ml.constants import ExtendedEnumMeta
 from enum import Enum
 # noinspection PyProtectedMember
 from pywps.response.status import _WPS_STATUS, WPS_STATUS
@@ -5,10 +6,9 @@ from typing import TYPE_CHECKING
 import six
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import AnyStatus  # noqa: F401
-    from typing import AnyStr, Union  # noqa: F401
 
 
-class COMPLIANT(Enum):
+class COMPLIANT(six.with_metaclass(ExtendedEnumMeta, Enum)):
     LITERAL = "STATUS_COMPLIANT_LITERAL"
     OGC = "STATUS_COMPLIANT_OGC"
     PYWPS = "STATUS_COMPLIANT_PYWPS"
@@ -16,13 +16,13 @@ class COMPLIANT(Enum):
     CELERY = "STATUS_COMPLIANT_CELERY"
 
 
-class CATEGORY(Enum):
+class CATEGORY(six.with_metaclass(ExtendedEnumMeta, Enum)):
     FINISHED = "STATUS_CATEGORY_FINISHED"
     RUNNING = "STATUS_CATEGORY_RUNNING"
     FAILED = "STATUS_CATEGORY_FAILED"
 
 
-class STATUS(Enum):
+class STATUS(six.with_metaclass(ExtendedEnumMeta, Enum)):
     ACCEPTED = "accepted"
     STARTED = "started"
     PAUSED = "paused"
@@ -39,6 +39,7 @@ class STATUS(Enum):
     UNKNOWN = "unknown"  # don't include in any below collections
 
 
+# noinspection LongLine
 job_status_categories = {
     # note:
     #   OGC compliant:  [Accepted, Running, Succeeded, Failed]

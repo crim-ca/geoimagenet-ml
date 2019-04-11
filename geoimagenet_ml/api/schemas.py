@@ -2,8 +2,9 @@
 # coding: utf-8
 
 from geoimagenet_ml import __meta__
-from geoimagenet_ml.processes.status import STATUS
+from geoimagenet_ml.status import STATUS
 from cornice.service import Service
+from colander import drop, Boolean, DateTime, Integer, MappingSchema, OneOf, SchemaNode, SequenceSchema, String, Time
 from pyramid.httpexceptions import (
     HTTPOk,
     HTTPCreated,
@@ -16,7 +17,6 @@ from pyramid.httpexceptions import (
     HTTPInternalServerError,
 )
 import six
-import colander
 
 
 TitleAPI = "GeoImageNet ML REST API"
@@ -40,18 +40,20 @@ class CorniceSwaggerPredicate(object):
         return self.schema
 
 
+URL = "url"
+
 # Tags
-APITag = 'API'
-DatasetsTag = 'Datasets'
-ModelsTag = 'Models'
-ProcessesTag = 'Processes'
+APITag = "API"
+DatasetsTag = "Datasets"
+ModelsTag = "Models"
+ProcessesTag = "Processes"
 
 
 # Generic Endpoint parts
-dataset_uuid = colander.SchemaNode(colander.String(), description="Dataset UUID.", title="Dataset UUID.")
-model_uuid = colander.SchemaNode(colander.String(), description="Model UUID.", title="Model UUID.")
-process_uuid = colander.SchemaNode(colander.String(), description="Process UUID.", title="Process UUID or Identifier.")
-job_uuid = colander.SchemaNode(colander.String(), description="Job UUID.", title="Job UUID.")
+dataset_uuid = SchemaNode(String(), description="Dataset UUID.", title="Dataset UUID.")
+model_uuid = SchemaNode(String(), description="Model UUID.", title="Model UUID.")
+process_uuid = SchemaNode(String(), description="Process UUID.", title="Process UUID or Identifier.")
+job_uuid = SchemaNode(String(), description="Job UUID.", title="Job UUID.")
 
 # Route variables
 DatasetVariableUUID = "{dataset_uuid}"
@@ -93,6 +95,9 @@ ModelAPI = Service(
 ModelDownloadAPI = Service(
     path=BaseAPI.path + "models/" + ModelVariableUUID + "/download",
     name="ModelDownload")
+ModelStatisticsAPI = Service(
+    path=BaseAPI.path + "models/" + ModelVariableUUID + "/statistics",
+    name="ModelStatistics")
 ProcessesAPI = Service(
     path=BaseAPI.path + "processes",
     name="Processes")
@@ -150,43 +155,43 @@ def get_security(service, method):
     return SecurityAdministratorAPI if "security" not in args else args["security"]
 
 
-class HeaderSchemaJSON(colander.MappingSchema):
-    content_type = colander.SchemaNode(colander.String(), example=ContentTypeJSON, default=ContentTypeJSON)
+class HeaderSchemaJSON(MappingSchema):
+    content_type = SchemaNode(String(), example=ContentTypeJSON, default=ContentTypeJSON)
     content_type.name = "Content-Type"
 
 
-class HeaderSchemaHTML(colander.MappingSchema):
-    content_type = colander.SchemaNode(colander.String(), example=ContentTypeHTML, default=ContentTypeHTML)
+class HeaderSchemaHTML(MappingSchema):
+    content_type = SchemaNode(String(), example=ContentTypeHTML, default=ContentTypeHTML)
     content_type.name = "Content-Type"
 
 
-class AcceptHeader(colander.MappingSchema):
-    Accept = colander.SchemaNode(colander.String(), missing=colander.drop, default=ContentTypeJSON,
-                                 validator=colander.OneOf([ContentTypeJSON, ContentTypeHTML]))
+class AcceptHeader(MappingSchema):
+    Accept = SchemaNode(String(), missing=drop, default=ContentTypeJSON,
+                        validator=OneOf([ContentTypeJSON, ContentTypeHTML]))
 
 
-class BaseRequestSchema(colander.MappingSchema):
+class BaseRequestSchema(MappingSchema):
     header = AcceptHeader()
 
 
-class BaseMetaResponseSchema(colander.MappingSchema):
-    code = colander.SchemaNode(
-        colander.Integer(), description="HTTP response code.", example=HTTPOk.code)
-    type = colander.SchemaNode(
-        colander.String(), description="Response content type.", example="application/json")
-    detail = colander.SchemaNode(
-        colander.String(), description="Response status message.")
-    route = colander.SchemaNode(
-        colander.String(), description="Request route called that generated the response.", missing=colander.drop)
-    uri = colander.SchemaNode(
-        colander.String(), description="Request URI that generated the response.", missing=colander.drop)
-    method = colander.SchemaNode(
-        colander.String(), description="Request method that generated the response.", missing=colander.drop)
+class BaseMetaResponseSchema(MappingSchema):
+    code = SchemaNode(
+        Integer(), description="HTTP response code.", example=HTTPOk.code)
+    type = SchemaNode(
+        String(), description="Response content type.", example="application/json")
+    detail = SchemaNode(
+        String(), description="Response status message.")
+    route = SchemaNode(
+        String(), description="Request route called that generated the response.", missing=drop)
+    uri = SchemaNode(
+        String(), description="Request URI that generated the response.", missing=drop)
+    method = SchemaNode(
+        String(), description="Request method that generated the response.", missing=drop)
 
 
-class BaseBodyResponseSchema(colander.MappingSchema):
+class BaseBodyResponseSchema(MappingSchema):
     meta = BaseMetaResponseSchema()
-    data = colander.MappingSchema(default={})
+    data = MappingSchema(default={})
 
     __code = None
     __desc = None
@@ -209,19 +214,19 @@ class BaseBodyResponseSchema(colander.MappingSchema):
                         meta_node.example = self.__desc
 
 
-class BaseResponseSchema(colander.MappingSchema):
+class BaseResponseSchema(MappingSchema):
     description = "UNDEFINED"
     header = AcceptHeader()
     body = BaseBodyResponseSchema(code=HTTPOk.code, description=description)
 
 
 class ErrorBodyResponseSchema(BaseBodyResponseSchema):
-    data = colander.MappingSchema()
+    data = MappingSchema()
 
 
-class UnauthorizedDataResponseSchema(colander.MappingSchema):
-    route_name = colander.SchemaNode(colander.String(), description="Specified route")
-    request_url = colander.SchemaNode(colander.String(), description="Specified url")
+class UnauthorizedDataResponseSchema(MappingSchema):
+    route_name = SchemaNode(String(), description="Specified route")
+    request_url = SchemaNode(String(), description="Specified url")
 
 
 class UnauthorizedResponseSchema(BaseResponseSchema):
@@ -239,18 +244,16 @@ class UnprocessableEntityResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPUnprocessableEntity.code, description=description)
 
 
-class TracebackListSchema(colander.SequenceSchema):
-    item = colander.SchemaNode(colander.String(), missing=colander.drop,
-                               description="Summary line of the traceback.")
+class TracebackListSchema(SequenceSchema):
+    traceback_item = SchemaNode(String(), missing=drop, description="Summary line of the traceback.")
 
 
-class InternalServerErrorDataSchema(colander.MappingSchema):
-    exception = colander.SchemaNode(colander.String(), missing=colander.drop,
-                                    description="Exception message description.")
-    traceback = TracebackListSchema(default=[], missing=colander.drop,
+class InternalServerErrorDataSchema(MappingSchema):
+    exception = SchemaNode(String(), missing=drop, description="Exception message description.")
+    traceback = TracebackListSchema(default=[], missing=drop,
                                     description="Exception stack trace caused by the request.")
-    caller = colander.MappingSchema(default={}, missing=colander.drop,
-                                    description="Details of the calling request generating this error.")
+    caller = MappingSchema(default={}, missing=drop,
+                           description="Details of the calling request generating this error.")
 
 
 class InternalServerErrorBodySchema(ErrorBodyResponseSchema):
@@ -266,18 +269,22 @@ class InternalServerErrorResponseSchema(BaseResponseSchema):
     body = InternalServerErrorBodySchema(description=description)
 
 
-class DatasetBodyResponseSchema(colander.MappingSchema):
-    uuid = colander.SchemaNode(colander.String(), description="Dataset uuid.", title="UUID")
-    name = colander.SchemaNode(colander.String(), description="Dataset name.")
-    path = colander.SchemaNode(colander.String(), description="Dataset path.")
+class DatasetSummaryBodyResponseSchema(MappingSchema):
+    uuid = SchemaNode(String(), description="Dataset uuid.", title="UUID")
+    name = SchemaNode(String(), description="Dataset name.")
 
 
-class DatasetNamesListSchema(colander.SequenceSchema):
-    item = DatasetBodyResponseSchema()
+class DatasetDetailBodyResponseSchema(DatasetSummaryBodyResponseSchema):
+    path = SchemaNode(String(), description="Dataset path.")
+    created = SchemaNode(DateTime(), description="Dataset creation time.")
 
 
-class Datasets_GET_DataResponseSchema(colander.MappingSchema):
-    datasets = DatasetNamesListSchema()
+class DatasetSummaryListSchema(SequenceSchema):
+    dataset_summary = DatasetSummaryBodyResponseSchema()
+
+
+class Datasets_GET_DataResponseSchema(MappingSchema):
+    datasets = DatasetSummaryListSchema()
 
 
 class Datasets_GET_BodyResponseSchema(BaseBodyResponseSchema):
@@ -294,16 +301,16 @@ class Datasets_GET_ForbiddenResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
-class DatasetDataResponseSchema(colander.MappingSchema):
-    dataset = DatasetBodyResponseSchema()
+class DatasetDataResponseSchema(MappingSchema):
+    dataset = DatasetDetailBodyResponseSchema()
 
 
-class Datasets_POST_BodyRequestSchema(colander.MappingSchema):
-    dataset_name = colander.SchemaNode(colander.String(), description="Name of the new dataset.")
-    dataset_path = colander.SchemaNode(colander.String(), description="Path of the new dataset.")
+class Datasets_POST_BodyRequestSchema(MappingSchema):
+    dataset_name = SchemaNode(String(), description="Name of the new dataset.")
+    dataset_path = SchemaNode(String(), description="Path of the new dataset.")
 
 
-class Datasets_POST_RequestSchema(colander.MappingSchema):
+class Datasets_POST_RequestSchema(MappingSchema):
     header = HeaderSchemaJSON()
     body = Datasets_POST_BodyRequestSchema()
 
@@ -366,7 +373,7 @@ class Dataset_GET_NotFoundResponseSchema(BaseResponseSchema):
 
 
 class Dataset_DELETE_BodyResponseSchema(BaseBodyResponseSchema):
-    data = colander.MappingSchema()
+    data = MappingSchema()
 
 
 class Dataset_DELETE_OkResponseSchema(BaseResponseSchema):
@@ -384,11 +391,11 @@ class Dataset_DELETE_NotFoundResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
-class DatasetLatest_GET_BodyRequestSchema(colander.MappingSchema):
-    dataset_name = colander.SchemaNode(colander.String(), missing=colander.drop,
-                                       description="Filter search only to datasets matching the specified name.")
-    dataset_type = colander.SchemaNode(colander.String(), missing=colander.drop,
-                                       description="Filter search only to datasets matching the specified type.")
+class DatasetLatest_GET_BodyRequestSchema(MappingSchema):
+    dataset_name = SchemaNode(String(), missing=drop,
+                              description="Filter search only to datasets matching the specified name.")
+    dataset_type = SchemaNode(String(), missing=drop,
+                              description="Filter search only to datasets matching the specified type.")
 
 
 class DatasetLatestEndpoint(BaseRequestSchema):
@@ -409,18 +416,22 @@ class DatasetDownload_GET_NotFoundResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
-class ModelBodyResponseSchema(colander.MappingSchema):
-    uuid = colander.SchemaNode(colander.String(), description="Model uuid.", title="UUID")
-    name = colander.SchemaNode(colander.String(), description="Model name.")
-    path = colander.SchemaNode(colander.String(), description="Model path.")
+class ModelSummaryBodyResponseSchema(MappingSchema):
+    uuid = SchemaNode(String(), description="Model uuid.", title="UUID")
+    name = SchemaNode(String(), description="Model name.")
 
 
-class ModelNamesListSchema(colander.SequenceSchema):
-    item = ModelBodyResponseSchema()
+class ModelDetailBodyResponseSchema(ModelSummaryBodyResponseSchema):
+    path = SchemaNode(String(), description="Model path.")
+    created = SchemaNode(DateTime(), description="Model creation time.")
 
 
-class Models_GET_DataResponseSchema(colander.MappingSchema):
-    models = ModelNamesListSchema()
+class ModelSummaryListSchema(SequenceSchema):
+    model_summary = ModelSummaryBodyResponseSchema()
+
+
+class Models_GET_DataResponseSchema(MappingSchema):
+    models = ModelSummaryListSchema()
 
 
 class Models_GET_BodyResponseSchema(BaseBodyResponseSchema):
@@ -437,16 +448,18 @@ class Models_GET_ForbiddenResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
-class ModelDataResponseSchema(colander.MappingSchema):
-    model = ModelBodyResponseSchema()
+class ModelDataResponseSchema(MappingSchema):
+    model = ModelDetailBodyResponseSchema()
+    owner = SchemaNode(Integer(), description="User ID of the model owner (uploader or creator).")
+    downloads = SchemaNode(Integer(), description="Number of time this model was downloaded.")
 
 
-class Models_POST_BodyRequestSchema(colander.MappingSchema):
-    model_name = colander.SchemaNode(colander.String(), description="Name of the new model.")
-    model_path = colander.SchemaNode(colander.String(), description="Path of the new model.")
+class Models_POST_BodyRequestSchema(MappingSchema):
+    model_name = SchemaNode(String(), description="Name of the new model.")
+    model_path = SchemaNode(String(), description="Path of the new model.")
 
 
-class Models_POST_RequestSchema(colander.MappingSchema):
+class Models_POST_RequestSchema(MappingSchema):
     header = HeaderSchemaJSON()
     body = Models_POST_BodyRequestSchema()
 
@@ -522,22 +535,77 @@ class ModelDownload_GET_OkResponseSchema(BaseResponseSchema):
     body = BaseBodyResponseSchema(code=HTTPOk.code, description=description)
 
 
-class ModelDownload_GET_NotFoundResponseSchema(BaseResponseSchema):
-    description = "Model download file could not be found."
-    body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
+ModelDownload_GET_NotFoundResponseSchema = Model_GET_NotFoundResponseSchema
 
 
-class ProcessBodyResponseSchema(colander.MappingSchema):
-    uuid = colander.SchemaNode(colander.String(), description="Process uuid.", title="UUID")
-    name = colander.SchemaNode(colander.String(), description="Process name.")
+class KeywordList(SequenceSchema):
+    keyword = SchemaNode(String(), mssing=drop)
 
 
-class ProcessNamesListSchema(colander.SequenceSchema):
-    item = ProcessBodyResponseSchema()
+class JsonLink(MappingSchema):
+    href = SchemaNode(String(), format=URL)
+    rel = SchemaNode(String(), missing=drop)
+    type = SchemaNode(String(), missing=drop)
+    hreflang = SchemaNode(String(), missing=drop)
+    title = SchemaNode(String(), missing=drop)
 
 
-class Processes_GET_DataResponseSchema(colander.MappingSchema):
-    processes = ProcessNamesListSchema()
+class Metadata(JsonLink):
+    role = SchemaNode(String(), format=URL, missing=drop)
+    value = SchemaNode(String(), missing=drop)
+
+
+class MetadataList(SequenceSchema):
+    metadata = Metadata(missing=drop)
+
+
+class Format(MappingSchema):
+    mimeType = SchemaNode(String())
+    schema = SchemaNode(String(), missing=drop)
+    encoding = SchemaNode(String(), missing=drop)
+
+
+class FormatList(SequenceSchema):
+    format = Format()
+
+
+class InputOutputDescription(MappingSchema):
+    id = SchemaNode(String(), description="Identifier of the item.")
+    abstract = SchemaNode(String(), description="Item abstract.", missing=drop)
+    type = SchemaNode(String(), description="Item type.", missing=drop)
+    formats = FormatList(description="Item supported formats.", missing=drop)
+    minOccurs = SchemaNode(Integer(), description="Minimum required instances of this item.", missing=drop)
+    maxOccurs = SchemaNode(Integer(), description="Maximum instances allowed of this item.", missing=drop)
+
+
+class InputOutputDescriptionList(SequenceSchema):
+    input_output = InputOutputDescription(missing=drop)
+
+
+class ProcessSummaryBodyResponseSchema(MappingSchema):
+    uuid = SchemaNode(String(), description="Process UUID.", title="UUID")
+    identifier = SchemaNode(String(), description="Process name.")
+    title = SchemaNode(String(), description="Process title.")
+    abstract = SchemaNode(String(), description="Process abstract.")
+    keywords = KeywordList()
+    metadata = MetadataList()
+    version = SchemaNode(String(), description="Process version.", missing=drop)
+    execute_endpoint = SchemaNode(String(), description="URL to launch a process execution.")
+
+
+class ProcessDetailBodyResponseSchema(ProcessSummaryBodyResponseSchema):
+    user = SchemaNode(String(), description="User UUID that launched the process.", default=None, missing=drop)
+    inputs = InputOutputDescriptionList(description="Inputs of the process.")
+    outputs = InputOutputDescriptionList(description="Outputs of the process.")
+    limit_single_job = SchemaNode(Boolean(), description="Indicator of job limitation to a single process.")
+
+
+class ProcessSummaryListSchema(SequenceSchema):
+    process = ProcessSummaryBodyResponseSchema()
+
+
+class Processes_GET_DataResponseSchema(MappingSchema):
+    processes = ProcessSummaryListSchema()
 
 
 class Processes_GET_BodyResponseSchema(BaseBodyResponseSchema):
@@ -554,17 +622,18 @@ class Processes_GET_ForbiddenResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
-class ProcessDataResponseSchema(colander.MappingSchema):
-    process = ProcessBodyResponseSchema()
+class Processes_POST_BodyRequestSchema(MappingSchema):
+    process_name = SchemaNode(String(), description="Name of the new process.")
+    process_type = SchemaNode(String(), description="Type of the new process.")
 
 
-class Processes_POST_BodyRequestSchema(colander.MappingSchema):
-    process_name = colander.SchemaNode(colander.String(), description="Name of the new process.")
-
-
-class Processes_POST_RequestSchema(colander.MappingSchema):
+class Processes_POST_RequestSchema(MappingSchema):
     header = HeaderSchemaJSON()
     body = Processes_POST_BodyRequestSchema()
+
+
+class ProcessDataResponseSchema(MappingSchema):
+    process = ProcessDetailBodyResponseSchema()
 
 
 class Processes_POST_BodyResponseSchema(BaseBodyResponseSchema):
@@ -629,31 +698,6 @@ class ProcessJobsEndpoint(BaseRequestSchema):
     job_uuid = job_uuid
 
 
-class ProcessJobs_GET_OkResponseSchema(BaseResponseSchema):
-    description = "Get process jobs successful."
-    body = Process_GET_BodyResponseSchema(code=HTTPOk.code, description=description)
-
-
-class ProcessJobs_GET_ForbiddenResponseSchema(BaseResponseSchema):
-    description = "Failed to retrieve process jobs from db."
-    body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
-
-
-class ProcessJobs_GET_NotFoundResponseSchema(BaseResponseSchema):
-    description = "Process jobs could not be found in db."
-    body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
-
-
-class InputOutput(colander.MappingSchema):
-    id = colander.SchemaNode(colander.String(), description="Identifier of the item.")
-    value = colander.SchemaNode(colander.String(), description="Value of the item.", missing=colander.drop)
-    href = colander.SchemaNode(colander.String(), description="Reference of the item.", missing=colander.drop)
-
-
-class InputOutputList(colander.SequenceSchema):
-    item = InputOutput(missing=colander.drop)
-
-
 class ProcessJobEndpoint(BaseRequestSchema):
     process_uuid = process_uuid
     job_uuid = job_uuid
@@ -667,32 +711,67 @@ class ProcessJobLatestEndpoint(BaseRequestSchema):
     process_uuid = process_uuid
 
 
-class Tags(colander.SequenceSchema):
-    tag = colander.SchemaNode(colander.String())
+class JobTagList(SequenceSchema):
+    tag = SchemaNode(String())
 
 
-class ProcessJobDataResponseSchema(colander.MappingSchema):
-    uuid = colander.SchemaNode(colander.String(), description="Job UUID.", title="UUID")
-    task = colander.SchemaNode(colander.String(), description="Job sub-task UUID.")
-    service = colander.SchemaNode(colander.String(), description="Service UUID.", default=None)
-    process = colander.SchemaNode(colander.String(), description="Process UUID.", default=None)
-    user = colander.SchemaNode(colander.String(), description="User UUID that launched the process.", default=None)
+class InputOutput(MappingSchema):
+    id = SchemaNode(String(), description="Identifier of the item.")
+    value = SchemaNode(String(), description="Value of the item.", missing=drop)
+    href = SchemaNode(String(), description="Reference of the item.", format=URL, missing=drop)
+
+
+class InputOutputList(SequenceSchema):
+    input_output = InputOutput(missing=drop)
+
+
+class ProcessJobSummaryDataResponseSchema(MappingSchema):
+    uuid = SchemaNode(String(), description="Job UUID.", title="UUID")
+    process = SchemaNode(String(), description="Process UUID.", default=None)
+
+
+class ProcessJobDetailDataResponseSchema(ProcessJobSummaryDataResponseSchema):
+    task = SchemaNode(String(), description="Job sub-task UUID.")
+    service = SchemaNode(String(), description="Service UUID.", default=None)
+    user = SchemaNode(String(), description="User UUID that launched the process.", default=None)
     inputs = InputOutputList(description="Inputs specified on job execution.")
-    status = colander.SchemaNode(colander.String(), description="Job status.",
-                                 validator=colander.OneOf(STATUS.__members__.keys()))
-    status_message = colander.SchemaNode(colander.String(), description="Job status message.")
-    status_location = colander.SchemaNode(colander.String(), description="Job status full URI.", format='url')
-    execute_async = colander.SchemaNode(colander.Boolean(), description="Asynchronous job execution specifier.")
-    is_workflow = colander.SchemaNode(colander.Boolean(), description="Workflow job execution specifier.")
-    created = colander.SchemaNode(colander.DateTime(), description="Job creation datetime (submission, not execution).")
-    finished = colander.SchemaNode(colander.DateTime(), description="Job completion datetime (success or failure).")
-    duration = colander.SchemaNode(colander.Time(), description="Job total duration between create/finished.")
-    progress = colander.SchemaNode(colander.Integer(), description="Job percentage completion progress.")
-    tags = Tags(description="Job execution tags.")
+    status = SchemaNode(String(), description="Job status.", validator=OneOf(STATUS.values()))
+    status_message = SchemaNode(String(), description="Job status message.")
+    status_location = SchemaNode(String(), description="Job status full URI.", format='url')
+    execute_async = SchemaNode(Boolean(), description="Asynchronous job execution specifier.")
+    is_workflow = SchemaNode(Boolean(), description="Workflow job execution specifier.")
+    created = SchemaNode(DateTime(), description="Job creation datetime (submission, not execution).")
+    finished = SchemaNode(DateTime(), description="Job completion datetime (success or failure).")
+    duration = SchemaNode(Time(), description="Job total duration between create/finished.")
+    progress = SchemaNode(Integer(), description="Job percentage completion progress.")
+    tags = JobTagList(description="Job execution tags.")
+
+
+class ProcessJobSummaryListDataResponseSchema(SequenceSchema):
+    job_summary = ProcessJobSummaryDataResponseSchema()
+
+
+class ProcessJobs_GET_BodyResponseSchema(BaseBodyResponseSchema):
+    data = ProcessJobSummaryListDataResponseSchema()
+
+
+class ProcessJobs_GET_OkResponseSchema(BaseResponseSchema):
+    description = "Get process jobs successful."
+    body = ProcessJobs_GET_BodyResponseSchema(code=HTTPOk.code, description=description)
+
+
+class ProcessJobs_GET_ForbiddenResponseSchema(BaseResponseSchema):
+    description = "Failed to retrieve process jobs from db."
+    body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
+
+
+class ProcessJobs_GET_NotFoundResponseSchema(BaseResponseSchema):
+    description = "Process jobs could not be found in db."
+    body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
 class ProcessJob_GET_BodyResponseSchema(BaseBodyResponseSchema):
-    data = ProcessJobDataResponseSchema()
+    data = ProcessJobDetailDataResponseSchema()
 
 
 class ProcessJob_GET_OkResponseSchema(BaseResponseSchema):
@@ -720,7 +799,7 @@ class ProcessJobResultEndpoint(BaseRequestSchema):
     job_uuid = job_uuid
 
 
-class ProcessJobResultDataResponseSchema(colander.MappingSchema):
+class ProcessJobResultDataResponseSchema(MappingSchema):
     outputs = InputOutputList()
 
 
@@ -738,11 +817,11 @@ class ProcessJobLogsEndpoint(BaseRequestSchema):
     job_uuid = job_uuid
 
 
-class Logs(colander.SequenceSchema):
-    item = colander.SchemaNode(colander.String())
+class Logs(SequenceSchema):
+    log_entry = SchemaNode(String())
 
 
-class ProcessJobLogsDataResponseSchema(colander.MappingSchema):
+class ProcessJobLogsDataResponseSchema(MappingSchema):
     logs = Logs()
 
 
@@ -760,19 +839,19 @@ class ProcessJobExceptionsEndpoint(BaseRequestSchema):
     job_uuid = job_uuid
 
 
-class ExceptionFrameDetail(colander.MappingSchema):
-    func_name = colander.SchemaNode(colander.String(), description="Name of the exception frame function.")
-    line_detail = colander.SchemaNode(colander.String(), description="Name of the exception frame function.")
-    line_number = colander.SchemaNode(colander.String(), description="Name of the exception frame function.")
-    module_name = colander.SchemaNode(colander.String(), description="Name of the exception frame module.")
-    module_path = colander.SchemaNode(colander.String(), description="Path of the exception frame module.")
+class ExceptionFrameDetail(MappingSchema):
+    func_name = SchemaNode(String(), description="Name of the exception frame function.")
+    line_detail = SchemaNode(String(), description="Name of the exception frame function.")
+    line_number = SchemaNode(String(), description="Name of the exception frame function.")
+    module_name = SchemaNode(String(), description="Name of the exception frame module.")
+    module_path = SchemaNode(String(), description="Path of the exception frame module.")
 
 
-class Exceptions(colander.SequenceSchema):
-    item = ExceptionFrameDetail()
+class Exceptions(SequenceSchema):
+    exception_frame = ExceptionFrameDetail()
 
 
-class ProcessJobExceptionsDataResponseSchema(colander.MappingSchema):
+class ProcessJobExceptionsDataResponseSchema(MappingSchema):
     exceptions = Exceptions()
 
 
@@ -785,11 +864,11 @@ class ProcessJobExceptions_GET_OkResponseSchema(BaseResponseSchema):
     body = ProcessJobExceptions_GET_BodyResponseSchema(code=HTTPOk.code, description=description)
 
 
-class ProcessJobsExecuteBodySchema(colander.MappingSchema):
-    inputs = InputOutputList(missing=colander.drop)
-    outputs = InputOutputList(missing=colander.drop)
-    # mode = SchemaNode(String(), validator=colander.OneOf(list(execute_mode_options)))
-    # response = SchemaNode(String(), validator=colander.OneOf(list(execute_response_options)))
+class ProcessJobsExecuteBodySchema(MappingSchema):
+    inputs = InputOutputList(missing=drop)
+    outputs = InputOutputList(missing=drop)
+    # mode = SchemaNode(String(), validator=OneOf(list(execute_mode_options)))
+    # response = SchemaNode(String(), validator=OneOf(list(execute_response_options)))
 
 
 class ProcessJobs_POST_RequestSchema(BaseRequestSchema):
@@ -818,14 +897,14 @@ class ProcessJobs_POST_NotFoundResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
 
 
-class Base_GET_DataResponseSchema(colander.MappingSchema):
-    docs = colander.SchemaNode(colander.String(), description="Information about API documentation.")
-    title = colander.SchemaNode(colander.String(), description="API package title.")
-    description = colander.SchemaNode(colander.String(), description="API package description.")
-    version = colander.SchemaNode(colander.String(), description="API version string")
-    url = colander.SchemaNode(colander.String(), description="API package source code url.")
-    author = colander.SchemaNode(colander.String(), description="API package author.")
-    email = colander.SchemaNode(colander.String(), description="API package email.")
+class Base_GET_DataResponseSchema(MappingSchema):
+    docs = SchemaNode(String(), description="Information about API documentation.")
+    title = SchemaNode(String(), description="API package title.")
+    description = SchemaNode(String(), description="API package description.")
+    version = SchemaNode(String(), description="API version string")
+    url = SchemaNode(String(), description="API package source code url.")
+    author = SchemaNode(String(), description="API package author.")
+    email = SchemaNode(String(), description="API package email.")
 
 
 class Base_GET_BodyResponseSchema(BaseBodyResponseSchema):
@@ -837,28 +916,27 @@ class Base_GET_OkResponseSchema(BaseResponseSchema):
     body = Base_GET_BodyResponseSchema(code=HTTPOk.code, description=description)
 
 
-class SwaggerJSON_GET_OkResponseSchema(colander.MappingSchema):
+class SwaggerJSON_GET_OkResponseSchema(MappingSchema):
     description = SwaggerJSON.description
 
 
-class SwaggerAPI_GET_OkResponseSchema(colander.MappingSchema):
+class SwaggerAPI_GET_OkResponseSchema(MappingSchema):
     description = "{} (this page)".format(SwaggerAPI.description)
 
 
-class Versions_GET_VersionsResponseSchema(colander.MappingSchema):
-    name = colander.SchemaNode(colander.String(), description="Version name identifier.", example="api")
-    version = colander.SchemaNode(colander.String(), description="Version string.",
-                                  example=__meta__.__version__)
-    type = colander.SchemaNode(colander.String(), description="Other version details.", missing=colander.drop)
+class Versions_GET_VersionsResponseSchema(MappingSchema):
+    name = SchemaNode(String(), description="Version name identifier.", example="api")
+    version = SchemaNode(String(), description="Version string.", example=__meta__.__version__)
+    type = SchemaNode(String(), description="Other version details.", missing=drop)
 
 
-class Versions_GET_VersionListResponseSchema(colander.SequenceSchema):
+class Versions_GET_VersionListResponseSchema(SequenceSchema):
     version = Versions_GET_VersionsResponseSchema()
 
 
-class Versions_GET_DataResponseSchema(colander.MappingSchema):
+class Versions_GET_DataResponseSchema(MappingSchema):
     versions = Versions_GET_VersionListResponseSchema()
-    db_type = colander.SchemaNode(colander.String(), description="Database type string.", exemple="mongodb")
+    db_type = SchemaNode(String(), description="Database type string.", exemple="mongodb")
 
 
 class Versions_GET_BodyResponseSchema(BaseBodyResponseSchema):

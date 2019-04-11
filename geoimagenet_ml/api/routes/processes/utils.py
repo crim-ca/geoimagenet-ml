@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
+from geoimagenet_ml.constants import SORT, OPERATION
 from geoimagenet_ml.store import exceptions as exc
 from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
-from geoimagenet_ml.store.constants import SORT, OPERATION
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
-from geoimagenet_ml.processes.status import map_status, STATUS
+from geoimagenet_ml.status import map_status, STATUS
 from geoimagenet_ml.utils import get_base_url, is_uuid
 from pyramid.httpexceptions import (
     HTTPCreated,

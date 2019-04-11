@@ -2,8 +2,8 @@
 # coding: utf-8
 from geoimagenet_ml.api import exceptions as ex, schemas as s
 from geoimagenet_ml.api.routes.processes.utils import create_process, get_process, get_job, create_process_job
+from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.utils import get_any_id, get_any_value, has_raw_value
-from geoimagenet_ml.store.constants import OPERATION
 from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from pyramid.httpexceptions import (

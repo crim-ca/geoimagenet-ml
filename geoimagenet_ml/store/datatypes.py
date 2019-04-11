@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.utils import (
     now,
     localize_datetime,
@@ -13,10 +14,10 @@ from geoimagenet_ml.utils import (
     get_error_fmt,
     fully_qualified_name,
     is_uuid,
+    isclass,
 )
-from geoimagenet_ml.processes.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
+from geoimagenet_ml.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
-from geoimagenet_ml.store.constants import OPERATION
 from geoimagenet_ml.store.exceptions import ModelLoadingError
 from geoimagenet_ml.store.exceptions import ProcessInstanceError
 from geoimagenet_ml.ml.impl import load_model
@@ -27,7 +28,6 @@ from dateutil.parser import parse
 from datetime import datetime       # noqa: F401
 from zipfile import ZipFile
 import json
-import inspect
 import boltons.tbutils
 import logging
 import shutil
@@ -133,7 +133,22 @@ class Base(dict):
         self["created"] = localize_datetime(dt)
 
 
-class Dataset(Base):
+class WithUser(dict):
+    """Adds properties ``user`` to corresponding class."""
+    @property
+    def user(self):
+        # type: () -> Optional[int]
+        return self.get("user", None)
+
+    @user.setter
+    def user(self, user):
+        # type: (Optional[int]) -> None
+        if not isinstance(user, int) or user is None:
+            raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
+        self["user"] = user
+
+
+class Dataset(Base, WithUser):
     """
     Dictionary that contains a dataset description for db storage.
     It always has keys ``name``, ``path``, ``type``, ``data`` and ``files``.
@@ -300,6 +315,7 @@ class Dataset(Base):
         # type: () -> JSON
         return {
             "uuid": self.uuid,
+            "user": self.user,
             "name": self.name,
             "path": self.path,
             "type": self.type,
@@ -332,7 +348,7 @@ class Dataset(Base):
         }
 
 
-class Model(Base):
+class Model(Base, WithUser):
     """
     Dictionary that contains a model description for db storage.
     It always has ``name`` and ``path`` keys.
@@ -392,6 +408,7 @@ class Model(Base):
         # type: () -> OptionType
         return {
             "uuid": self.uuid,
+            "user": self.user,
             "name": self.name,
             "path": self.path,
             "file": self.file,
@@ -415,7 +432,7 @@ class Model(Base):
         }
 
 
-class Process(Base):
+class Process(Base, WithUser):
     """
     Dictionary that contains a process description for db storage.
     It always has ``uuid`` and ``identifier`` keys.
@@ -489,23 +506,10 @@ class Process(Base):
         _check_io_format(outputs)
         self["outputs"] = outputs
 
-    # noinspection PyPep8Naming
     @property
-    def jobControlOptions(self):
+    def execute_endpoint(self):
         # type: () -> AnyStr
-        return self.get("jobControlOptions")
-
-    # noinspection PyPep8Naming
-    @property
-    def outputTransmission(self):
-        # type: () -> AnyStr
-        return self.get("outputTransmission")
-
-    # noinspection PyPep8Naming
-    @property
-    def executeEndpoint(self):
-        # type: () -> AnyStr
-        return self.get("executeEndpoint")
+        return self.get("execute_endpoint")
 
     @property
     def package(self):
@@ -522,6 +526,7 @@ class Process(Base):
         # type: () -> OptionType
         return {
             "uuid": self.uuid,
+            "user": self.user,
             "identifier": self.identifier,
             "title": self.title,
             "abstract": self.abstract,
@@ -530,9 +535,7 @@ class Process(Base):
             "version": self.version,
             "inputs": self.inputs,
             "outputs": self.outputs,
-            "jobControlOptions": self.jobControlOptions,
-            "outputTransmission": self.outputTransmission,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
             "type": self.type,
             "package": self.package,      # deployment specification (json body)
@@ -567,9 +570,7 @@ class Process(Base):
             "version": self.version,
             "inputs": self.inputs,
             "outputs": self.outputs,
-            "jobControlOptions": self.jobControlOptions,
-            "outputTransmission": self.outputTransmission,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
         }
 
@@ -583,8 +584,7 @@ class Process(Base):
             "keywords": self.keywords,
             "metadata": self.metadata,
             "version": self.version,
-            "jobControlOptions": self.jobControlOptions,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
         }
 
     def wps(self):
@@ -598,7 +598,7 @@ class Process(Base):
         return process_mapping[process_key](**kwargs)
 
 
-class Job(Base):
+class Job(Base, WithUser):
     """
     Dictionary that contains a job description for db storage.
     It always has ``uuid`` and ``process`` keys.
@@ -707,18 +707,6 @@ class Job(Base):
 
     # allows to correctly update list by ref using 'job.inputs.extend()'
     inputs = property(_get_inputs, _set_inputs)
-
-    @property
-    def user(self):
-        # type: () -> Optional[int]
-        return self.get("user", None)
-
-    @user.setter
-    def user(self, user):
-        # type: (Optional[int]) -> None
-        if not isinstance(user, int) or user is None:
-            raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
-        self["user"] = user
 
     @property
     def status(self):
@@ -993,7 +981,7 @@ class Action(Base):
 
     @staticmethod
     def _is_action_type(_type):
-        return ((inspect.isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
+        return ((isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
                 (isinstance(_type, Base) and type(_type) not in [Base, Action]))
 
     @staticmethod
@@ -1019,7 +1007,7 @@ class Action(Base):
         if not self._is_action_type(_type):
             raise TypeError("Class or instance derived from 'Base' required.")
         # add 'item' automatically if not explicitly provided and is available
-        if inspect.isclass(_type):
+        if isclass(_type):
             self["type"] = _type
         else:
             self["type"] = type(_type)

@@ -1,5 +1,5 @@
 from geoimagenet_ml.store.exceptions import InvalidIdentifierValue
-from geoimagenet_ml.processes.status import map_status
+from geoimagenet_ml.status import map_status
 from pyramid.config import Configurator
 from pyramid.request import Request
 from pyramid.registry import Registry
@@ -154,7 +154,7 @@ def islambda(func):
 def isclass(obj):
     # type: (Any) -> bool
     """Evaluates ``obj`` for ``class`` type (ie: class definition, not an instance nor any other type)."""
-    return isinstance(obj, (type, six.class_types))
+    return isinstance(obj, six.class_types)
 
 
 def is_uuid(item, version=4):

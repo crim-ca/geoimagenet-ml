@@ -6,9 +6,11 @@ History
 0.8.0
 ---------------------
 
-* add ``Magpie`` request to store corresponding user-id to db
+* add request to store corresponding user-id to db if specified with ``MAGPIE_USER_URL``
 * add statistics and action tracking of api requests
 * fix incorrectly saved datetime as string in db
+* fix API schemas and drop unused items
+* restructure enum components used across the project
 
 0.7.1
 ---------------------

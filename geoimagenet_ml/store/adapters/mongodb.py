@@ -2,11 +2,11 @@
 Store adapters to read/write data to from/to mongodb using pymongo.
 """
 
-from geoimagenet_ml.store.constants import ORDER, SORT, OPERATION
+from geoimagenet_ml.constants import ORDER, SORT, OPERATION
 from geoimagenet_ml.store import exceptions as ex
 from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job, Action
 from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore, ActionStore
-from geoimagenet_ml.processes.status import STATUS, CATEGORY, job_status_categories, map_status
+from geoimagenet_ml.status import STATUS, CATEGORY, job_status_categories, map_status
 from geoimagenet_ml.processes.types import PROCESS_WPS
 from geoimagenet_ml.processes.runners import ProcessRunner
 from geoimagenet_ml.utils import isclass, islambda, get_sane_name, is_uuid, get_user_id
@@ -231,7 +231,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         from geoimagenet_ml.api.schemas import ProcessJobsAPI
         super(MongodbProcessStore, self).__init__(collection=collection)
         self.default_host = settings.get("geoimagenet_ml.api.url")
-        self.default_wps_endpoint_template = "{host}{path}".format(host=self.default_host, path=ProcessJobsAPI.path)
+        self.default_endpoint_template = "{host}{path}".format(host=self.default_host, path=ProcessJobsAPI.path)
         if default_processes:
             registered_processes = [process.identifier for process in self.list_processes()]
             for process in default_processes:
@@ -286,11 +286,11 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             raise ex.ProcessInstanceError("Unsupported process type '{}'.".format(type(process)))
 
         process_name = self._get_process_id(process)
-        process_exec = self.default_wps_endpoint_template.replace("{process_uuid}", new_process.uuid)
+        process_exec = self.default_endpoint_template.replace("{process_uuid}", new_process.uuid)
         try:
             new_process["identifier"] = process_name
             new_process["type"] = self._get_process_type(process)
-            new_process["executeEndpoint"] = process_exec
+            new_process["execute_endpoint"] = process_exec
             self.collection.insert_one(new_process)
         except Exception as exc:
             raise ex.ProcessRegistrationError(
@@ -510,13 +510,17 @@ class MongodbActionStore(ActionStore, MongodbStore):
             raise ex.ActionRegistrationError("Job '{}' could not be registered.".format(action.uuid))
 
     # noinspection PyShadowingBuiltins
-    def find_actions(self, type=None, item=None, operation=None, user=None, start=None, end=None, sort=None, order=None,
-                     page=0, limit=10):
+    def find_actions(self, item_type=None, item=None, operation=None, user=None, start=None, end=None,
+                     sort=None, order=None, page=None, limit=None):
         search_filters = {}
-        if type:
-            if not isinstance(type, six.string_types):
+        if item_type:
+            if isclass(item_type):
+                item_type = item_type.__name__
+            elif isclass(type(item_type)):
+                item_type = item_type.__name__
+            if not isinstance(item_type, six.string_types):
                 raise TypeError("Invalid 'type' to search for 'Action'.")
-            search_filters["type"] = type
+            search_filters["type"] = item_type
         if item:
             if not is_uuid(item):
                 raise TypeError("Invalid 'item' to search for 'Action'.")
@@ -551,5 +555,9 @@ class MongodbActionStore(ActionStore, MongodbStore):
         sort_criteria = [(sort.value, sort_order)]
         found = self.collection.find(search_filters)
         count = self.collection.count_documents(search_filters)
-        items = [Action(item) for item in list(found.skip(page * limit).limit(limit).sort(sort_criteria))]
+        if isinstance(limit, int):
+            if isinstance(page, int):
+                found = found.skip(page * limit)
+            found = found.limit(limit)
+        items = [Action(item) for item in list(found.sort(sort_criteria))]
         return items, count

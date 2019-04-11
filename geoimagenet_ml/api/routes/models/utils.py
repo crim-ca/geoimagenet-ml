@@ -11,18 +11,18 @@ from pyramid.request import Request  # noqa: F401
 
 def create_model(request):
     # type: (Request) -> Model
-    model_name = r.get_multiformat_post(request, 'model_name')
-    model_path = r.get_multiformat_post(request, 'model_path')
-    ex.verify_param(model_name, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='model_name',
+    model_name = r.get_multiformat_post(request, "model_name")
+    model_path = r.get_multiformat_post(request, "model_path")
+    ex.verify_param(model_name, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="model_name",
                     msgOnFail=s.Models_POST_BadRequestResponseSchema.description, request=request)
-    ex.verify_param(model_path, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='model_path',
+    ex.verify_param(model_path, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="model_path",
                     msgOnFail=s.Models_POST_BadRequestResponseSchema.description, request=request)
 
     is_model_loaded, _, buffer, load_exception = load_model(model_path)
     if not is_model_loaded:
         ex.raise_http(httpError=HTTPUnprocessableEntity, request=request,
                       detail=s.Models_POST_UnprocessableEntityResponseSchema.description,
-                      content={'exception': repr(load_exception)})
+                      content={"exception": repr(load_exception)})
 
     new_model = None
     try:
@@ -44,8 +44,8 @@ def create_model(request):
 
 def get_model(request):
     # type: (Request) -> Model
-    model_uuid = request.matchdict.get('model_uuid')
-    ex.verify_param(model_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='model_uuid',
+    model_uuid = request.matchdict.get("model_uuid")
+    ex.verify_param(model_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="model_uuid",
                     msgOnFail=s.Model_GET_BadRequestResponseSchema.description, request=request)
     model = None
     try:

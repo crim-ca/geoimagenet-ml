@@ -2,7 +2,7 @@
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Process as ProcessDB
-    from geoimagenet_ml.processes.status import STATUS
+    from geoimagenet_ml.status import STATUS
     from geoimagenet_ml.processes.runners import ProcessRunner
     from pyramid.config import Configurator
     from pyramid.registry import Registry
