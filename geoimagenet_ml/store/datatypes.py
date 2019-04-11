@@ -26,6 +26,7 @@ from dateutil.parser import parse
 from datetime import datetime       # noqa: F401
 from zipfile import ZipFile
 import json
+import inspect
 import boltons.tbutils
 import logging
 import shutil
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     # noinspection PyPackageRequirements
     from geoimagenet_ml.typedefs import (   # noqa: F401
         AnyStr, AnyStatus, ErrorType, LevelType, List, LoggerType, Number, Union,
-        Optional, InputType, OutputType, UUID, JSON, OptionType
+        Optional, InputType, OutputType, UUID, JSON, OptionType, Type,
     )
 
 
@@ -958,4 +959,71 @@ class Job(Base):
         return {
             "uuid": self.uuid,
             "process": self.process,
+        }
+
+
+class Action(Base):
+    """
+    Dictionary that contains an action description for db storage.
+    It always has ``uuid``, ``item`` and ``operation`` keys.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(Action, self).__init__(*args, **kwargs)
+        if "uuid" not in self:
+            raise TypeError("Action 'uuid' is required.")
+        if "item" not in self:
+            raise TypeError("Action 'item' is required.")
+        if "operation" not in self:
+            raise TypeError("Action 'operation' is required.")
+
+    @property
+    def item(self):
+        # type: () -> AnyStr
+        """Type of item affected by the action."""
+        return self["item"]
+
+    @item.setter
+    def item(self, item):
+        # type: (Union[Base, Type[Base]]) -> None
+        if not ((inspect.isclass(item) and issubclass(item, Base) and item is not Base) or
+                (isinstance(item, Base) and not type(item) is Base)):
+            raise TypeError("Class or instance derived from 'Base' required.")
+        self["item"] = (item if inspect.isclass(item) else type(item)).__name__
+
+    @property
+    def operation(self):
+        # type: () -> AnyStr
+        """Operation accomplished by the action."""
+        return self["operation"]
+
+    @operation.setter
+    def operation(self, operation):
+        # type: (AnyStr) -> None
+        if not isinstance(operation, six.string_types):
+            raise TypeError("Type 'str' required.")
+        self["operation"] = operation
+
+    @property
+    def user(self):
+        # type: () -> Optional[int]
+        """User that accomplished the action."""
+        return self.get("user", None)
+
+    @user.setter
+    def user(self, user):
+        # type: (Optional[int]) -> None
+        if not isinstance(user, int) or user is None:
+            raise TypeError("Type 'int' required.")
+        self["user"] = user
+
+    @property
+    def params(self):
+        # type: () -> JSON
+        return {
+            "uuid": self.uuid,
+            "item": self.item,
+            "user": self.user,
+            "operation": self.opeartion,
+            "created": datetime2str(self.created) if self.created else None,
         }

@@ -3,6 +3,29 @@
 History
 =======
 
+0.7.2
+---------------------
+
+* add ``Magpie`` request to store corresponding user-id to db
+* add statistics tracking of api requests
+
+0.7.1
+---------------------
+
+* add pip check on install to ensure all package requirements/dependencies are met recursively
+* fix supervisor path reference to source
+* fix db invalid index reference
+
+0.7.0
+---------------------
+
+* rebase source directory from ``src`` to ``geoimagenet_ml`` to solve installation/debug issues
+* add more validation of job inputs
+* add and fix utility make targets
+* fix gdal package and unresolved symbol error
+* fix typing and general code formatting
+* fix and complete `batch-creation` job execution
+
 0.6.x
 ---------------------
 

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     Number = Union[float, int]
     JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
-    JSON = Dict[JsonKey, Union[JsonValue, List['JSON'], Dict[JsonKey, 'JSON']]]
+    JSON = Dict[JsonKey, Union[JsonValue, List["JSON"], Dict[JsonKey, "JSON"]]]
     OptionType = Dict[AnyStr, Any]
     InputType = Dict[AnyStr, JSON]
     OutputType = Dict[AnyStr, JSON]

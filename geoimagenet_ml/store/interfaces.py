@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.processes.status import STATUS, CATEGORY
-from geoimagenet_ml.store.constants import SORT, ORDER
-from typing import TYPE_CHECKING, Any, AnyStr, List, Optional                   # noqa: F401
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job     # noqa: F401
-    from geoimagenet_ml.typedefs import OptionType, UUID, Tuple, Union          # noqa: F401
-    from pyramid.request import Request                                         # noqa: F401
-    from io import BufferedIOBase                                               # noqa: F401
+    from geoimagenet_ml.store.datatypes import Base, Dataset, Process, Model, Job, Action                   # noqa: F401
+    from geoimagenet_ml.processes.status import STATUS, CATEGORY                                            # noqa: F401
+    from geoimagenet_ml.store.constants import SORT, ORDER, OPERATION                                       # noqa: F401
+    from geoimagenet_ml.typedefs import OptionType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
+    from datetime import datetime                                                                           # noqa: F401
+    from pyramid.request import Request                                                                     # noqa: F401
+    from io import BufferedIOBase                                                                           # noqa: F401
 
 
 class DatabaseInterface(object):
@@ -251,4 +252,22 @@ class JobStore(object):
         """
         Get job for given ``uuid`` from storage.
         """
+        raise NotImplementedError
+
+
+class ActionStore(object):
+    """
+    Storage for local actions.
+    """
+    def find_actions(self,
+                     item=None,         # type: Optional[Union[Base, Type[Base]]]
+                     operation=None,    # type: Optional[OPERATION]
+                     user=None,         # type: Optional[int]
+                     start=None,        # type: Optional[datetime]
+                     end=None,          # type: Optional[datetime]
+                     sort=None,         # type: Optional[SORT]
+                     order=None,        # type: Optional[ORDER]
+                     limit=10,          # type: int
+                     ):                 # type: (...) -> List[Action]
+        """Get all matching actions from storage."""
         raise NotImplementedError
