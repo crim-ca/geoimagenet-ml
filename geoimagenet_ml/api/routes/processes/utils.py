@@ -4,7 +4,7 @@ from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store import exceptions as exc
 from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
-from geoimagenet_ml.store.constants import SORT
+from geoimagenet_ml.store.constants import SORT, OPERATION
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
 from geoimagenet_ml.processes.status import map_status, STATUS
 from geoimagenet_ml.utils import get_base_url, is_uuid
@@ -31,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def create_process(request):
-    # type: (Request) -> Process
+    # type: (Request) -> Optional[Process]
     """Creates the process based on the request after body inputs validation."""
     process_name = r.get_multiformat_post(request, "process_name")
     process_type = r.get_multiformat_post(request, "process_type")
@@ -42,12 +42,14 @@ def create_process(request):
                     msgOnFail=s.Processes_POST_BadRequestResponseSchema.description, request=request)
     if process_type is None:
         process_type = PROCESS_WPS
-    new_process = None
     try:
+        db = database_factory(request)
+        new_process = None
         tmp_process = Process(identifier=process_name, type=process_type)
-        new_process = database_factory(request.registry).processes_store.save_process(tmp_process, request=request)
+        new_process = db.processes_store.save_process(tmp_process, request=request)
         if not new_process:
             raise exc.ProcessRegistrationError
+        return new_process
     except (exc.ProcessRegistrationError, exc.ProcessInstanceError):
         ex.raise_http(httpError=HTTPForbidden, request=request,
                       detail=s.Processes_POST_ForbiddenResponseSchema.description)
@@ -57,33 +59,32 @@ def create_process(request):
     except exc.ProcessNotFoundError:
         ex.raise_http(httpError=HTTPNotFound, request=request,
                       detail=s.Processes_POST_NotFoundResponseSchema.description)
-    return new_process
 
 
 def get_process(request):
-    # type: (Request) -> Process
+    # type: (Request) -> Optional[Process]
     """Retrieves the process based on the request after body inputs validation."""
     process_uuid = request.matchdict.get('process_uuid')
     ex.verify_param(process_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='process_uuid',
                     msgOnFail=s.Process_GET_BadRequestResponseSchema.description, request=request)
     process = None
     try:
-        store = database_factory(request.registry).processes_store
+        db = database_factory(request)
         if is_uuid(process_uuid):
             LOGGER.debug("fetching process by uuid '{}'".format(process_uuid))
-            process = store.fetch_by_uuid(process_uuid)
+            process = db.processes_store.fetch_by_uuid(process_uuid)
         else:
             LOGGER.debug("fetching process by identifier '{}'".format(process_uuid))
-            process = store.fetch_by_identifier(process_uuid)
+            process = db.processes_store.fetch_by_identifier(process_uuid)
         if not process:
             raise exc.ProcessNotFoundError
+        return process
     except exc.ProcessInstanceError:
         ex.raise_http(httpError=HTTPForbidden, request=request,
                       detail=s.Process_GET_ForbiddenResponseSchema.description)
     except exc.ProcessNotFoundError:
         ex.raise_http(httpError=HTTPNotFound, request=request,
                       detail=s.Process_GET_NotFoundResponseSchema.description)
-    return process
 
 
 def get_job(request):
@@ -97,7 +98,7 @@ def get_job(request):
         if job_uuid in ["current", "latest"]:
             job = get_job_special(request, job_uuid)
         else:
-            job = database_factory(request.registry).jobs_store.fetch_by_uuid(job_uuid)
+            job = database_factory(request).jobs_store.fetch_by_uuid(job_uuid)
         if not job:
             raise exc.JobNotFoundError
     except exc.ProcessInstanceError:
@@ -112,7 +113,7 @@ def get_job(request):
 def get_job_special(request, job_type):
     # type: (Request, AnyStr) -> Optional[Job]
     """Retrieves a job based on the request using keyword specifiers input validation."""
-    jobs_store = database_factory(request.registry).jobs_store
+    jobs_store = database_factory(request).jobs_store
     proc = get_process(request)  # process required, raise if not specified
     status = map_status(STATUS.RUNNING if job_type == "current" else STATUS.SUCCESS)
     sort = SORT.FINISHED if job_type == "latest" else SORT.CREATED
@@ -177,7 +178,8 @@ def create_process_job(request, process):
     if missing_inputs:
         raise HTTPBadRequest("Missing inputs '{}' for process of type '{}'.".format(missing_inputs, process.type))
 
-    jobs_store = database_factory(request.registry).jobs_store
+    db = database_factory(request)
+    jobs_store = db.jobs_store
     job = Job(process=process.uuid, inputs=job_inputs)
     job = jobs_store.save_job(job)
     LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
@@ -192,6 +194,7 @@ def create_process_job(request, process):
         "status": job.status,
         "location": job.status_location
     }
+    db.actions_store.save_action(job, OPERATION.SUBMIT, request=request)
     return HTTPCreated(location=job.status_location, json=body_data)
 
 

@@ -16,6 +16,7 @@ from geoimagenet_ml.utils import (
 )
 from geoimagenet_ml.processes.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
+from geoimagenet_ml.store.constants import OPERATION
 from geoimagenet_ml.store.exceptions import ModelLoadingError
 from geoimagenet_ml.store.exceptions import ProcessInstanceError
 from geoimagenet_ml.ml.impl import load_model
@@ -305,13 +306,23 @@ class Dataset(Base):
             "data": self.data,
             "files": self.files,
             "status": self.status,
-            "created": datetime2str(self.created) if self.created else None,
-            "finished": datetime2str(self.finished) if self.finished else None,
+            "created": self.created,
+            "finished": self.finished,
         }
 
     def json(self):
         # type: () -> JSON
-        return self.params
+        return {
+            "uuid": self.uuid,
+            "name": self.name,
+            "path": self.path,
+            "type": self.type,
+            "data": self.data,
+            "files": self.files,
+            "status": self.status,
+            "created": datetime2str(self.created) if self.created else None,
+            "finished": datetime2str(self.finished) if self.finished else None,
+        }
 
     def summary(self):
         # type: () -> JSON
@@ -965,31 +976,44 @@ class Job(Base):
 class Action(Base):
     """
     Dictionary that contains an action description for db storage.
-    It always has ``uuid``, ``item`` and ``operation`` keys.
+    It always has ``uuid``, ``type`` and ``operation`` keys.
     """
 
     def __init__(self, *args, **kwargs):
         super(Action, self).__init__(*args, **kwargs)
         if "uuid" not in self:
             raise TypeError("Action 'uuid' is required.")
-        if "item" not in self:
-            raise TypeError("Action 'item' is required.")
+        if "type" not in self:
+            raise TypeError("Action 'type' is required.")
         if "operation" not in self:
             raise TypeError("Action 'operation' is required.")
 
     @property
-    def item(self):
+    def type(self):
         # type: () -> AnyStr
         """Type of item affected by the action."""
         return self["item"]
 
+    @type.setter
+    def type(self, _type):
+        # type: (Union[Base, Type[Base]]) -> None
+        if not ((inspect.isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
+                (isinstance(_type, Base) and type(_type) not in [Base, Action])):
+            raise TypeError("Class or instance derived from 'Base' required.")
+        self["type"] = (_type if inspect.isclass(_type) else type(_type)).__name__
+
+    @property
+    def item(self):
+        # type: () -> Optional[UUID]
+        """Reference to a specific item affected by the action."""
+        return self.get("item", None)
+
     @item.setter
     def item(self, item):
-        # type: (Union[Base, Type[Base]]) -> None
-        if not ((inspect.isclass(item) and issubclass(item, Base) and item is not Base) or
-                (isinstance(item, Base) and not type(item) is Base)):
-            raise TypeError("Class or instance derived from 'Base' required.")
-        self["item"] = (item if inspect.isclass(item) else type(item)).__name__
+        # type: (Optional[UUID]) -> None
+        if item is not None and not is_uuid(item):
+            raise TypeError("Item of type 'UUID' required.")
+        self["item"] = str(item)
 
     @property
     def operation(self):
@@ -999,10 +1023,12 @@ class Action(Base):
 
     @operation.setter
     def operation(self, operation):
-        # type: (AnyStr) -> None
-        if not isinstance(operation, six.string_types):
-            raise TypeError("Type 'str' required.")
-        self["operation"] = operation
+        # type: (Union[OPERATION, AnyStr]) -> None
+        if isinstance(operation, six.string_types):
+            operation = OPERATION.get(operation)
+        if operation not in OPERATION:
+            raise TypeError("Type 'OPERATION' required.")
+        self["operation"] = operation.value
 
     @property
     def user(self):
@@ -1018,12 +1044,41 @@ class Action(Base):
         self["user"] = user
 
     @property
+    def path(self):
+        # type: () -> Optional[AnyStr]
+        """Request path on with the action was accomplished."""
+        return self.get("path", None)
+
+    @path.setter
+    def path(self, path):
+        # type: (Optional[AnyStr]) -> None
+        if not isinstance(path, six.string_types) or path is None:
+            raise TypeError("Type 'str' required.")
+        self["path"] = path
+
+    @property
+    def method(self):
+        # type: () -> Optional[AnyStr]
+        """Request path on with the action was accomplished."""
+        return self.get("method", None)
+
+    @method.setter
+    def method(self, method):
+        # type: (Optional[AnyStr]) -> None
+        if not isinstance(method, six.string_types) or method is None:
+            raise TypeError("Type 'str' required.")
+        self["method"] = method
+
+    @property
     def params(self):
         # type: () -> JSON
         return {
             "uuid": self.uuid,
+            "type": self.type,
             "item": self.item,
             "user": self.user,
+            "path": self.path,
+            "method": self.method,
             "operation": self.opeartion,
-            "created": datetime2str(self.created) if self.created else None,
+            "created": self.created,
         }

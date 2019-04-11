@@ -99,7 +99,7 @@ def get_user_id(request):
     The ``request`` cookies have to be set to ensure a valid answer of the expected user.
     """
     url = os.getenv("MAGPIE_USER_URL")
-    if isinstance(url, six.string_types) and len(url) and url.startswith("http"):
+    if not url or (isinstance(url, six.string_types) and not len(url)) or not url.startswith("http"):
         return None
     headers = request.headers
     headers.update({"Accept": "application/json"})

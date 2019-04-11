@@ -2,16 +2,18 @@
 Store adapters to read/write data to from/to mongodb using pymongo.
 """
 
-from geoimagenet_ml.store.constants import ORDER, SORT
+from geoimagenet_ml.store.constants import ORDER, SORT, OPERATION
 from geoimagenet_ml.store import exceptions as ex
-from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job
-from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore
+from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job, Action
+from geoimagenet_ml.store.interfaces import DatasetStore, ModelStore, ProcessStore, JobStore, ActionStore
 from geoimagenet_ml.processes.status import STATUS, CATEGORY, job_status_categories, map_status
 from geoimagenet_ml.processes.types import PROCESS_WPS
 from geoimagenet_ml.processes.runners import ProcessRunner
-from geoimagenet_ml.utils import isclass, islambda, get_sane_name, is_uuid
+from geoimagenet_ml.utils import isclass, islambda, get_sane_name, is_uuid, get_user_id
+from pyramid.request import Request
 from pywps import Process as ProcessWPS
 from pymongo.errors import DuplicateKeyError
+from datetime import datetime
 import pymongo
 import shutil
 import os
@@ -19,7 +21,9 @@ import io
 import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyProcess, Callable, Dict, Union, Type  # noqa: F401
+    from geoimagenet_ml.typedefs import (  # noqa: F401
+        Any, AnyStr, AnyProcess, Callable, Dict, Optional, Union, Tuple, Type
+    )
 LOGGER = logging.getLogger(__name__)
 
 
@@ -50,7 +54,7 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
         try:
             result = self.collection.insert_one(dataset.params)
             if not result.acknowledged:
-                raise Exception("insertion not acknowledged")
+                raise Exception("Dataset insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.DatasetConflictError("Dataset '{}' conflicts with an existing dataset.".format(dataset.name))
         except Exception as exc:
@@ -171,7 +175,7 @@ class MongodbModelStore(ModelStore, MongodbStore):
                 raise ex.ModelInstanceError("Model data is expected to be a buffer or dict, got {!r}.".format(data))
             result = self.collection.insert_one(model)
             if not result.acknowledged:
-                raise Exception("insertion not acknowledged")
+                raise Exception("Model insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.ModelConflictError("Model '{}' conflicts with an existing model.".format(model.name))
         except Exception as exc:
@@ -389,7 +393,7 @@ class MongodbJobStore(JobStore, MongodbStore):
         try:
             result = self.collection.insert_one(job)
             if not result.acknowledged:
-                raise Exception("insertion not acknowledged")
+                raise Exception("Job insertion not acknowledged")
         except DuplicateKeyError:
             raise ex.JobConflictError("Job '{}' conflicts with an existing job.".format(job.uuid))
         except Exception as exc:
@@ -474,4 +478,86 @@ class MongodbJobStore(JobStore, MongodbStore):
         found = self.collection.find(search_filters)
         count = self.collection.count_documents(search_filters)
         items = [Job(item) for item in list(found.skip(page * limit).limit(limit).sort(sort_criteria))]
+        return items, count
+
+
+class MongodbActionStore(ActionStore, MongodbStore):
+    # noinspection PyUnusedLocal
+    def __init__(self, collection, settings):
+        super(MongodbActionStore, self).__init__(collection=collection)
+
+    @staticmethod
+    def _item_type_and_uuid(item):
+        # type: (Any) -> Optional[Tuple[AnyStr, Optional[AnyStr]]]
+        """Obtains the item's (type, uuid) according to what is passed."""
+        if isinstance(item, (Dataset, Model, Process, Job)):
+            return type(item).__name__, item.uuid
+        elif item in (Dataset, Model, Process, Job):
+            return item.__name__, None
+        return None
+
+    def save_action(self, item, operation, request=None):
+        item_info = self._item_type_and_uuid(item)
+        if not item_info:
+            raise ex.ActionInstanceError("Invalid 'Action' instance or class.")
+
+        action = Action(type=item_info[0], item=item_info[1], operation=operation)
+
+        # automatically add additional request details
+        if isinstance(request, Request):
+            action.user = get_user_id(request)
+            action.path = request.path
+            action.method = request.method.upper()
+
+        try:
+            result = self.collection.insert_one(action)
+            if not result.acknowledged:
+                raise Exception("Action insertion not acknowledged")
+            return Action(self.collection.find_one({"uuid": action.uuid}))
+        except DuplicateKeyError:
+            raise ex.ActionRegistrationError("Action '{}' conflicts with an existing action.".format(action.uuid))
+        except Exception as exc:
+            LOGGER.exception("Action '{}' registration generated error: [{!r}].".format(action.uuid, exc))
+            raise ex.ActionRegistrationError("Job '{}' could not be registered.".format(action.uuid))
+
+    def find_actions(self, item=None, operation=None, user=None, start=None, end=None, sort=None, order=None,
+                     page=0, limit=10):
+        search_filters = {}
+        if item:
+            item_info = self._item_type_and_uuid(item)
+            if not item_info:
+                raise ex.ActionInstanceError("Invalid 'Action' instance or class.")
+            search_filters["type"] = item_info[0]
+            search_filters["item"] = item_info[1]
+
+        if operation in OPERATION:
+            search_filters["operation"] = operation.value
+
+        if isinstance(user, int):
+            search_filters["user"] = user
+
+        if isinstance(start, datetime):
+            search_filters["created"] = {"$gte": start}
+        if isinstance(end, datetime):
+            if "created" in search_filters:
+                if start >= end:
+                    raise ValueError("Invalid start/end datetimes.")
+                search_filters["created"]["$lte"] = end
+            else:
+                search_filters["created"] = {"$lte": end}
+
+        if sort is None:
+            sort = SORT.CREATED
+        if order is None:
+            order = ORDER.DESCENDING if sort == SORT.CREATED else ORDER.ASCENDING
+        if not isinstance(sort, SORT):
+            raise ValueError("Invalid sorting method: '{}'".format(repr(sort)))
+        if not isinstance(order, ORDER):
+            raise ValueError("Invalid ordering method: '{}'".format(repr(order)))
+
+        sort_order = pymongo.DESCENDING if order == ORDER.DESCENDING else pymongo.ASCENDING
+        sort_criteria = [(sort.value, sort_order)]
+        found = self.collection.find(search_filters)
+        count = self.collection.count_documents(search_filters)
+        items = [Action(item) for item in list(found.skip(page * limit).limit(limit).sort(sort_criteria))]
         return items, count

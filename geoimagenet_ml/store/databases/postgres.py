@@ -22,12 +22,12 @@ configure_mappers()
 
 class PostgresDatabase(DatabaseInterface):
     _db_session = None
-    _registry = None
+    _settings = None
 
-    def __init__(self, registry):
-        super(PostgresDatabase, self).__init__(registry)
-        self._registry = registry
-        self._db_session = get_postgresdb_session_from_settings(registry.settings)
+    def __init__(self, settings):
+        super(PostgresDatabase, self).__init__(settings)
+        self._settings = settings
+        self._db_session = get_postgresdb_session_from_settings(settings)
 
     @property
     def datasets_store(self):
@@ -46,10 +46,10 @@ class PostgresDatabase(DatabaseInterface):
         raise NotImplementedError
 
     def is_ready(self):
-        return is_database_ready(self._registry.settings)
+        return is_database_ready(self._settings)
 
     def run_migration(self):
-        run_database_migration(self._registry.settings)
+        run_database_migration(self._settings)
 
     def rollback(self):
         self._db_session.rollback()

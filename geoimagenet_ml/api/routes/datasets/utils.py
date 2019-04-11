@@ -32,7 +32,7 @@ def create_dataset(request):
     new_dataset = None
     try:
         tmp_dataset = Dataset(name=dataset_name, path=dataset_path, type=dataset_type, params=dataset_params)
-        new_dataset = database_factory(request.registry).datasets_store.save_dataset(tmp_dataset, request=request)
+        new_dataset = database_factory(request).datasets_store.save_dataset(tmp_dataset, request=request)
         if not new_dataset:
             raise exc.DatasetRegistrationError
     except (exc.DatasetRegistrationError, exc.DatasetInstanceError):
@@ -54,7 +54,7 @@ def get_dataset(request):
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:
-        datasets_store = database_factory(request.registry).datasets_store
+        datasets_store = database_factory(request).datasets_store
         if dataset_uuid == "latest":
             datasets, count = datasets_store.find_datasets(
                 name=r.get_multiformat_any(request, "dataset_name"),
@@ -86,7 +86,7 @@ def delete_dataset(request):
                     msgOnFail=s.Dataset_DELETE_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:
-        is_deleted = database_factory(request.registry).datasets_store.delete_dataset(dataset_uuid, request=request)
+        is_deleted = database_factory(request).datasets_store.delete_dataset(dataset_uuid, request=request)
         if not is_deleted:
             raise exc.DatasetNotFoundError
     except exc.DatasetInstanceError:

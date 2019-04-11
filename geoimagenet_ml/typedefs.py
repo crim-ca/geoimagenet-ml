@@ -18,11 +18,11 @@ if TYPE_CHECKING:
     from uuid import UUID as _UUID
 
     UUID = Union[AnyStr, _UUID]
+    AnyKey = Union[AnyStr, int]
     AnyProcess = Union[ProcessDB, ProcessWPS, ProcessRunner]
     Number = Union[float, int]
-    JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
-    JSON = Dict[JsonKey, Union[JsonValue, List["JSON"], Dict[JsonKey, "JSON"]]]
+    JSON = Dict[AnyKey, Union[JsonValue, List["JSON"], Dict[AnyKey, "JSON"]]]
     OptionType = Dict[AnyStr, Any]
     InputType = Dict[AnyStr, JSON]
     OutputType = Dict[AnyStr, JSON]

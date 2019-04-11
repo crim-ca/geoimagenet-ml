@@ -27,7 +27,7 @@ def create_model(request):
     new_model = None
     try:
         tmp_model = Model(name=model_name, path=model_path)
-        new_model = database_factory(request.registry).models_store.save_model(tmp_model, data=buffer, request=request)
+        new_model = database_factory(request).models_store.save_model(tmp_model, data=buffer, request=request)
         if not new_model:
             raise exc.ModelRegistrationError
     except (exc.ModelRegistrationError, exc.ModelInstanceError):
@@ -49,7 +49,7 @@ def get_model(request):
                     msgOnFail=s.Model_GET_BadRequestResponseSchema.description, request=request)
     model = None
     try:
-        model = database_factory(request.registry).models_store.fetch_by_uuid(model_uuid)
+        model = database_factory(request).models_store.fetch_by_uuid(model_uuid)
         if not model:
             raise exc.ModelNotFoundError
     except exc.ModelInstanceError:

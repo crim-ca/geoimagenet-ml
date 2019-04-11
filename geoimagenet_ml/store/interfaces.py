@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class DatabaseInterface(object):
     # noinspection PyUnusedLocal
-    def __init__(self, registry):
+    def __init__(self, settings):
         pass
 
     @property
@@ -35,6 +35,11 @@ class DatabaseInterface(object):
     @property
     def jobs_store(self):
         # type: () -> JobStore
+        raise NotImplementedError
+
+    @property
+    def actions_store(self):
+        # type: () -> ActionStore
         raise NotImplementedError
 
     def is_ready(self):
@@ -259,6 +264,11 @@ class ActionStore(object):
     """
     Storage for local actions.
     """
+    def save_action(self, item, operation, request=None):
+        # type: (Union[Base, Type[Base]], OPERATION, Optional[Request]) -> Action
+        """Stores a new action in storage."""
+        raise NotImplementedError
+
     def find_actions(self,
                      item=None,         # type: Optional[Union[Base, Type[Base]]]
                      operation=None,    # type: Optional[OPERATION]
@@ -267,6 +277,7 @@ class ActionStore(object):
                      end=None,          # type: Optional[datetime]
                      sort=None,         # type: Optional[SORT]
                      order=None,        # type: Optional[ORDER]
+                     page=0,            # type: int
                      limit=10,          # type: int
                      ):                 # type: (...) -> List[Action]
         """Get all matching actions from storage."""

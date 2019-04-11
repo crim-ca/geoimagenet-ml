@@ -3,11 +3,12 @@
 History
 =======
 
-0.7.2
+0.8.0
 ---------------------
 
 * add ``Magpie`` request to store corresponding user-id to db
-* add statistics tracking of api requests
+* add statistics and action tracking of api requests
+* fix incorrectly saved datetime as string in db
 
 0.7.1
 ---------------------
