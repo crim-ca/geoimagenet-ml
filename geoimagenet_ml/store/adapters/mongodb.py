@@ -16,14 +16,14 @@ from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 import pymongo
 import shutil
+import six
 import os
 import io
 import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, AnyProcess, Callable, Dict, Optional, Union, Tuple, Type
-    )
+    from geoimagenet_ml.typedefs import Any, AnyProcess, Callable, Dict, Union, Type  # noqa: F401
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -486,22 +486,11 @@ class MongodbActionStore(ActionStore, MongodbStore):
     def __init__(self, collection, settings):
         super(MongodbActionStore, self).__init__(collection=collection)
 
-    @staticmethod
-    def _item_type_and_uuid(item):
-        # type: (Any) -> Optional[Tuple[AnyStr, Optional[AnyStr]]]
-        """Obtains the item's (type, uuid) according to what is passed."""
-        if isinstance(item, (Dataset, Model, Process, Job)):
-            return type(item).__name__, item.uuid
-        elif item in (Dataset, Model, Process, Job):
-            return item.__name__, None
-        return None
-
-    def save_action(self, item, operation, request=None):
-        item_info = self._item_type_and_uuid(item)
-        if not item_info:
-            raise ex.ActionInstanceError("Invalid 'Action' instance or class.")
-
-        action = Action(type=item_info[0], item=item_info[1], operation=operation)
+    def save_action(self, type_or_item, operation, request=None):
+        try:
+            action = Action(type=type_or_item, operation=operation)
+        except Exception as exc:
+            raise ex.ActionInstanceError("Invalid 'Action' instance raised an error: [{!r}].".format(exc))
 
         # automatically add additional request details
         if isinstance(request, Request):
@@ -510,7 +499,7 @@ class MongodbActionStore(ActionStore, MongodbStore):
             action.method = request.method.upper()
 
         try:
-            result = self.collection.insert_one(action)
+            result = self.collection.insert_one(action.params)
             if not result.acknowledged:
                 raise Exception("Action insertion not acknowledged")
             return Action(self.collection.find_one({"uuid": action.uuid}))
@@ -520,15 +509,18 @@ class MongodbActionStore(ActionStore, MongodbStore):
             LOGGER.exception("Action '{}' registration generated error: [{!r}].".format(action.uuid, exc))
             raise ex.ActionRegistrationError("Job '{}' could not be registered.".format(action.uuid))
 
-    def find_actions(self, item=None, operation=None, user=None, start=None, end=None, sort=None, order=None,
+    # noinspection PyShadowingBuiltins
+    def find_actions(self, type=None, item=None, operation=None, user=None, start=None, end=None, sort=None, order=None,
                      page=0, limit=10):
         search_filters = {}
+        if type:
+            if not isinstance(type, six.string_types):
+                raise TypeError("Invalid 'type' to search for 'Action'.")
+            search_filters["type"] = type
         if item:
-            item_info = self._item_type_and_uuid(item)
-            if not item_info:
-                raise ex.ActionInstanceError("Invalid 'Action' instance or class.")
-            search_filters["type"] = item_info[0]
-            search_filters["item"] = item_info[1]
+            if not is_uuid(item):
+                raise TypeError("Invalid 'item' to search for 'Action'.")
+            search_filters["item"] = str(item)
 
         if operation in OPERATION:
             search_filters["operation"] = operation.value

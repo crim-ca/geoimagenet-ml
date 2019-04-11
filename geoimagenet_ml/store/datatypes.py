@@ -987,20 +987,43 @@ class Action(Base):
             raise TypeError("Action 'type' is required.")
         if "operation" not in self:
             raise TypeError("Action 'operation' is required.")
+        # enforce type conversions
+        for field in ["type", "operation"]:
+            setattr(self, field, self[field])
+
+    @staticmethod
+    def _is_action_type(_type):
+        return ((inspect.isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
+                (isinstance(_type, Base) and type(_type) not in [Base, Action]))
+
+    @staticmethod
+    def _to_action_type(_type):
+        if isinstance(_type, six.string_types):
+            for _class in [Dataset, Job, Model, Process]:
+                if _class.__name__ == _type:
+                    return _class
+        return _type
 
     @property
     def type(self):
-        # type: () -> AnyStr
+        # type: () -> Union[Base, Type[Base]]
         """Type of item affected by the action."""
-        return self["item"]
+        # enforce conversion in case loaded from db as string
+        setattr(self, "type", self.get("type"))
+        return self["type"]
 
     @type.setter
     def type(self, _type):
         # type: (Union[Base, Type[Base]]) -> None
-        if not ((inspect.isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
-                (isinstance(_type, Base) and type(_type) not in [Base, Action])):
+        _type = self._to_action_type(_type)
+        if not self._is_action_type(_type):
             raise TypeError("Class or instance derived from 'Base' required.")
-        self["type"] = (_type if inspect.isclass(_type) else type(_type)).__name__
+        # add 'item' automatically if not explicitly provided and is available
+        if inspect.isclass(_type):
+            self["type"] = _type
+        else:
+            self["type"] = type(_type)
+            setattr(self, "item", self.item or _type.uuid)
 
     @property
     def item(self):
@@ -1015,11 +1038,12 @@ class Action(Base):
             raise TypeError("Item of type 'UUID' required.")
         self["item"] = str(item)
 
+    # noinspection PyTypeChecker
     @property
     def operation(self):
-        # type: () -> AnyStr
+        # type: () -> OPERATION
         """Operation accomplished by the action."""
-        return self["operation"]
+        return OPERATION.get(self["operation"])
 
     @operation.setter
     def operation(self, operation):
@@ -1039,7 +1063,7 @@ class Action(Base):
     @user.setter
     def user(self, user):
         # type: (Optional[int]) -> None
-        if not isinstance(user, int) or user is None:
+        if not isinstance(user, int) and user is not None:
             raise TypeError("Type 'int' required.")
         self["user"] = user
 
@@ -1074,11 +1098,11 @@ class Action(Base):
         # type: () -> JSON
         return {
             "uuid": self.uuid,
-            "type": self.type,
+            "type": self.type.__name__,
             "item": self.item,
             "user": self.user,
             "path": self.path,
             "method": self.method,
-            "operation": self.opeartion,
+            "operation": self.operation.name,
             "created": self.created,
         }

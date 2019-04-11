@@ -13,7 +13,12 @@ class ExtendedEnumMeta(EnumMeta):
 
     def get(cls, key_or_value, default=None):
         # type: (AnyKey, Optional[Any]) -> Optional[Type[Enum]]
-        """Finds a enum entry by defined name or its value."""
+        """
+        Finds a enum entry by defined name or its value.
+        Returns the entry directly if it is already a valid enum.
+        """
+        if key_or_value in cls:
+            return key_or_value
         for m_key, m_val in cls.__members__.items():
             if key_or_value == m_key or key_or_value == m_val.value:
                 return m_val

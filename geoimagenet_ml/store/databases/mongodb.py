@@ -41,7 +41,7 @@ class MongoDatabase(DatabaseInterface):
         return MongodbJobStore(collection=self._database.jobs, settings=self._settings)
 
     @property
-    def action_store(self):
+    def actions_store(self):
         return MongodbActionStore(collection=self._database.actions, settings=self._settings)
 
     def is_ready(self):

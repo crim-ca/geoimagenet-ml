@@ -68,7 +68,7 @@ class DatabaseInterface(object):
 
     def get_revision(self):
         # type: () -> AnyStr
-        return self.get_information().get('version')
+        return self.get_information().get("version")
 
 
 class DatasetStore(object):
@@ -264,13 +264,15 @@ class ActionStore(object):
     """
     Storage for local actions.
     """
-    def save_action(self, item, operation, request=None):
-        # type: (Union[Base, Type[Base]], OPERATION, Optional[Request]) -> Action
+    def save_action(self, type_or_item, operation, request=None):
+        # type: (Union[Type[Base], Base], OPERATION, Optional[Request]) -> Action
         """Stores a new action in storage."""
         raise NotImplementedError
 
+    # noinspection PyShadowingBuiltins
     def find_actions(self,
-                     item=None,         # type: Optional[Union[Base, Type[Base]]]
+                     type=None,         # type: Optional[AnyStr]
+                     item=None,         # type: Optional[UUID]
                      operation=None,    # type: Optional[OPERATION]
                      user=None,         # type: Optional[int]
                      start=None,        # type: Optional[datetime]
