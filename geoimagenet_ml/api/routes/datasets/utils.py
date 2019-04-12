@@ -6,6 +6,7 @@ from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.datatypes import Dataset
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
+from geoimagenet_ml.utils import get_user_id
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from pyramid.request import Request
 import six
@@ -31,7 +32,8 @@ def create_dataset(request):
                     msgOnFail=s.Datasets_POST_BadRequestResponseSchema.description, request=request)
     new_dataset = None
     try:
-        tmp_dataset = Dataset(name=dataset_name, path=dataset_path, type=dataset_type, params=dataset_params)
+        tmp_dataset = Dataset(name=dataset_name, path=dataset_path, type=dataset_type,
+                              params=dataset_params, user=get_user_id(request))
         new_dataset = database_factory(request).datasets_store.save_dataset(tmp_dataset, request=request)
         if not new_dataset:
             raise exc.DatasetRegistrationError

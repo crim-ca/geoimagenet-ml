@@ -7,7 +7,7 @@ from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
 from geoimagenet_ml.status import map_status, STATUS
-from geoimagenet_ml.utils import get_base_url, is_uuid
+from geoimagenet_ml.utils import get_base_url, get_user_id, is_uuid
 from pyramid.httpexceptions import (
     HTTPCreated,
     HTTPBadRequest,
@@ -45,7 +45,7 @@ def create_process(request):
     try:
         db = database_factory(request)
         new_process = None
-        tmp_process = Process(identifier=process_name, type=process_type)
+        tmp_process = Process(identifier=process_name, type=process_type, user=get_user_id(request))
         new_process = db.processes_store.save_process(tmp_process, request=request)
         if not new_process:
             raise exc.ProcessRegistrationError
@@ -180,7 +180,7 @@ def create_process_job(request, process):
 
     db = database_factory(request)
     jobs_store = db.jobs_store
-    job = Job(process=process.uuid, inputs=job_inputs)
+    job = Job(process=process.uuid, inputs=job_inputs, user=get_user_id(request))
     job = jobs_store.save_job(job)
     LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
     result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)

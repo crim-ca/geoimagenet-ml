@@ -149,7 +149,7 @@ class ProcessRunner(ProcessBase):
         self.job.status_message = "{} {}.".format(str(self.job), status_message)
         self.job.progress = status_progress if status_progress is not None else self.job.progress
         self.job.save_log(logger=self.logger, errors=errors, level=level)
-        self.db.jobs_store.update_job(self.job, request=self.request)
+        self.job = self.db.jobs_store.update_job(self.job, request=self.request)
 
 
 class ProcessRunnerModelTester(ProcessRunner):
@@ -248,10 +248,10 @@ class ProcessRunnerModelTester(ProcessRunner):
             #   task is already a child worker of the main celery app
             # see:
             #   ``geoimagenet_ml.ml.impl.test_loader_from_configs`` for corresponding override
-            worker_count = self.registry.settings.get('geoimagenet_ml.ml.data_loader_workers', 0)
+            worker_count = self.registry.settings.get("geoimagenet_ml.ml.data_loader_workers", 0)
             worker_process = multiprocessing.current_process()
             # noinspection PyProtectedMember, PyUnresolvedReferences
-            worker_process._config['daemon'] = not bool(worker_count)
+            worker_process._config["daemon"] = not bool(worker_count)
 
             self.update_job_status(STATUS.STARTED, "initiation done", 1)
 

@@ -722,6 +722,8 @@ class Job(Base, WithUser):
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
         self["status"] = status.value
+        if status in job_status_categories[CATEGORY.EXECUTING]:
+            self.mark_started()
         if status in job_status_categories[CATEGORY.FINISHED]:
             self.mark_finished()
 
@@ -776,6 +778,32 @@ class Job(Base, WithUser):
         self["is_workflow"] = is_workflow
 
     @property
+    def started(self):
+        # type: () -> Optional[datetime]
+        started = self.get("started")
+        if isinstance(started, six.string_types):
+            started = str2datetime(started)
+        if started:
+            return started
+        return None
+
+    @started.setter
+    def started(self, dt):
+        # type: (datetime) -> None
+        if not isinstance(dt, datetime):
+            raise TypeError("Type 'datetime' required.")
+        self["started"] = localize_datetime(dt)
+
+    def is_started(self):
+        # type: () -> bool
+        return self.started is not None
+
+    def mark_started(self):
+        # type: () -> None
+        if not self.is_started():
+            setattr(self, "started", now())
+
+    @property
     def finished(self):
         # type: () -> Optional[datetime]
         finished = self.get("finished")
@@ -798,14 +826,18 @@ class Job(Base, WithUser):
 
     def mark_finished(self):
         # type: () -> None
-        setattr(self, "finished", now())
+        if not self.is_finished():
+            setattr(self, "finished", now())
 
     @property
     def duration(self):
         # type: () -> AnyStr
-        final_time = self.finished or now()
-        duration = localize_datetime(final_time) - localize_datetime(self.created)
-        self["duration"] = str(duration).split(".")[0]
+        if self.is_started():
+            final_time = self.finished or now()
+            duration = localize_datetime(final_time) - localize_datetime(self.started)
+            self["duration"] = str(duration).split(".")[0]
+        else:
+            self["duration"] = None
         return self["duration"]
 
     @property
@@ -921,6 +953,7 @@ class Job(Base, WithUser):
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
             "created": self.created,
+            "started": self.started,
             "finished": self.finished,
             "duration": self.duration,
             "progress": self.progress,
@@ -947,6 +980,7 @@ class Job(Base, WithUser):
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
             "created": datetime2str(self.created) if self.created else None,
+            "started": datetime2str(self.started) if self.started else None,
             "finished": datetime2str(self.finished) if self.finished else None,
             "duration": self.duration,
             "progress": self.progress,

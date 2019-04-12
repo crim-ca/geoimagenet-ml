@@ -269,14 +269,23 @@ class InternalServerErrorResponseSchema(BaseResponseSchema):
     body = InternalServerErrorBodySchema(description=description)
 
 
+class FileList(SequenceSchema):
+    file = SchemaNode(String(), description="File path.")
+
+
 class DatasetSummaryBodyResponseSchema(MappingSchema):
     uuid = SchemaNode(String(), description="Dataset uuid.", title="UUID")
     name = SchemaNode(String(), description="Dataset name.")
 
 
 class DatasetDetailBodyResponseSchema(DatasetSummaryBodyResponseSchema):
+    type = SchemaNode(String(), description="Dataset type.")
     path = SchemaNode(String(), description="Dataset path.")
-    created = SchemaNode(DateTime(), description="Dataset creation time.")
+    data = MappingSchema(description="Dataset complete data definition (no specific format, depends on dataset type).")
+    files = FileList(description="Files referenced internally by the dataset.")
+    status = SchemaNode(String(), description="Dataset status.", example=STATUS.FINISHED.value)
+    created = SchemaNode(DateTime(), description="Dataset creation time (not complete).")
+    finished = SchemaNode(DateTime(), description="Dataset completion time.")
 
 
 class DatasetSummaryListSchema(SequenceSchema):
@@ -301,10 +310,6 @@ class Datasets_GET_ForbiddenResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
-class DatasetDataResponseSchema(MappingSchema):
-    dataset = DatasetDetailBodyResponseSchema()
-
-
 class Datasets_POST_BodyRequestSchema(MappingSchema):
     dataset_name = SchemaNode(String(), description="Name of the new dataset.")
     dataset_path = SchemaNode(String(), description="Path of the new dataset.")
@@ -315,8 +320,12 @@ class Datasets_POST_RequestSchema(MappingSchema):
     body = Datasets_POST_BodyRequestSchema()
 
 
+class Dataset_POST_DataResponseSchema(MappingSchema):
+    dataset = DatasetDetailBodyResponseSchema()
+
+
 class Datasets_POST_BodyResponseSchema(BaseBodyResponseSchema):
-    data = DatasetDataResponseSchema()
+    data = Dataset_POST_DataResponseSchema()
 
 
 class Datasets_POST_CreatedResponseSchema(BaseResponseSchema):
@@ -348,8 +357,14 @@ class DatasetEndpoint(BaseRequestSchema):
     dataset_uuid = dataset_uuid
 
 
+class Dataset_GET_DataResponseSchema(MappingSchema):
+    dataset = DatasetDetailBodyResponseSchema()
+    owner = SchemaNode(Integer(), description="User ID of the dataset owner (uploader or creator).", default=None)
+    downloads = SchemaNode(Integer(), description="Number of time this dataset was downloaded.", default=0)
+
+
 class Dataset_GET_BodyResponseSchema(BaseBodyResponseSchema):
-    data = DatasetDataResponseSchema()
+    data = Dataset_GET_DataResponseSchema()
 
 
 class Dataset_GET_OkResponseSchema(BaseResponseSchema):
@@ -448,10 +463,14 @@ class Models_GET_ForbiddenResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
-class ModelDataResponseSchema(MappingSchema):
-    model = ModelDetailBodyResponseSchema()
-    owner = SchemaNode(Integer(), description="User ID of the model owner (uploader or creator).")
-    downloads = SchemaNode(Integer(), description="Number of time this model was downloaded.")
+class Model_GET_DataResponseSchema(MappingSchema):
+    model = ModelDetailBodyResponseSchema(description="Detailed information of the model.")
+
+
+class Model_POST_DataResponseSchema(MappingSchema):
+    model = ModelDetailBodyResponseSchema(description="Detailed information of the model.")
+    owner = SchemaNode(Integer(), description="User ID of the model owner (uploader or creator).", default=None)
+    downloads = SchemaNode(Integer(), description="Number of time this model was downloaded.", default=0)
 
 
 class Models_POST_BodyRequestSchema(MappingSchema):
@@ -465,7 +484,7 @@ class Models_POST_RequestSchema(MappingSchema):
 
 
 class Models_POST_BodyResponseSchema(BaseBodyResponseSchema):
-    data = ModelDataResponseSchema()
+    data = Model_POST_DataResponseSchema()
 
 
 class Models_POST_CreatedResponseSchema(BaseResponseSchema):
@@ -503,7 +522,7 @@ class ModelEndpoint(BaseRequestSchema):
 
 
 class Model_GET_BodyResponseSchema(BaseBodyResponseSchema):
-    data = ModelDataResponseSchema()
+    data = Model_GET_DataResponseSchema()
 
 
 class Model_GET_OkResponseSchema(BaseResponseSchema):

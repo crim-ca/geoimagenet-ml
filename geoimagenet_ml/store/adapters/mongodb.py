@@ -527,7 +527,7 @@ class MongodbActionStore(ActionStore, MongodbStore):
             search_filters["item"] = str(item)
 
         if operation in OPERATION:
-            search_filters["operation"] = operation.value
+            search_filters["operation"] = operation.name
 
         if isinstance(user, int):
             search_filters["user"] = user

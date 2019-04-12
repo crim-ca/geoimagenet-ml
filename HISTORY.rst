@@ -7,7 +7,10 @@ History
 ---------------------
 
 * add request to store corresponding user-id to db if specified with ``MAGPIE_USER_URL``
-* add statistics and action tracking of api requests
+* add statistics and action tracking of API requests
+* add user creating a new dataset, model, job, process
+* add started timestamp for jobs not immediately running (accepted but pending), duration based on it
+* fix rare race condition of job update caused by updated job details not retrieved from db
 * fix incorrectly saved datetime as string in db
 * fix API schemas and drop unused items
 * restructure enum components used across the project

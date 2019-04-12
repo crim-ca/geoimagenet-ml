@@ -17,8 +17,9 @@ class COMPLIANT(six.with_metaclass(ExtendedEnumMeta, Enum)):
 
 
 class CATEGORY(six.with_metaclass(ExtendedEnumMeta, Enum)):
+    RECEIVED = "STATUS_CATEGORY_RECEIVED"
     FINISHED = "STATUS_CATEGORY_FINISHED"
-    RUNNING = "STATUS_CATEGORY_RUNNING"
+    EXECUTING = "STATUS_CATEGORY_EXECUTING"
     FAILED = "STATUS_CATEGORY_FAILED"
 
 
@@ -53,9 +54,11 @@ job_status_categories = {
     COMPLIANT.OWSLIB:    frozenset([STATUS.ACCEPTED, STATUS.RUNNING, STATUS.SUCCEEDED, STATUS.FAILED, STATUS.PAUSED]),                    # noqa: E501
     COMPLIANT.CELERY:    frozenset([STATUS.ACCEPTED, STATUS.STARTED, STATUS.SUCCEEDED, STATUS.FAILED, STATUS.PAUSED, STATUS.EXCEPTION]),  # noqa: E501
     # utility categories
-    CATEGORY.RUNNING:    frozenset([STATUS.ACCEPTED, STATUS.RUNNING,   STATUS.STARTED,   STATUS.PAUSED]),
-    CATEGORY.FINISHED:   frozenset([STATUS.FAILED,   STATUS.DISMISSED, STATUS.EXCEPTION, STATUS.SUCCEEDED]),
-    CATEGORY.FAILED:     frozenset([STATUS.FAILED,   STATUS.DISMISSED, STATUS.EXCEPTION, STATUS.FAILURE])
+    CATEGORY.RECEIVED:   frozenset([STATUS.ACCEPTED, STATUS.PENDING,   STATUS.RETRY,    STATUS.STARTED]),
+    CATEGORY.EXECUTING:  frozenset([STATUS.RUNNING,  STATUS.STARTED,   STATUS.PAUSED]),
+    CATEGORY.FAILED:     frozenset([STATUS.FAILED,   STATUS.DISMISSED, STATUS.EXCEPTION, STATUS.FAILURE]),
+    CATEGORY.FINISHED:   frozenset([STATUS.FAILED,   STATUS.DISMISSED, STATUS.EXCEPTION,
+                                    STATUS.SUCCESS,  STATUS.SUCCEEDED, STATUS.FINISHED]),
 }
 
 
@@ -98,9 +101,8 @@ def map_status(wps_status, compliant=COMPLIANT.OGC):
             job_status = STATUS.SUCCEEDED
 
         if compliant == COMPLIANT.OGC:
-            if job_status in job_status_categories[CATEGORY.RUNNING]:
-                if job_status in [STATUS.STARTED, STATUS.PAUSED]:
-                    job_status = STATUS.RUNNING
+            if job_status in [STATUS.STARTED, STATUS.PAUSED]:
+                job_status = STATUS.RUNNING
             elif job_status in job_status_categories[CATEGORY.FAILED] and job_status != STATUS.FAILED:
                 job_status = STATUS.FAILED
 

@@ -34,8 +34,16 @@ def post_datasets_view(request):
 
 def get_dataset_handler(request):
     dataset = get_dataset(request)
-    database_factory(request).actions_store.save_action(dataset, OPERATION.INFO, request=request)
-    return ex.valid_http(httpSuccess=HTTPOk, content={u"datasets": dataset.json()},
+    db = database_factory(request)
+    db.actions_store.save_action(dataset, OPERATION.INFO, request=request)
+    _, download_count = db.actions_store.find_actions(item_type=Dataset, item=dataset.uuid,
+                                                      operation=OPERATION.DOWNLOAD)
+    dataset_content = {
+        u"dataset": dataset.json(),
+        u"owner": dataset.user,
+        u"downloads": download_count,
+    }
+    return ex.valid_http(httpSuccess=HTTPOk, content=dataset_content,
                          detail=s.Dataset_GET_OkResponseSchema.description, request=request)
 
 

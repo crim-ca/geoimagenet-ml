@@ -4,6 +4,7 @@ from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
 from geoimagenet_ml.store.datatypes import Model
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
+from geoimagenet_ml.utils import get_user_id
 from geoimagenet_ml.ml.impl import load_model
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPUnprocessableEntity
 from pyramid.request import Request  # noqa: F401
@@ -26,7 +27,7 @@ def create_model(request):
 
     new_model = None
     try:
-        tmp_model = Model(name=model_name, path=model_path)
+        tmp_model = Model(name=model_name, path=model_path, user=get_user_id(request))
         new_model = database_factory(request).models_store.save_model(tmp_model, data=buffer, request=request)
         if not new_model:
             raise exc.ModelRegistrationError
