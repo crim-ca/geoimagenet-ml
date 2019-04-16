@@ -5,6 +5,7 @@ from geoimagenet_ml import GEOIMAGENET_ML_API_DIR
 from geoimagenet_ml.store.databases import models
 from geoimagenet_ml.store.databases.types import POSTGRES_TYPE
 from geoimagenet_ml.store.interfaces import DatabaseInterface
+from geoimagenet_ml.utils import isclass
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm import sessionmaker, configure_mappers
 from sqlalchemy import engine_from_config
@@ -22,12 +23,12 @@ configure_mappers()
 
 class PostgresDatabase(DatabaseInterface):
     _db_session = None
-    _registry = None
+    _settings = None
 
-    def __init__(self, registry):
-        super(PostgresDatabase, self).__init__(registry)
-        self._registry = registry
-        self._db_session = get_postgresdb_session_from_settings(registry.settings)
+    def __init__(self, settings):
+        super(PostgresDatabase, self).__init__(settings)
+        self._settings = settings
+        self._db_session = get_postgresdb_session_from_settings(settings)
 
     @property
     def datasets_store(self):
@@ -46,10 +47,10 @@ class PostgresDatabase(DatabaseInterface):
         raise NotImplementedError
 
     def is_ready(self):
-        return is_database_ready(self._registry.settings)
+        return is_database_ready(self._settings)
 
     def run_migration(self):
-        run_database_migration(self._registry.settings)
+        run_database_migration(self._settings)
 
     def rollback(self):
         self._db_session.rollback()
@@ -129,7 +130,7 @@ def is_database_ready(settings):
     table_names = inspector.get_table_names()
 
     for name, obj in inspect.getmembers(models):
-        if inspect.isclass(obj):
+        if isclass(obj):
             # noinspection PyBroadException
             try:
                 curr_table_name = obj.__tablename__

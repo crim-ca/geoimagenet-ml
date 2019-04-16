@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.processes.status import STATUS, CATEGORY
-from geoimagenet_ml.store.constants import SORT, ORDER
-from typing import TYPE_CHECKING, Any, AnyStr, List, Optional                   # noqa: F401
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Dataset, Process, Model, Job     # noqa: F401
-    from geoimagenet_ml.typedefs import OptionType, UUID, Tuple, Union          # noqa: F401
-    from pyramid.request import Request                                         # noqa: F401
-    from io import BufferedIOBase                                               # noqa: F401
+    from geoimagenet_ml.constants import SORT, ORDER, OPERATION                                             # noqa: F401
+    from geoimagenet_ml.status import STATUS, CATEGORY                                                      # noqa: F401
+    from geoimagenet_ml.store.datatypes import Base, Dataset, Process, Model, Job, Action                   # noqa: F401
+    from geoimagenet_ml.typedefs import OptionType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
+    from datetime import datetime                                                                           # noqa: F401
+    from pyramid.request import Request                                                                     # noqa: F401
+    from io import BufferedIOBase                                                                           # noqa: F401
 
 
 class DatabaseInterface(object):
     # noinspection PyUnusedLocal
-    def __init__(self, registry):
+    def __init__(self, settings):
         pass
 
     @property
@@ -34,6 +35,11 @@ class DatabaseInterface(object):
     @property
     def jobs_store(self):
         # type: () -> JobStore
+        raise NotImplementedError
+
+    @property
+    def actions_store(self):
+        # type: () -> ActionStore
         raise NotImplementedError
 
     def is_ready(self):
@@ -62,7 +68,7 @@ class DatabaseInterface(object):
 
     def get_revision(self):
         # type: () -> AnyStr
-        return self.get_information().get('version')
+        return self.get_information().get("version")
 
 
 class DatasetStore(object):
@@ -243,6 +249,9 @@ class JobStore(object):
                   ):                # type: (...) -> Tuple[List[Job], int]
         """
         Finds all jobs in database matching search filters.
+
+        Returns a tuple of filtered ``items`` and their ``count``, where ``items`` can have paging and be limited
+        to a maximum per page, but ``count`` always indicate the `total` number of matches.
         """
         raise NotImplementedError
 
@@ -250,5 +259,35 @@ class JobStore(object):
         # type: (UUID, Optional[Request]) -> Job
         """
         Get job for given ``uuid`` from storage.
+        """
+        raise NotImplementedError
+
+
+class ActionStore(object):
+    """
+    Storage for local actions.
+    """
+    def save_action(self, type_or_item, operation, request=None):
+        # type: (Union[Type[Base], Base], OPERATION, Optional[Request]) -> Action
+        """Stores a new action in storage."""
+        raise NotImplementedError
+
+    def find_actions(self,
+                     item_type=None,    # type: Optional[Any]
+                     item=None,         # type: Optional[UUID]
+                     operation=None,    # type: Optional[OPERATION]
+                     user=None,         # type: Optional[int]
+                     start=None,        # type: Optional[datetime]
+                     end=None,          # type: Optional[datetime]
+                     sort=None,         # type: Optional[SORT]
+                     order=None,        # type: Optional[ORDER]
+                     page=None,         # type: Optional[int]
+                     limit=None,        # type: Optional[int]
+                     ):                 # type: (...) -> Tuple[List[Action], int]
+        """
+        Get all matching actions from storage.
+
+        Returns a tuple of filtered ``items`` and their ``count``, where ``items`` can have paging and be limited
+        to a maximum per page, but ``count`` always indicate the `total` number of matches.
         """
         raise NotImplementedError

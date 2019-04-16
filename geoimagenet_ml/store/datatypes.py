@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.utils import (
     now,
     localize_datetime,
@@ -13,8 +14,9 @@ from geoimagenet_ml.utils import (
     get_error_fmt,
     fully_qualified_name,
     is_uuid,
+    isclass,
 )
-from geoimagenet_ml.processes.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
+from geoimagenet_ml.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
 from geoimagenet_ml.store.exceptions import ModelLoadingError
 from geoimagenet_ml.store.exceptions import ProcessInstanceError
@@ -37,7 +39,7 @@ if TYPE_CHECKING:
     # noinspection PyPackageRequirements
     from geoimagenet_ml.typedefs import (   # noqa: F401
         AnyStr, AnyStatus, ErrorType, LevelType, List, LoggerType, Number, Union,
-        Optional, InputType, OutputType, UUID, JSON, OptionType
+        Optional, InputType, OutputType, UUID, JSON, OptionType, Type,
     )
 
 
@@ -131,7 +133,22 @@ class Base(dict):
         self["created"] = localize_datetime(dt)
 
 
-class Dataset(Base):
+class WithUser(dict):
+    """Adds properties ``user`` to corresponding class."""
+    @property
+    def user(self):
+        # type: () -> Optional[int]
+        return self.get("user", None)
+
+    @user.setter
+    def user(self, user):
+        # type: (Optional[int]) -> None
+        if not isinstance(user, int) or user is None:
+            raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
+        self["user"] = user
+
+
+class Dataset(Base, WithUser):
     """
     Dictionary that contains a dataset description for db storage.
     It always has keys ``name``, ``path``, ``type``, ``data`` and ``files``.
@@ -298,6 +315,21 @@ class Dataset(Base):
         # type: () -> JSON
         return {
             "uuid": self.uuid,
+            "user": self.user,
+            "name": self.name,
+            "path": self.path,
+            "type": self.type,
+            "data": self.data,
+            "files": self.files,
+            "status": self.status,
+            "created": self.created,
+            "finished": self.finished,
+        }
+
+    def json(self):
+        # type: () -> JSON
+        return {
+            "uuid": self.uuid,
             "name": self.name,
             "path": self.path,
             "type": self.type,
@@ -308,10 +340,6 @@ class Dataset(Base):
             "finished": datetime2str(self.finished) if self.finished else None,
         }
 
-    def json(self):
-        # type: () -> JSON
-        return self.params
-
     def summary(self):
         # type: () -> JSON
         return {
@@ -320,7 +348,7 @@ class Dataset(Base):
         }
 
 
-class Model(Base):
+class Model(Base, WithUser):
     """
     Dictionary that contains a model description for db storage.
     It always has ``name`` and ``path`` keys.
@@ -380,6 +408,7 @@ class Model(Base):
         # type: () -> OptionType
         return {
             "uuid": self.uuid,
+            "user": self.user,
             "name": self.name,
             "path": self.path,
             "file": self.file,
@@ -403,7 +432,7 @@ class Model(Base):
         }
 
 
-class Process(Base):
+class Process(Base, WithUser):
     """
     Dictionary that contains a process description for db storage.
     It always has ``uuid`` and ``identifier`` keys.
@@ -477,23 +506,10 @@ class Process(Base):
         _check_io_format(outputs)
         self["outputs"] = outputs
 
-    # noinspection PyPep8Naming
     @property
-    def jobControlOptions(self):
+    def execute_endpoint(self):
         # type: () -> AnyStr
-        return self.get("jobControlOptions")
-
-    # noinspection PyPep8Naming
-    @property
-    def outputTransmission(self):
-        # type: () -> AnyStr
-        return self.get("outputTransmission")
-
-    # noinspection PyPep8Naming
-    @property
-    def executeEndpoint(self):
-        # type: () -> AnyStr
-        return self.get("executeEndpoint")
+        return self.get("execute_endpoint")
 
     @property
     def package(self):
@@ -510,6 +526,7 @@ class Process(Base):
         # type: () -> OptionType
         return {
             "uuid": self.uuid,
+            "user": self.user,
             "identifier": self.identifier,
             "title": self.title,
             "abstract": self.abstract,
@@ -518,9 +535,7 @@ class Process(Base):
             "version": self.version,
             "inputs": self.inputs,
             "outputs": self.outputs,
-            "jobControlOptions": self.jobControlOptions,
-            "outputTransmission": self.outputTransmission,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
             "type": self.type,
             "package": self.package,      # deployment specification (json body)
@@ -555,9 +570,7 @@ class Process(Base):
             "version": self.version,
             "inputs": self.inputs,
             "outputs": self.outputs,
-            "jobControlOptions": self.jobControlOptions,
-            "outputTransmission": self.outputTransmission,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
         }
 
@@ -571,8 +584,7 @@ class Process(Base):
             "keywords": self.keywords,
             "metadata": self.metadata,
             "version": self.version,
-            "jobControlOptions": self.jobControlOptions,
-            "executeEndpoint": self.executeEndpoint,
+            "execute_endpoint": self.execute_endpoint,
         }
 
     def wps(self):
@@ -586,7 +598,7 @@ class Process(Base):
         return process_mapping[process_key](**kwargs)
 
 
-class Job(Base):
+class Job(Base, WithUser):
     """
     Dictionary that contains a job description for db storage.
     It always has ``uuid`` and ``process`` keys.
@@ -697,18 +709,6 @@ class Job(Base):
     inputs = property(_get_inputs, _set_inputs)
 
     @property
-    def user(self):
-        # type: () -> Optional[int]
-        return self.get("user", None)
-
-    @user.setter
-    def user(self, user):
-        # type: (Optional[int]) -> None
-        if not isinstance(user, int) or user is None:
-            raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
-        self["user"] = user
-
-    @property
     def status(self):
         # type: () -> AnyStr
         return self.get("status", STATUS.UNKNOWN.value)
@@ -722,6 +722,8 @@ class Job(Base):
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
         self["status"] = status.value
+        if status in job_status_categories[CATEGORY.EXECUTING]:
+            self.mark_started()
         if status in job_status_categories[CATEGORY.FINISHED]:
             self.mark_finished()
 
@@ -776,6 +778,32 @@ class Job(Base):
         self["is_workflow"] = is_workflow
 
     @property
+    def started(self):
+        # type: () -> Optional[datetime]
+        started = self.get("started")
+        if isinstance(started, six.string_types):
+            started = str2datetime(started)
+        if started:
+            return started
+        return None
+
+    @started.setter
+    def started(self, dt):
+        # type: (datetime) -> None
+        if not isinstance(dt, datetime):
+            raise TypeError("Type 'datetime' required.")
+        self["started"] = localize_datetime(dt)
+
+    def is_started(self):
+        # type: () -> bool
+        return self.started is not None
+
+    def mark_started(self):
+        # type: () -> None
+        if not self.is_started():
+            setattr(self, "started", now())
+
+    @property
     def finished(self):
         # type: () -> Optional[datetime]
         finished = self.get("finished")
@@ -798,14 +826,18 @@ class Job(Base):
 
     def mark_finished(self):
         # type: () -> None
-        setattr(self, "finished", now())
+        if not self.is_finished():
+            setattr(self, "finished", now())
 
     @property
     def duration(self):
         # type: () -> AnyStr
-        final_time = self.finished or now()
-        duration = localize_datetime(final_time) - localize_datetime(self.created)
-        self["duration"] = str(duration).split(".")[0]
+        if self.is_started():
+            final_time = self.finished or now()
+            duration = localize_datetime(final_time) - localize_datetime(self.started)
+            self["duration"] = str(duration).split(".")[0]
+        else:
+            self["duration"] = None
         return self["duration"]
 
     @property
@@ -921,6 +953,7 @@ class Job(Base):
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
             "created": self.created,
+            "started": self.started,
             "finished": self.finished,
             "duration": self.duration,
             "progress": self.progress,
@@ -947,6 +980,7 @@ class Job(Base):
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
             "created": datetime2str(self.created) if self.created else None,
+            "started": datetime2str(self.started) if self.started else None,
             "finished": datetime2str(self.finished) if self.finished else None,
             "duration": self.duration,
             "progress": self.progress,
@@ -958,4 +992,139 @@ class Job(Base):
         return {
             "uuid": self.uuid,
             "process": self.process,
+        }
+
+
+class Action(Base):
+    """
+    Dictionary that contains an action description for db storage.
+    It always has ``uuid``, ``type`` and ``operation`` keys.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(Action, self).__init__(*args, **kwargs)
+        if "uuid" not in self:
+            raise TypeError("Action 'uuid' is required.")
+        if "type" not in self:
+            raise TypeError("Action 'type' is required.")
+        if "operation" not in self:
+            raise TypeError("Action 'operation' is required.")
+        # enforce type conversions
+        for field in ["type", "operation"]:
+            setattr(self, field, self[field])
+
+    @staticmethod
+    def _is_action_type(_type):
+        return ((isclass(_type) and issubclass(_type, Base) and _type not in [Base, Action]) or
+                (isinstance(_type, Base) and type(_type) not in [Base, Action]))
+
+    @staticmethod
+    def _to_action_type(_type):
+        if isinstance(_type, six.string_types):
+            for _class in [Dataset, Job, Model, Process]:
+                if _class.__name__ == _type:
+                    return _class
+        return _type
+
+    @property
+    def type(self):
+        # type: () -> Union[Base, Type[Base]]
+        """Type of item affected by the action."""
+        # enforce conversion in case loaded from db as string
+        setattr(self, "type", self.get("type"))
+        return self["type"]
+
+    @type.setter
+    def type(self, _type):
+        # type: (Union[Base, Type[Base]]) -> None
+        _type = self._to_action_type(_type)
+        if not self._is_action_type(_type):
+            raise TypeError("Class or instance derived from 'Base' required.")
+        # add 'item' automatically if not explicitly provided and is available
+        if isclass(_type):
+            self["type"] = _type
+        else:
+            self["type"] = type(_type)
+            setattr(self, "item", self.item or _type.uuid)
+
+    @property
+    def item(self):
+        # type: () -> Optional[UUID]
+        """Reference to a specific item affected by the action."""
+        return self.get("item", None)
+
+    @item.setter
+    def item(self, item):
+        # type: (Optional[UUID]) -> None
+        if item is not None and not is_uuid(item):
+            raise TypeError("Item of type 'UUID' required.")
+        self["item"] = str(item)
+
+    # noinspection PyTypeChecker
+    @property
+    def operation(self):
+        # type: () -> OPERATION
+        """Operation accomplished by the action."""
+        return OPERATION.get(self["operation"])
+
+    @operation.setter
+    def operation(self, operation):
+        # type: (Union[OPERATION, AnyStr]) -> None
+        if isinstance(operation, six.string_types):
+            operation = OPERATION.get(operation)
+        if operation not in OPERATION:
+            raise TypeError("Type 'OPERATION' required.")
+        self["operation"] = operation.value
+
+    @property
+    def user(self):
+        # type: () -> Optional[int]
+        """User that accomplished the action."""
+        return self.get("user", None)
+
+    @user.setter
+    def user(self, user):
+        # type: (Optional[int]) -> None
+        if not isinstance(user, int) and user is not None:
+            raise TypeError("Type 'int' required.")
+        self["user"] = user
+
+    @property
+    def path(self):
+        # type: () -> Optional[AnyStr]
+        """Request path on with the action was accomplished."""
+        return self.get("path", None)
+
+    @path.setter
+    def path(self, path):
+        # type: (Optional[AnyStr]) -> None
+        if not isinstance(path, six.string_types) or path is None:
+            raise TypeError("Type 'str' required.")
+        self["path"] = path
+
+    @property
+    def method(self):
+        # type: () -> Optional[AnyStr]
+        """Request path on with the action was accomplished."""
+        return self.get("method", None)
+
+    @method.setter
+    def method(self, method):
+        # type: (Optional[AnyStr]) -> None
+        if not isinstance(method, six.string_types) or method is None:
+            raise TypeError("Type 'str' required.")
+        self["method"] = method
+
+    @property
+    def params(self):
+        # type: () -> JSON
+        return {
+            "uuid": self.uuid,
+            "type": self.type.__name__,
+            "item": self.item,
+            "user": self.user,
+            "path": self.path,
+            "method": self.method,
+            "operation": self.operation.name,
+            "created": self.created,
         }

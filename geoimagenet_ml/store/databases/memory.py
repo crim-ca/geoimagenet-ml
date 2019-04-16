@@ -7,8 +7,8 @@ from geoimagenet_ml.store.interfaces import DatabaseInterface
 
 class MemoryDatabase(DatabaseInterface):
 
-    def __init__(self, registry):
-        super(MemoryDatabase, self).__init__(registry)
+    def __init__(self, settings):
+        super(MemoryDatabase, self).__init__(settings)
 
     @property
     def datasets_store(self):
