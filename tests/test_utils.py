@@ -1,5 +1,5 @@
 from geoimagenet_ml import utils
-import status
+from geoimagenet_ml import status
 # noinspection PyPackageRequirements
 import pytest
 import os
