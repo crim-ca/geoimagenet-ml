@@ -1,5 +1,5 @@
 from geoimagenet_ml.store.exceptions import InvalidIdentifierValue
-from geoimagenet_ml.processes.status import map_status
+from geoimagenet_ml.status import map_status
 from pyramid.config import Configurator
 from pyramid.request import Request
 from pyramid.registry import Registry
@@ -9,6 +9,7 @@ from datetime import datetime
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
 import collections
+import requests
 import time
 import pytz
 import types
@@ -91,6 +92,26 @@ def get_settings(container):
     raise TypeError("Could not retrieve settings from container object of type [{}]".format(type(container)))
 
 
+def get_user_id(request):
+    # type: (Request) -> Optional[int]
+    """
+    Retrieves the user ID from the ``request`` by fetching ``MAGPIE_USER_URL`` details.
+    The ``request`` cookies have to be set to ensure a valid answer of the expected user.
+    """
+    url = os.getenv("MAGPIE_USER_URL")
+    if not url or (isinstance(url, six.string_types) and not len(url)) or not url.startswith("http"):
+        return None
+    headers = request.headers
+    headers.update({"Accept": "application/json"})
+    resp = requests.get(url, headers=headers, cookies=request.cookies)
+    if resp.status_code != 200:
+        raise ValueError("Failed connection to user id provider.")
+    user_id = resp.json().get("user", {}).get("user_id")
+    if not isinstance(user_id, int):
+        return None
+    return user_id
+
+
 def str2paths(str_list=None, list_files=False):
     # type: (Optional[AnyStr], bool) -> List[AnyStr]
     """
@@ -133,7 +154,7 @@ def islambda(func):
 def isclass(obj):
     # type: (Any) -> bool
     """Evaluates ``obj`` for ``class`` type (ie: class definition, not an instance nor any other type)."""
-    return isinstance(obj, (type, six.class_types))
+    return isinstance(obj, six.class_types)
 
 
 def is_uuid(item, version=4):

@@ -45,7 +45,7 @@ def get_api_base_view(request):
 @s.VersionsAPI.get(tags=[s.APITag], response_schemas=s.Versions_GET_responses)
 def get_version_view(request):
     """API version information."""
-    db_info = database_factory(request.registry).get_information()
+    db_info = database_factory(request).get_information()
     content = {u"versions": [
         {u"name": u"api", u"version": __meta__.__version__},
         {u"name": u"db", u"version": db_info["version"], u"type": db_info["type"]},

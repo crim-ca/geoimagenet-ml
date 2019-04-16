@@ -5,7 +5,7 @@ from geoimagenet_ml.processes.types import process_mapping
 from geoimagenet_ml.store.interfaces import DatabaseInterface
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from geoimagenet_ml.store.adapters.mongodb import (
-    MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore
+    MongodbDatasetStore, MongodbModelStore, MongodbProcessStore, MongodbJobStore, MongodbActionStore
 )
 import pymongo
 import os
@@ -15,10 +15,10 @@ class MongoDatabase(DatabaseInterface):
     _database = None
     _settings = None
 
-    def __init__(self, registry):
-        super(MongoDatabase, self).__init__(registry)
-        self._database = MongoDB.get(registry)
-        self._settings = registry.settings
+    def __init__(self, settings):
+        super(MongoDatabase, self).__init__(settings)
+        self._database = MongoDB.get(settings)
+        self._settings = settings
         self.run_migration()
 
     @property
@@ -39,6 +39,10 @@ class MongoDatabase(DatabaseInterface):
     @property
     def jobs_store(self):
         return MongodbJobStore(collection=self._database.jobs, settings=self._settings)
+
+    @property
+    def actions_store(self):
+        return MongodbActionStore(collection=self._database.actions, settings=self._settings)
 
     def is_ready(self):
         return self._database is not None and self._settings is not None
@@ -75,9 +79,8 @@ class MongoDB:
         cls.__init = True
 
     @classmethod
-    def get(cls, registry):
+    def get(cls, settings):
         if not cls.__db:
-            settings = registry.settings
             username = os.getenv("MONGODB_USER") or settings.get("mongodb.user")
             password = os.getenv("MONGODB_PASSWORD") or settings.get("mongodb.password")
             client = pymongo.MongoClient(
@@ -90,6 +93,8 @@ class MongoDB:
             cls.__db = client[os.getenv("MONGODB_DB_NAME") or settings.get("mongodb.db_name")]
             cls.__db.datasets.create_index("uuid", unique=True)
             cls.__db.models.create_index("uuid", unique=True)
+            cls.__db.jobs.create_index("uuid", unique=True)
             cls.__db.processes.create_index("uuid", unique=True)
+            cls.__db.actions.create_index("uuid", unique=True)
             cls.__db.version.create_index("version_num", unique=True)
         return cls.__db

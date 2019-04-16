@@ -2,7 +2,7 @@
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Process as ProcessDB
-    from geoimagenet_ml.processes.status import STATUS
+    from geoimagenet_ml.status import STATUS
     from geoimagenet_ml.processes.runners import ProcessRunner
     from pyramid.config import Configurator
     from pyramid.registry import Registry
@@ -18,11 +18,11 @@ if TYPE_CHECKING:
     from uuid import UUID as _UUID
 
     UUID = Union[AnyStr, _UUID]
+    AnyKey = Union[AnyStr, int]
     AnyProcess = Union[ProcessDB, ProcessWPS, ProcessRunner]
     Number = Union[float, int]
-    JsonKey = Union[AnyStr, int]
     JsonValue = Union[AnyStr, Number, bool, None]
-    JSON = Dict[JsonKey, Union[JsonValue, List['JSON'], Dict[JsonKey, 'JSON']]]
+    JSON = Dict[AnyKey, Union[JsonValue, List["JSON"], Dict[AnyKey, "JSON"]]]
     OptionType = Dict[AnyStr, Any]
     InputType = Dict[AnyStr, JSON]
     OutputType = Dict[AnyStr, JSON]

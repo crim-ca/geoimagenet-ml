@@ -3,6 +3,35 @@
 History
 =======
 
+0.8.0
+---------------------
+
+* add request to store corresponding user-id to db if specified with ``MAGPIE_USER_URL``
+* add statistics and action tracking of API requests
+* add user creating a new dataset, model, job, process
+* add started timestamp for jobs not immediately running (accepted but pending), duration based on it
+* fix rare race condition of job update caused by updated job details not retrieved from db
+* fix incorrectly saved datetime as string in db
+* fix API schemas and drop unused items
+* restructure enum components used across the project
+
+0.7.1
+---------------------
+
+* add pip check on install to ensure all package requirements/dependencies are met recursively
+* fix supervisor path reference to source
+* fix db invalid index reference
+
+0.7.0
+---------------------
+
+* rebase source directory from ``src`` to ``geoimagenet_ml`` to solve installation/debug issues
+* add more validation of job inputs
+* add and fix utility make targets
+* fix gdal package and unresolved symbol error
+* fix typing and general code formatting
+* fix and complete `batch-creation` job execution
+
 0.6.x
 ---------------------
 
