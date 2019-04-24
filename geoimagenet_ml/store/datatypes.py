@@ -267,7 +267,7 @@ class Dataset(Base, WithUser):
     @property
     def finished(self):
         # type: () -> Optional[datetime]
-        finished = self["finished"]
+        finished = self.get("finished")
         if isinstance(finished, six.string_types):
             finished = str2datetime(finished)
         if finished:

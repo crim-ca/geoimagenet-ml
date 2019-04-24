@@ -76,8 +76,8 @@ class DatasetStore(object):
     Storage for local datasets.
     """
 
-    def save_dataset(self, dataset, request=None):
-        # type: (Dataset, Optional[Request]) -> Dataset
+    def save_dataset(self, dataset, overwrite=False, request=None):
+        # type: (Dataset, bool, Optional[Request]) -> Dataset
         """
         Stores a dataset in storage.
         """

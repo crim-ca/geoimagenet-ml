@@ -46,13 +46,16 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
     def __init__(self, collection, settings):
         super(MongodbDatasetStore, self).__init__(collection=collection)
 
-    def save_dataset(self, dataset, request=None):
+    def save_dataset(self, dataset, overwrite=False, request=None):
         if not isinstance(dataset, Dataset):
             raise ex.DatasetInstanceError("Unsupported dataset type '{}'".format(type(dataset)))
         if not len(dataset.files) or not len(dataset.data):
             raise ex.DatasetInstanceError("Incomplete dataset generation not allowed.")
         try:
-            result = self.collection.insert_one(dataset.params)
+            if overwrite:
+                result = self.collection.update_one({"uuid": dataset.uuid}, {"$set": dataset.params}, upsert=True)
+            else:
+                result = self.collection.insert_one(dataset.params)
             if not result.acknowledged:
                 raise Exception("Dataset insertion not acknowledged")
         except DuplicateKeyError:
