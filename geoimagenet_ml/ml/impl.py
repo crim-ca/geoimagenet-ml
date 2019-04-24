@@ -281,7 +281,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
         patches_crop.append((crop_fixed_size, "fixed"))
 
-    last_progress_offset, progress_scale = 0, int((patch_percent - start_percent) / len(features))
+    last_progress_offset, progress_scale = 0, float(patch_percent - start_percent) / len(features)
     dataset_container.data["patches"] = list()
     for feature_idx, feature in enumerate(features):
         progress_offset = int(start_percent + feature_idx * progress_scale)
@@ -353,7 +353,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     })
         if feature_idx // dataset_update_count:
             update_func("updating dataset definition (checkpoint: {}/{})"
-                        .format(feature_idx, len(features)), patch_percent)
+                        .format(feature_idx, len(features)), progress_offset)
             dataset_store.save_dataset(dataset_container, overwrite=True)
 
     update_func("generating patches archived file", final_percent)
