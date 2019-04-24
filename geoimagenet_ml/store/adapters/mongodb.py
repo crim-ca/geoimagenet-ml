@@ -149,9 +149,9 @@ class MongodbModelStore(ModelStore, MongodbStore):
     # noinspection PyUnusedLocal
     def __init__(self, collection, settings):
         super(MongodbModelStore, self).__init__(collection=collection)
-        if not isinstance(settings, dict) or "geoimagenet_ml.api.models_path" not in settings:
-            raise LookupError("Settings with 'geoimagenet_ml.api.models_path' is mandatory.")
-        self.models_path = settings.get("geoimagenet_ml.api.models_path")
+        if not isinstance(settings, dict) or "geoimagenet_ml.ml.models_path" not in settings:
+            raise LookupError("Settings with 'geoimagenet_ml.ml.models_path' is mandatory.")
+        self.models_path = settings.get("geoimagenet_ml.ml.models_path")
         os.makedirs(self.models_path, exist_ok=True)
 
     def save_model(self, model, data=None, request=None):

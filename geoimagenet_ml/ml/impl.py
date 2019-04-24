@@ -1,4 +1,4 @@
-from geoimagenet_ml.utils import ClassCounter, get_sane_name
+from geoimagenet_ml.utils import get_sane_name
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional,
         FeatureType, RasterDataType
     )
+    from geoimagenet_ml.utils import ClassCounter  # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
 osgeo.gdal.UseExceptions()
@@ -63,14 +64,14 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get('geoimagenet_ml.api.models_path'), model.uuid)
+    save_dir = os.path.join(settings.get('geoimagenet_ml.ml.models_path'), model.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
-    # session name as Job UUID will write data under '<geoimagenet_ml.api.models_path>/<model-UUID>/output/<job-UUID>/'
+    # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
     trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
     return trainer
 
