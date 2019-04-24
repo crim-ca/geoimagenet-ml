@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import AnyStr, AnySettingsContainer, Union  # noqa: F401
-    from geoimagenet_ml.store.interfaces import DatabaseInterface   # noqa: F401
+    from geoimagenet_ml.store.interfaces import DatabaseInterface  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -42,7 +42,7 @@ def get_database_type(specification):
 
 
 def database_factory(container):
-    # type: (AnySettingsContainer) -> DatabaseInterface
+    # type: (AnySettingsContainer) -> Union[DatabaseInterface, MemoryDatabase, PostgresDatabase, MongoDatabase]
     db_type = get_database_type(container)
     settings = get_settings(container)
     if db_type == MEMORY_TYPE:

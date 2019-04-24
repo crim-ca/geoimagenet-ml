@@ -89,7 +89,7 @@ class TestModelApi(unittest.TestCase):
         cls.app = utils.setup_test_app(config=cls.conf)
         cls.json_headers = [('Content-Type', schemas.ContentTypeJSON), ('Accept', schemas.ContentTypeJSON)]
         cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
-        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get('geoimagenet_ml.api.models_path')
+        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get('geoimagenet_ml.ml.models_path')
 
         # url to existing remote model file definition
         cls.TEST_MODEL_URL = os.getenv('TEST_MODEL_URL')

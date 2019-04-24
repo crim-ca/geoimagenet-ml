@@ -8,8 +8,10 @@ from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.store import exceptions as exc
 from geoimagenet_ml.utils import get_user_id
 from pyramid.httpexceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPInternalServerError
-from pyramid.request import Request
+from typing import TYPE_CHECKING
 import six
+if TYPE_CHECKING:
+    from pyramid.request import Request  # noqa: F401
 
 
 def create_dataset(request):
@@ -86,7 +88,6 @@ def delete_dataset(request):
     dataset_uuid = request.matchdict.get("dataset_uuid")
     ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="dataset_uuid",
                     msgOnFail=s.Dataset_DELETE_BadRequestResponseSchema.description, request=request)
-    dataset = None
     try:
         is_deleted = database_factory(request).datasets_store.delete_dataset(dataset_uuid, request=request)
         if not is_deleted:
