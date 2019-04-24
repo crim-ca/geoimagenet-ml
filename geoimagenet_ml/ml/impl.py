@@ -354,11 +354,11 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         if feature_idx // dataset_update_count:
             update_func("updating dataset definition (checkpoint: {}/{})"
                         .format(feature_idx, len(features)), patch_percent)
-            dataset_store.save_dataset(dataset_container)
+            dataset_store.save_dataset(dataset_container, overwrite=True)
 
     update_func("generating patches archived file", final_percent)
     dataset_container.zip()
 
     update_func("updating completed dataset definition", final_percent)
     dataset_container.mark_finished()
-    return dataset_store.save_dataset(dataset_container)
+    return dataset_store.save_dataset(dataset_container, overwrite=True)
