@@ -22,7 +22,6 @@ from geoimagenet_ml.store.exceptions import ModelLoadingError
 from geoimagenet_ml.store.exceptions import ProcessInstanceError
 from geoimagenet_ml.ml.impl import load_model
 from pyramid_celery import celery_app as app
-from pywps import Process as ProcessWPS
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
 from datetime import datetime       # noqa: F401
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
         AnyStr, AnyStatus, ErrorType, LevelType, List, LoggerType, Number, Union,
         Optional, InputType, OutputType, UUID, JSON, OptionType, Type,
     )
+    from pywps import Process as ProcessWPS  # noqa: F401
 
 
 def _check_io_format(io_items):

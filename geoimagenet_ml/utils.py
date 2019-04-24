@@ -101,8 +101,7 @@ def get_user_id(request):
     url = os.getenv("MAGPIE_USER_URL")
     if not url or (isinstance(url, six.string_types) and not len(url)) or not url.startswith("http"):
         return None
-    headers = request.headers
-    headers.update({"Accept": "application/json"})
+    headers = {"Accept": "application/json"}
     resp = requests.get(url, headers=headers, cookies=request.cookies)
     if resp.status_code != 200:
         raise ValueError("Failed connection to user id provider.")

@@ -60,7 +60,7 @@ def setup_config_with_mongodb(settings=None, config=None):
         "mongodb.port": "27027",
         "mongodb.db_name": "geoimagenet-test",
         "geoimagenet_ml.api.db_factory": MONGODB_TYPE,
-        "geoimagenet_ml.api.models_path": "/tmp"  # place models somewhere they will be deleted periodically
+        "geoimagenet_ml.ml.models_path": "/tmp"  # place models somewhere they will be deleted periodically
     }
     if settings:
         settings_db.update(settings)

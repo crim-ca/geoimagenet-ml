@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (   # noqa: F401
         Any, AnyStr, ErrorType, LevelType, Number, Dict, List, JSON, Optional, UUID, Union
     )
-    from geoimagenet_ml.store.datatypes import Job
+    from geoimagenet_ml.store.datatypes import Job  # noqa: F401
     # noinspection PyProtectedMember
     from celery import Task                 # noqa: F401
     from pyramid.registry import Registry   # noqa: F401

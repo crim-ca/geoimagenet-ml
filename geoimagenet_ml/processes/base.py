@@ -1,6 +1,8 @@
 from geoimagenet_ml.utils import classproperty
-from typing import AnyStr
+from typing import TYPE_CHECKING
 from abc import abstractmethod
+if TYPE_CHECKING:
+    from typing import AnyStr  # noqa: F401
 
 
 class ProcessBase(object):
