@@ -97,14 +97,14 @@ class ProcessRunner(ProcessBase):
             if not isnull(default):
                 flattened_inputs = [default]
             else:
-                input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]  # type: JSON
+                input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]
                 if len(input_spec) < 1:
                     raise ValueError("Missing input '{}' not resolvable from process definition.".format(input_id))
                 input_spec = input_spec[0]
-                if 'default' in input_spec:
-                    flattened_inputs = [input_spec['default']]
+                if "default" in input_spec:
+                    flattened_inputs = [input_spec["default"]]
                 else:
-                    formats_defaults = [f['default'] for f in input_spec['formats'] if 'default' in f]
+                    formats_defaults = [f["default"] for f in input_spec["formats"] if "default" in f]
                     if formats_defaults:
                         flattened_inputs = [formats_defaults[0]]
 

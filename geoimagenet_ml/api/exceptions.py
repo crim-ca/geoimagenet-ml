@@ -18,7 +18,7 @@ import json
 import six
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import JSON, OptionType  # noqa: F401
+    from geoimagenet_ml.typedefs import JSON, ParamsType  # noqa: F401
 
 # control variables to avoid infinite recursion in case of
 # major programming error to avoid application hanging
@@ -34,7 +34,7 @@ def verify_param(param,                             # type: Any
                  httpKWArgs=None,                   # type: Dict[AnyStr, Any]
                  msgOnFail="",                      # type: AnyStr
                  content=None,                      # type: Optional[JSON]
-                 contentType='application/json',    # type: AnyStr
+                 contentType="application/json",    # type: AnyStr
                  notNone=False,                     # type: bool
                  notEmpty=False,                    # type: bool
                  notIn=False,                       # type: bool
@@ -237,7 +237,7 @@ def valid_http(httpSuccess=HTTPOk, httpKWArgs=None, detail="",
 
 
 def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
-               httpKWArgs=None,                     # type: Optional[OptionType]
+               httpKWArgs=None,                     # type: Optional[ParamsType]
                detail="",                           # type: Optional[AnyStr]
                content=None,                        # type: Optional[AnyStr, JSON]
                contentType='application/json',      # type: Optional[AnyStr]

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Callable, List, Tuple, Union, OptionType, JSON, SettingsType, Number, Optional,
+        Any, AnyStr, Callable, List, Tuple, Union, ParamsType, JSON, SettingsType, Number, Optional,
         FeatureType, RasterDataType
     )
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
@@ -31,9 +31,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 def load_model(model_file):
-    # type: (Union[Any, AnyStr]) -> Tuple[bool, OptionType, Optional[BytesIO], Optional[Exception]]
+    # type: (Union[Any, AnyStr]) -> Tuple[bool, ParamsType, Optional[BytesIO], Optional[Exception]]
     """
     Tries to load a model checkpoint file from the file-like object, file path or URL.
+
     :return: tuple of (success, data, buffer, exception) accordingly.
     :raises: None (nothrow)
     """

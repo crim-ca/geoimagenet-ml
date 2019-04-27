@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from geoimagenet_ml.constants import OPERATION
+from geoimagenet_ml.constants import OPERATION, VISIBILITY
 from geoimagenet_ml.utils import (
     now,
     localize_datetime,
@@ -18,13 +18,12 @@ from geoimagenet_ml.utils import (
 )
 from geoimagenet_ml.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
-from geoimagenet_ml.store.exceptions import ModelLoadingError
-from geoimagenet_ml.store.exceptions import ProcessInstanceError
+from geoimagenet_ml.store import exceptions as ex
 from geoimagenet_ml.ml.impl import load_model
 from pyramid_celery import celery_app as app
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
-from datetime import datetime       # noqa: F401
+from datetime import datetime
 from zipfile import ZipFile
 import json
 import boltons.tbutils
@@ -33,12 +32,13 @@ import shutil
 import uuid
 import six
 import os
+import io
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # noinspection PyPackageRequirements
     from geoimagenet_ml.typedefs import (   # noqa: F401
         AnyStr, AnyStatus, ErrorType, LevelType, List, LoggerType, Number, Union,
-        Optional, InputType, OutputType, UUID, JSON, OptionType, Type,
+        Optional, InputType, OutputType, UUID, JSON, ParamsType, Type,
     )
     from pywps import Process as ProcessWPS  # noqa: F401
 
@@ -86,7 +86,7 @@ class Base(dict):
         prop = getattr(type(self), item)
         if isinstance(prop, property) and prop.fget is not None:
             # noinspection PyArgumentList
-            return prop.fget(self, item)
+            return prop.fget(self)
         elif item in self:
             return self[item]
         else:
@@ -102,6 +102,32 @@ class Base(dict):
         cls = type(self)
         rep = dict.__repr__(self)
         return "{0}.{1} ({2})".format(cls.__module__, cls.__name__, rep)
+
+    def _get_params(self, extra_params=None):
+        # type: (Optional[ParamsType]) -> ParamsType
+        """
+        Collects ``params`` fields defined by every child ``With<Field>`` and aggregates them for the parent class.
+        """
+        base_params = {}
+        for cls in type(self).__bases__:
+            # noinspection PyUnresolvedReferences
+            base_params.update(cls.params.fget(self))
+        # apply parent definitions last to guarantee they override any base definitions
+        base_params.update(extra_params or {})
+        return base_params
+
+    def _get_json(self, extra_json=None):
+        # type: (Optional[JSON]) -> JSON
+        """
+        Collects ``json`` fields defined by every child ``With<Field>`` and aggregates them for the parent class.
+        """
+        base_json = {}
+        for cls in type(self).__bases__:
+            # noinspection PyUnresolvedReferences
+            base_json.update(cls.json(self))
+        # apply parent definitions last to guarantee they override any base definitions
+        base_json.update(extra_json or {})
+        return base_json
 
     @property
     def uuid(self):
@@ -132,9 +158,102 @@ class Base(dict):
             raise TypeError("Type 'datetime' expected.")
         self["created"] = localize_datetime(dt)
 
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {
+            "uuid": self.uuid,
+            "created": self.created,
+        }
+
+    def json(self):
+        # type: () -> JSON
+        return {
+            "uuid": self.uuid,
+            "created": datetime2str(self.created) if self.created else None
+        }
+
+
+class WithFinished(dict):
+    """Adds property ``finished`` to corresponding class."""
+    @property
+    def finished(self):
+        # type: () -> Optional[datetime]
+        finished = self.get("finished")
+        if isinstance(finished, six.string_types):
+            finished = str2datetime(finished)
+        if finished:
+            return finished
+        return None
+
+    @finished.setter
+    def finished(self, dt):
+        # type: (datetime) -> None
+        if not isinstance(dt, datetime):
+            raise TypeError("Type 'datetime' required.")
+        self["finished"] = localize_datetime(dt)
+
+    def is_finished(self):
+        # type: () -> bool
+        return self.finished is not None
+
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {"finished": self.finished}
+
+    def json(self):
+        # type: () -> JSON
+        return {"finished": datetime2str(self.finished) if self.finished else None}
+
+
+class WithName(dict):
+    """Adds property ``name`` to corresponding class."""
+
+    @property
+    def name(self):
+        # type: () -> AnyStr
+        return self["name"]
+
+    @name.setter
+    def name(self, name):
+        # type: (AnyStr) -> None
+        self["name"] = name
+
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {"name": self.name}
+
+    def json(self):
+        # type: () -> JSON
+        return {"name": self.name}
+
+
+class WithType(dict):
+    """Adds property ``type`` to corresponding class."""
+    @property
+    def type(self):
+        # type: () -> AnyStr
+        return self["type"]
+
+    @type.setter
+    def type(self, _type):
+        # type: (AnyStr) -> None
+        self["type"] = _type
+
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {"type": self.type}
+
+    def json(self):
+        # type: () -> JSON
+        return {"type": self.type}
+
 
 class WithUser(dict):
-    """Adds properties ``user`` to corresponding class."""
+    """Adds property ``user`` to corresponding class."""
     @property
     def user(self):
         # type: () -> Optional[int]
@@ -143,12 +262,49 @@ class WithUser(dict):
     @user.setter
     def user(self, user):
         # type: (Optional[int]) -> None
-        if not isinstance(user, int) or user is None:
+        if not isinstance(user, int) or user is not None:
             raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
         self["user"] = user
 
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {"user": self.user}
 
-class Dataset(Base, WithUser):
+    def json(self):
+        # type: () -> JSON
+        return {"user": self.user}
+
+
+class WithVisibility(dict):
+    """Adds properties ``visibility`` to corresponding class."""
+
+    # noinspection PyTypeChecker
+    @property
+    def visibility(self):
+        # type: () -> VISIBILITY
+        return VISIBILITY.get(self.get("visibility"), default=VISIBILITY.PRIVATE)
+
+    @visibility.setter
+    def visibility(self, visibility):
+        # type: (Union[VISIBILITY, AnyStr]) -> None
+        if isinstance(visibility, six.string_types):
+            visibility = VISIBILITY.get(visibility)
+        if visibility not in VISIBILITY:
+            raise TypeError("Type 'VISIBILITY' required.")
+        self["visibility"] = visibility
+
+    @property
+    def params(self):
+        # type: () -> ParamsType
+        return {"visibility": self.visibility.name}
+
+    def json(self):
+        # type: () -> JSON
+        return {"visibility": self.visibility.value}
+
+
+class Dataset(Base, WithName, WithType, WithUser, WithFinished):
     """
     Dictionary that contains a dataset description for db storage.
     It always has keys ``name``, ``path``, ``type``, ``data`` and ``files``.
@@ -166,16 +322,6 @@ class Dataset(Base, WithUser):
             setattr(self, "files", list())
         if "status" not in self:
             setattr(self, "status", STATUS.RUNNING)
-
-    @property
-    def name(self):
-        # type: () -> AnyStr
-        return self["name"]
-
-    @name.setter
-    def name(self, name):
-        # type: (AnyStr) -> None
-        self["name"] = name
 
     @property
     def path(self):
@@ -234,16 +380,6 @@ class Dataset(Base, WithUser):
         return dataset_zip_path
 
     @property
-    def type(self):
-        # type: () -> AnyStr
-        return self["type"]
-
-    @type.setter
-    def type(self, _type):
-        # type: (AnyStr) -> None
-        self["type"] = _type
-
-    @property
     def status(self):
         # type: () -> AnyStr
         status = self.get("status")
@@ -263,23 +399,6 @@ class Dataset(Base, WithUser):
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
         self["status"] = status.value
-
-    @property
-    def finished(self):
-        # type: () -> Optional[datetime]
-        finished = self.get("finished")
-        if isinstance(finished, six.string_types):
-            finished = str2datetime(finished)
-        if finished:
-            return finished
-        return None
-
-    @finished.setter
-    def finished(self, dt):
-        # type: (datetime) -> None
-        if not isinstance(dt, datetime):
-            raise TypeError("Type 'datetime' required.")
-        self["finished"] = localize_datetime(dt)
 
     def mark_finished(self):
         # type: () -> None
@@ -312,33 +431,26 @@ class Dataset(Base, WithUser):
 
     @property
     def params(self):
-        # type: () -> JSON
-        return {
-            "uuid": self.uuid,
-            "user": self.user,
+        # type: () -> ParamsType
+        return self._get_params({
             "name": self.name,
             "path": self.path,
             "type": self.type,
             "data": self.data,
             "files": self.files,
             "status": self.status,
-            "created": self.created,
-            "finished": self.finished,
-        }
+        })
 
     def json(self):
         # type: () -> JSON
-        return {
-            "uuid": self.uuid,
+        return self._get_json({
             "name": self.name,
             "path": self.path,
             "type": self.type,
             "data": self.data,
             "files": self.files,
             "status": self.status,
-            "created": datetime2str(self.created) if self.created else None,
-            "finished": datetime2str(self.finished) if self.finished else None,
-        }
+        })
 
     def summary(self):
         # type: () -> JSON
@@ -348,7 +460,7 @@ class Dataset(Base, WithUser):
         }
 
 
-class Model(Base, WithUser):
+class Model(Base, WithName, WithUser, WithVisibility):
     """
     Dictionary that contains a model description for db storage.
     It always has ``name`` and ``path`` keys.
@@ -387,42 +499,101 @@ class Model(Base, WithUser):
 
     @property
     def data(self):
-        # type: () -> Optional[OptionType]
+        # type: () -> Optional[ParamsType]
         """
-        Retrieve the model's data from the stored file.
-        Data can be
+        Retrieve the model's data config from the stored file.
+        If data was already loaded and cached in the object, it is returned instead.
         """
-        if self["data"] is not None:
+        if self.get("data") is not None:
             return self["data"]
         if self.file:
-            success, data, buffer, exception = load_model(self.file)
-            if exception:
-                raise exception
-            if not success:
-                raise ModelLoadingError("Failed retrieving model data.")
+            data, _ = self._load_check_data(self.file)
+            self["data"] = data
             return data
         return None
 
+    def save(self, location):
+        """
+        Saves the model data to specified storage ``location``, using the available ``file``, ``data`` or ``path``
+        field, in this specific order of priority. Execute validation of data contents before saving.
+
+        Cases:
+            - ``file`` is available and exists, duplicate is created at ``location``
+            - ``file`` is missing and ``data`` is *raw* checkpoint data (not loaded checkpoint config),
+              it is dumped at ``location``
+            - ``path`` is the only provided field and points to a valid path/URL, fetches and dumps
+              its content to ``location``
+
+        After calling this method, ``data`` is cleared (as required) and ``file`` is updated with ``location``.
+
+        :returns: model safe to write to database (JSON serializable), with cleared `data` field and updated `file`.
+        :raises ModelInstanceError:
+            if none of the fields can help retrieve the model's data.
+        :raises ModelLoadingError:
+            if saving cannot be accomplished using provided fields because of invalid format or failing validation.
+        :raises ModelRegistrationError:
+            if the save location is invalid.
+        :raises ModelConflictError:
+            if the save location already exists.
+        """
+        if not isinstance(location, six.string_types):
+            raise ex.ModelRegistrationError("Model save location has to be a string.")
+        location = os.path.abspath(location)
+        os.makedirs(os.path.dirname(location), exist_ok=True)
+
+        if self.file and os.path.isfile(self.file) and self.file != location:
+            if os.path.isfile(location):
+                raise ex.ModelConflictError("Model save location already exists.")
+            shutil.copyfile(self.file, location)
+            self["file"] = location
+            self["data"] = None
+            return
+
+        def _write_buffer(_buffer):
+            # transfer loaded data buffer to storage file
+            with open(location, 'wb') as model_file:
+                _buffer.seek(0)
+                model_file.write(_buffer.read())
+                _buffer.close()
+
+        if isinstance(self.data, io.BufferedIOBase):
+            _write_buffer(self["data"])
+            self["file"] = location
+            self["data"] = None
+            return
+
+        if not self.file and not self.data and self.path:
+            _, buffer = self._load_check_data(self.path)
+            _write_buffer(buffer)
+            self["file"] = location
+            self["data"] = None
+            return
+
+        raise ex.ModelInstanceError("Model is expected to provided one of valid field: [file, data, path]")
+
+    @staticmethod
+    def _load_check_data(path):
+        success, data, buffer, exception = load_model(path)  # nothrow operation
+        if not success:
+            if not exception:
+                exception = "unknown reason"
+            raise ex.ModelLoadingError("Failed loading model data: [{!r}].".format(exception))
+        return data, buffer
+
     @property
     def params(self):
-        # type: () -> OptionType
-        return {
-            "uuid": self.uuid,
-            "user": self.user,
-            "name": self.name,
-            "path": self.path,
-            "file": self.file,
-            "created": self.created,
-        }
+        # type: () -> ParamsType
+        return self._get_params({
+            # note: purposely avoid 'data' field to store only 'file' information
+            "file": self.file,  # saved location (storage)
+            "path": self.path,  # input location (submit)
+        })
 
     def json(self):
         # type: () -> JSON
-        return {
-            "uuid": self.uuid,
-            "name": self.name,
+        return self._get_json({
             "path": self.path,
-            "created": datetime2str(self.created),
-        }
+        })
 
     def summary(self):
         # type: () -> JSON
@@ -432,10 +603,12 @@ class Model(Base, WithUser):
         }
 
 
-class Process(Base, WithUser):
+class Process(Base, WithType, WithUser):
     """
     Dictionary that contains a process description for db storage.
     It always has ``uuid`` and ``identifier`` keys.
+
+    Field ``type`` represents the wps, workflow, etc.
     """
 
     def __init__(self, *args, **kwargs):
@@ -454,12 +627,6 @@ class Process(Base, WithUser):
     def identifier(self):
         # type: () -> AnyStr
         return self["identifier"]
-
-    # wps, workflow, etc.
-    @property
-    def type(self):
-        # type: () -> AnyStr
-        return self["type"]
 
     @property
     def title(self):
@@ -513,7 +680,7 @@ class Process(Base, WithUser):
 
     @property
     def package(self):
-        # type: () -> OptionType
+        # type: () -> ParamsType
         return self.get("package")
 
     @property
@@ -523,10 +690,8 @@ class Process(Base, WithUser):
 
     @property
     def params(self):
-        # type: () -> OptionType
-        return {
-            "uuid": self.uuid,
-            "user": self.user,
+        # type: () -> ParamsType
+        return self._get_params({
             "identifier": self.identifier,
             "title": self.title,
             "abstract": self.abstract,
@@ -537,13 +702,12 @@ class Process(Base, WithUser):
             "outputs": self.outputs,
             "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
-            "type": self.type,
             "package": self.package,      # deployment specification (json body)
-        }
+        })
 
     @property
     def params_wps(self):
-        # type: () -> OptionType
+        # type: () -> ParamsType
         """
         Values applicable to WPS Process ``__init__``
         """
@@ -560,8 +724,7 @@ class Process(Base, WithUser):
 
     def json(self):
         # type: () -> JSON
-        return {
-            "uuid": self.uuid,
+        return self._get_json({
             "identifier": self.identifier,
             "title": self.title,
             "abstract": self.abstract,
@@ -572,7 +735,7 @@ class Process(Base, WithUser):
             "outputs": self.outputs,
             "execute_endpoint": self.execute_endpoint,
             "limit_single_job": self.limit_single_job,
-        }
+        })
 
     def summary(self):
         # type: () -> JSON
@@ -591,14 +754,15 @@ class Process(Base, WithUser):
         # type: () -> ProcessWPS
         process_key = self.identifier
         if self.type != PROCESS_WPS:
-            raise ProcessInstanceError("Invalid WPS process call for '{}' of type '{}'.".format(process_key, self.type))
+            raise ex.ProcessInstanceError("Invalid WPS process call for '{}' of type '{}'."
+                                          .format(process_key, self.type))
         if process_key not in process_mapping:
-            raise ProcessInstanceError("Unknown process '{}' in mapping".format(process_key))
+            raise ex.ProcessInstanceError("Unknown process '{}' in mapping".format(process_key))
         kwargs = self.params_wps
         return process_mapping[process_key](**kwargs)
 
 
-class Job(Base, WithUser):
+class Job(Base, WithUser, WithFinished, WithVisibility):
     """
     Dictionary that contains a job description for db storage.
     It always has ``uuid`` and ``process`` keys.
@@ -803,27 +967,6 @@ class Job(Base, WithUser):
         if not self.is_started():
             setattr(self, "started", now())
 
-    @property
-    def finished(self):
-        # type: () -> Optional[datetime]
-        finished = self.get("finished")
-        if isinstance(finished, six.string_types):
-            finished = str2datetime(finished)
-        if finished:
-            return finished
-        return None
-
-    @finished.setter
-    def finished(self, dt):
-        # type: (datetime) -> None
-        if not isinstance(dt, datetime):
-            raise TypeError("Type 'datetime' required.")
-        self["finished"] = localize_datetime(dt)
-
-    def is_finished(self):
-        # type: () -> bool
-        return self.finished is not None
-
     def mark_finished(self):
         # type: () -> None
         if not self.is_finished():
@@ -939,22 +1082,18 @@ class Job(Base, WithUser):
 
     @property
     def params(self):
-        # type: () -> JSON
-        return {
-            "uuid": self.uuid,
+        # type: () -> ParamsType
+        return self._get_params({
             "task": self.task,
             "service": self.service,
             "process": self.process,
             "inputs": self.inputs,
-            "user": self.user,
             "status": self.status,
             "status_message": self.status_message,
             "status_location": self.status_location,
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
-            "created": self.created,
             "started": self.started,
-            "finished": self.finished,
             "duration": self.duration,
             "progress": self.progress,
             "results": self.results,
@@ -963,29 +1102,25 @@ class Job(Base, WithUser):
             "tags": self.tags,
             "request": self.request,
             "response": self.response,
-        }
+        })
 
     def json(self):
         # type: () -> JSON
-        return {
-            "uuid": self.uuid,
+        return self._get_json({
             "task": self.task,
             "service": self.service,
             "process": self.process,
-            "user": self.user,
             "inputs": self.inputs,
             "status": self.status,
             "status_message": self.status_message,
             "status_location": self.status_location,
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
-            "created": datetime2str(self.created) if self.created else None,
             "started": datetime2str(self.started) if self.started else None,
-            "finished": datetime2str(self.finished) if self.finished else None,
             "duration": self.duration,
             "progress": self.progress,
             "tags": self.tags,
-        }
+        })
 
     def summary(self):
         # type: () -> JSON
@@ -995,7 +1130,7 @@ class Job(Base, WithUser):
         }
 
 
-class Action(Base):
+class Action(Base, WithUser):
     """
     Dictionary that contains an action description for db storage.
     It always has ``uuid``, ``type`` and ``operation`` keys.
@@ -1074,20 +1209,7 @@ class Action(Base):
             operation = OPERATION.get(operation)
         if operation not in OPERATION:
             raise TypeError("Type 'OPERATION' required.")
-        self["operation"] = operation.value
-
-    @property
-    def user(self):
-        # type: () -> Optional[int]
-        """User that accomplished the action."""
-        return self.get("user", None)
-
-    @user.setter
-    def user(self, user):
-        # type: (Optional[int]) -> None
-        if not isinstance(user, int) and user is not None:
-            raise TypeError("Type 'int' required.")
-        self["user"] = user
+        self["operation"] = operation
 
     @property
     def path(self):
@@ -1117,14 +1239,11 @@ class Action(Base):
 
     @property
     def params(self):
-        # type: () -> JSON
-        return {
-            "uuid": self.uuid,
+        # type: () -> ParamsType
+        return self._get_params({
             "type": self.type.__name__,
             "item": self.item,
-            "user": self.user,
             "path": self.path,
             "method": self.method,
             "operation": self.operation.name,
-            "created": self.created,
-        }
+        })

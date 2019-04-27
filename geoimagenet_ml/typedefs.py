@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     Number = Union[float, int]
     JsonValue = Union[AnyStr, Number, bool, None]
     JSON = Dict[AnyKey, Union[JsonValue, List["JSON"], Dict[AnyKey, "JSON"]]]
-    OptionType = Dict[AnyStr, Any]
+    ParamsType = Dict[AnyStr, Any]
     InputType = Dict[AnyStr, JSON]
     OutputType = Dict[AnyStr, JSON]
     LoggerType = _loggerClass

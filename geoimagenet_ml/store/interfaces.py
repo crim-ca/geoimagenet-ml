@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from geoimagenet_ml.constants import SORT, ORDER, OPERATION                                             # noqa: F401
     from geoimagenet_ml.status import STATUS, CATEGORY                                                      # noqa: F401
     from geoimagenet_ml.store.datatypes import Base, Dataset, Process, Model, Job, Action                   # noqa: F401
-    from geoimagenet_ml.typedefs import OptionType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
+    from geoimagenet_ml.typedefs import ParamsType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
     from datetime import datetime                                                                           # noqa: F401
     from pyramid.request import Request                                                                     # noqa: F401
     from io import BufferedIOBase                                                                           # noqa: F401
@@ -60,7 +60,7 @@ class DatabaseInterface(object):
         raise NotImplementedError
 
     def get_information(self):
-        # type: () -> OptionType
+        # type: () -> ParamsType
         """
         :returns: {'version': version, 'type': db_type}
         """
@@ -125,8 +125,8 @@ class ModelStore(object):
     Storage for local models.
     """
 
-    def save_model(self, model, data=None, request=None):
-        # type: (Model, Optional[OptionType, BufferedIOBase], Optional[Request]) -> Model
+    def save_model(self, model, request=None):
+        # type: (Model, Optional[Request]) -> Model
         """
         Stores a model in storage.
         """

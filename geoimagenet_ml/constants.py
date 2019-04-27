@@ -48,3 +48,8 @@ class OPERATION(six.with_metaclass(ExtendedEnumMeta, Enum)):
     DOWNLOAD = "download"   # requests 'GET' with file returned
     INFO = "info"           # requests 'GET' with single {} item returned
     LIST = "list"           # requests 'GET' with multiple {} items returned
+
+
+class VISIBILITY(six.with_metaclass(ExtendedEnumMeta, Enum)):
+    PUBLIC = "public"
+    PRIVATE = "private"

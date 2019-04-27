@@ -18,7 +18,6 @@ import pymongo
 import shutil
 import six
 import os
-import io
 import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -157,33 +156,23 @@ class MongodbModelStore(ModelStore, MongodbStore):
         self.models_path = settings.get("geoimagenet_ml.ml.models_path")
         os.makedirs(self.models_path, exist_ok=True)
 
-    def save_model(self, model, data=None, request=None):
+    def save_model(self, model, request=None):
         if not isinstance(model, Model):
             raise ex.ModelInstanceError("Unsupported model type '{}'".format(type(model)))
-        data = data or model.data
         try:
-            if isinstance(data, io.BufferedIOBase):
-                # transfer loaded data buffer to storage file
-                model_path = os.path.join(self.models_path, model.uuid + self._model_ext)
-                with open(model_path, 'wb') as model_file:
-                    data.seek(0)
-                    model_file.write(data.read())
-                    data.close()
-                model["data"] = None        # force reload from stored file when calling `model.data` retrieved from db
-                model["file"] = model_path
-            elif isinstance(data, dict):
-                model["data"] = data
-                model["file"] = None
-            else:
-                raise ex.ModelInstanceError("Model data is expected to be a buffer or dict, got {!r}.".format(data))
-            result = self.collection.insert_one(model)
+            model_path = os.path.join(self.models_path, model.uuid + self._model_ext)
+            model.save(model_path)  # apply the database's known storage location and prepare to write to db
+            result = self.collection.insert_one(model.params)
             if not result.acknowledged:
                 raise Exception("Model insertion not acknowledged")
+        except ex.ModelError as exc:
+            raise
         except DuplicateKeyError:
             raise ex.ModelConflictError("Model '{}' conflicts with an existing model.".format(model.name))
         except Exception as exc:
-            LOGGER.exception("Model '{}' registration generated error: [{!r}].".format(model.name, exc))
-            raise ex.ModelRegistrationError("Model '{}' could not be registered.".format(model.name))
+            msg_exc = "Model '{}' could not be registered. Unhandled error: [{!r}].".format(model.name, exc)
+            LOGGER.exception(msg_exc)
+            raise ex.ModelRegistrationError(msg_exc)
         return self.fetch_by_uuid(model.uuid)
 
     def delete_model(self, model_uuid, request=None):

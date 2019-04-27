@@ -8,20 +8,22 @@ test_api
 Tests for `GeoImageNet ML API` module.
 """
 
-import os
-import six
-# noinspection PyPackageRequirements
-import pytest
-import unittest
-import pyramid
-import pyramid.testing
-import warnings
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model
 from geoimagenet_ml.store.factories import database_factory
 from tests import utils
+import pyramid.testing
+# noinspection PyPackageRequirements
+import pytest
+import unittest
+import pyramid
+import warnings
+import json
+import six
+import os
+
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -102,16 +104,16 @@ class TestModelApi(unittest.TestCase):
         cls.db.models_store.clear_models()
         pyramid.testing.tearDown()
 
-    def make_model(self, name):
-        return Model(name=name, path=os.path.join(self.MODEL_BASE_PATH, name))
+    def make_model(self, name, data):
+        return Model(name=name, path=os.path.join(self.MODEL_BASE_PATH, name), data=json.dump(data))
 
     def setUp(self):
         if not self.db.models_store.clear_models():
             warnings.warn("Models could not be cleared, future tests might fail due to unexpected values.", Warning)
-        self.model_1 = self.make_model('model-1')
-        self.model_2 = self.make_model('model-2')
-        self.db.models_store.save_model(self.model_1, data={'model': 'test-1'})
-        self.db.models_store.save_model(self.model_2, data={'model': 'test-2'})
+        self.model_1 = self.make_model('model-1', data={'model': 'test-1'})
+        self.model_2 = self.make_model('model-2', data={'model': 'test-2'})
+        self.db.models_store.save_model(self.model_1)
+        self.db.models_store.save_model(self.model_2)
 
     def test_GetModels_valid(self):
         resp = utils.request(self.app, 'GET', schemas.ModelsAPI.path, headers=self.json_headers)

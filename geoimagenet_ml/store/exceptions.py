@@ -10,7 +10,14 @@ class InvalidIdentifierValue(ValueError):
     pass
 
 
-class DatasetNotFoundError(Exception):
+class DatasetError(Exception):
+    """
+    Error related to :class:`geoimagenet_ml.store.datatypes.Dataset`.
+    """
+    pass
+
+
+class DatasetNotFoundError(DatasetError):
     """
     Error indicating that a dataset could not be read from the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.DatasetStore`.
@@ -18,7 +25,7 @@ class DatasetNotFoundError(Exception):
     pass
 
 
-class DatasetRegistrationError(Exception):
+class DatasetRegistrationError(DatasetError):
     """
     Error indicating that a dataset could not be registered in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.DatasetStore`.
@@ -26,7 +33,7 @@ class DatasetRegistrationError(Exception):
     pass
 
 
-class DatasetInstanceError(Exception):
+class DatasetInstanceError(DatasetError):
     """
     Error indicating that the instance passed is not supported with
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.DatasetStore`.
@@ -34,7 +41,7 @@ class DatasetInstanceError(Exception):
     pass
 
 
-class DatasetConflictError(Exception):
+class DatasetConflictError(DatasetError):
     """
     Error indicating that the instance of :class:`geoimagenet_ml.store.interfaces.DatasetStore`
     is conflicting with another process in the storage backend .
@@ -42,7 +49,14 @@ class DatasetConflictError(Exception):
     pass
 
 
-class ModelNotFoundError(Exception):
+class ModelError(Exception):
+    """
+    Error related to :class:`geoimagenet_ml.store.datatypes.Model`.
+    """
+    pass
+
+
+class ModelNotFoundError(ModelError):
     """
     Error indicating that a model could not be read from the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ModelStore`.
@@ -50,7 +64,7 @@ class ModelNotFoundError(Exception):
     pass
 
 
-class ModelRegistrationError(Exception):
+class ModelRegistrationError(ModelError):
     """
     Error indicating that a model could not be registered in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ModelStore`.
@@ -58,7 +72,7 @@ class ModelRegistrationError(Exception):
     pass
 
 
-class ModelInstanceError(Exception):
+class ModelInstanceError(ModelError):
     """
     Error indicating that the instance passed is not supported with
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ModelStore`.
@@ -66,14 +80,14 @@ class ModelInstanceError(Exception):
     pass
 
 
-class ModelLoadingError(Exception):
+class ModelLoadingError(ModelError):
     """
     Error indicating that loading of the model data from the model definition failed.
     """
     pass
 
 
-class ModelConflictError(Exception):
+class ModelConflictError(ModelError):
     """
     Error indicating that the instance of :class:`geoimagenet_ml.store.interfaces.ModelStore`
     is conflicting with another process in the storage backend .
@@ -81,7 +95,14 @@ class ModelConflictError(Exception):
     pass
 
 
-class ProcessNotFoundError(Exception):
+class ProcessError(Exception):
+    """
+    Error related to :class:`geoimagenet_ml.store.datatypes.Process`.
+    """
+    pass
+
+
+class ProcessNotFoundError(ProcessError):
     """
     Error indicating that a process could not be read from the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ProcessStore`.
@@ -89,7 +110,7 @@ class ProcessNotFoundError(Exception):
     pass
 
 
-class ProcessRegistrationError(Exception):
+class ProcessRegistrationError(ProcessError):
     """
     Error indicating that a process could not be registered in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ProcessStore`.
@@ -97,7 +118,7 @@ class ProcessRegistrationError(Exception):
     pass
 
 
-class ProcessInstanceError(Exception):
+class ProcessInstanceError(ProcessError):
     """
     Error indicating that the instance passed is not supported with
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ProcessStore`.
@@ -105,7 +126,7 @@ class ProcessInstanceError(Exception):
     pass
 
 
-class ProcessConflictError(Exception):
+class ProcessConflictError(ProcessError):
     """
     Error indicating that the instance of :class:`geoimagenet_ml.store.interfaces.ProcessStore`
     is conflicting with another process in the storage backend .
@@ -113,7 +134,14 @@ class ProcessConflictError(Exception):
     pass
 
 
-class JobNotFoundError(Exception):
+class JobError(Exception):
+    """
+    Error related to :class:`geoimagenet_ml.store.datatypes.Job`.
+    """
+    pass
+
+
+class JobNotFoundError(JobError):
     """
     Error indicating that a job could not be read from the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.JobStore`.
@@ -121,7 +149,7 @@ class JobNotFoundError(Exception):
     pass
 
 
-class JobRegistrationError(Exception):
+class JobRegistrationError(JobError):
     """
     Error indicating that a job could not be registered in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.JobStore`.
@@ -129,7 +157,7 @@ class JobRegistrationError(Exception):
     pass
 
 
-class JobUpdateError(Exception):
+class JobUpdateError(JobError):
     """
     Error indicating that a job could not be updated in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.JobStore`.
@@ -137,7 +165,7 @@ class JobUpdateError(Exception):
     pass
 
 
-class JobInstanceError(Exception):
+class JobInstanceError(JobError):
     """
     Error indicating that the instance passed is not supported with
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.JobStore`.
@@ -145,7 +173,7 @@ class JobInstanceError(Exception):
     pass
 
 
-class JobConflictError(Exception):
+class JobConflictError(JobError):
     """
     Error indicating that the instance of :class:`geoimagenet_ml.store.interfaces.JobStore`
     is conflicting with another process in the storage backend .
@@ -153,7 +181,14 @@ class JobConflictError(Exception):
     pass
 
 
-class ActionInstanceError(Exception):
+class ActionError(Exception):
+    """
+    Error related to :class:`geoimagenet_ml.store.datatypes.Action`.
+    """
+    pass
+
+
+class ActionInstanceError(ActionError):
     """
     Error indicating that instance of :class:`geoimagenet_ml.store.datatypes.Action`
     could not be successfully generated using provided arguments.
@@ -161,7 +196,7 @@ class ActionInstanceError(Exception):
     pass
 
 
-class ActionRegistrationError(Exception):
+class ActionRegistrationError(ActionError):
     """
     Error indicating that a job could not be registered in the
     storage backend by an instance of :class:`geoimagenet_ml.store.interfaces.ActionStore`.
