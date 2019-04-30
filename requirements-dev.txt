@@ -5,3 +5,4 @@ WebTest
 wsgiproxy
 flake8
 coverage
+mock

@@ -85,8 +85,8 @@ def test_dataset_fields():
 def test_model_fields():
     check_fields(
         Model(uuid="test", name="test", path="test", type="test", user=1),
-        ["uuid", "name", "path", "data", "user", "created", "visibility"],
-        ["uuid", "name", "path", "data", "user", "created", "visibility"],
+        ["uuid", "name", "path", "user", "created", "visibility", "file"],
+        ["uuid", "name", "path", "user", "created", "visibility"],
         ["uuid", "name"],
     )
 

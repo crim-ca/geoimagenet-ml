@@ -262,8 +262,8 @@ class WithUser(dict):
     @user.setter
     def user(self, user):
         # type: (Optional[int]) -> None
-        if not isinstance(user, int) or user is not None:
-            raise TypeError("Type 'int' is required for '{}.user'".format(type(self)))
+        if not isinstance(user, int) and user is not None:
+            raise TypeError("Type 'int' or 'None' is required for '{}.user'".format(type(self)))
         self["user"] = user
 
     @property
