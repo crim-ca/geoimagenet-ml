@@ -1,4 +1,4 @@
-from geoimagenet_ml.api.routes.models.utils import create_model, get_model
+from geoimagenet_ml.api.routes.models.utils import create_model, get_model, update_model
 from geoimagenet_ml.api import exceptions as ex, schemas as s
 from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.store.datatypes import Model
@@ -7,7 +7,7 @@ from pyramid.response import FileResponse
 from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInternalServerError
 
 
-@s.ModelsAPI.get(tags=[s.ModelsTag], response_schemas=s.Models_GET_responses)
+@s.ModelsAPI.get(tags=[s.TagModels], response_schemas=s.Models_GET_responses)
 def get_models_view(request):
     """Get registered models."""
     db = database_factory(request)
@@ -22,7 +22,7 @@ def get_models_view(request):
                          detail=s.Models_GET_OkResponseSchema.description, request=request)
 
 
-@s.ModelsAPI.post(tags=[s.ModelsTag], schema=s.Models_POST_RequestSchema(), response_schemas=s.Models_POST_responses)
+@s.ModelsAPI.post(tags=[s.TagModels], schema=s.Models_POST_RequestSchema(), response_schemas=s.Models_POST_responses)
 def post_models_view(request):
     """Register a new model."""
     model = create_model(request)
@@ -31,8 +31,8 @@ def post_models_view(request):
                          detail=s.Models_POST_CreatedResponseSchema.description, request=request)
 
 
-@s.ModelAPI.get(tags=[s.ModelsTag],
-                schema=s.ModelEndpoint(), response_schemas=s.Model_GET_responses)
+@s.ModelAPI.get(tags=[s.TagModels],
+                schema=s.Model_GET_Endpoint(), response_schemas=s.Model_GET_responses)
 def get_model_view(request):
     """Get registered model information."""
     model = get_model(request)
@@ -48,7 +48,18 @@ def get_model_view(request):
                          detail=s.Model_GET_OkResponseSchema.description, request=request)
 
 
-@s.ModelDownloadAPI.get(tags=[s.ModelsTag],
+@s.ModelAPI.put(tags=[s.TagModels],
+                schema=s.Model_PUT_Endpoint(), response_schemas=s.Model_PUT_responses)
+def put_model_view(request):
+    """Update registered model information."""
+    model = update_model(request)
+    db = database_factory(request)
+    db.actions_store.save_action(model, OPERATION.UPDATE, request=request)
+    return ex.valid_http(httpSuccess=HTTPOk, content={"model": model.summary()},
+                         detail=s.Model_PUT_OkResponseSchema.description, request=request)
+
+
+@s.ModelDownloadAPI.get(tags=[s.TagModels],
                         schema=s.ModelDownloadEndpoint(), response_schemas=s.ModelDownload_GET_responses)
 def download_model_view(request):
     """Download registered model file."""

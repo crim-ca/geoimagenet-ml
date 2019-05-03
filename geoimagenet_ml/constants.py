@@ -44,6 +44,7 @@ class ORDER(six.with_metaclass(ExtendedEnumMeta, Enum)):
 class OPERATION(six.with_metaclass(ExtendedEnumMeta, Enum)):
     SUBMIT = "submit"       # requests 'POST' with item submission (ex: Job)
     DELETE = "delete"       # requests 'DELETE' of an item
+    UPDATE = "update"       # requests 'PUT' on item to modify it's content
     UPLOAD = "upload"       # requests 'POST' for created item with file
     DOWNLOAD = "download"   # requests 'GET' with file returned
     INFO = "info"           # requests 'GET' with single {} item returned

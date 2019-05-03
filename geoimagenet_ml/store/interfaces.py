@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import ParamsType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
     from datetime import datetime                                                                           # noqa: F401
     from pyramid.request import Request                                                                     # noqa: F401
-    from io import BufferedIOBase                                                                           # noqa: F401
 
 
 class DatabaseInterface(object):
@@ -128,7 +127,14 @@ class ModelStore(object):
     def save_model(self, model, request=None):
         # type: (Model, Optional[Request]) -> Model
         """
-        Stores a model in storage.
+        Saves a model in storage.
+        """
+        raise NotImplementedError
+
+    def update_model(self, model, request=None, **fields):
+        # type: (Model, Optional[Request], Any) -> Model
+        """
+        Updates a model's fields in storage.
         """
         raise NotImplementedError
 

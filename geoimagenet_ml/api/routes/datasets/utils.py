@@ -16,6 +16,12 @@ if TYPE_CHECKING:
 
 def create_dataset(request):
     # type: (Request) -> Dataset
+    """
+    Creates a new dataset instance and registers it to database.
+
+    :returns: created dataset instance if all requirements are met.
+    :raises HTTPException: corresponding status to error encountered.
+    """
     dataset_name = r.get_multiformat_post(request, "dataset_name")
     dataset_path = r.get_multiformat_post(request, "dataset_path")
     dataset_type = r.get_multiformat_post(request, "dataset_type")
@@ -53,8 +59,14 @@ def create_dataset(request):
 
 def get_dataset(request):
     # type: (Request) -> Dataset
-    dataset_uuid = request.matchdict.get("dataset_uuid")
-    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="dataset_uuid",
+    """
+    Searches for the dataset specified by path parameter.
+
+    :returns: valid dataset instance if found.
+    :raises HTTPException: corresponding status to error encountered.
+    """
+    dataset_uuid = request.matchdict.get(s.ParamDatasetUUID)
+    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName=s.ParamDatasetUUID,
                     msgOnFail=s.Dataset_GET_BadRequestResponseSchema.description, request=request)
     dataset = None
     try:
@@ -85,8 +97,14 @@ def get_dataset(request):
 
 def delete_dataset(request):
     # type: (Request) -> None
-    dataset_uuid = request.matchdict.get("dataset_uuid")
-    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="dataset_uuid",
+    """
+    Deletes the dataset specified by path parameter.
+
+    :returns: nothing if operation was successful.
+    :raises HTTPException: corresponding status to error encountered.
+    """
+    dataset_uuid = request.matchdict.get(s.ParamDatasetUUID)
+    ex.verify_param(dataset_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName=s.ParamDatasetUUID,
                     msgOnFail=s.Dataset_DELETE_BadRequestResponseSchema.description, request=request)
     try:
         is_deleted = database_factory(request).datasets_store.delete_dataset(dataset_uuid, request=request)

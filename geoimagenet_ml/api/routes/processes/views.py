@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.api import exceptions as ex, schemas as s
-from geoimagenet_ml.api.routes.processes.utils import create_process, get_process, get_job, create_process_job
+from geoimagenet_ml.api.routes.processes.utils import (
+    create_process, get_process, get_job, create_process_job, update_job_params
+)
 from geoimagenet_ml.constants import OPERATION
 from geoimagenet_ml.utils import get_any_id, get_any_value, has_raw_value
 from geoimagenet_ml.store.datatypes import Process, Job
@@ -15,7 +17,7 @@ from pyramid.httpexceptions import (
 )
 
 
-@s.ProcessesAPI.get(tags=[s.ProcessesTag], response_schemas=s.Processes_GET_responses)
+@s.ProcessesAPI.get(tags=[s.TagProcesses], response_schemas=s.Processes_GET_responses)
 def get_processes_view(request):
     """Get registered processes information."""
     db = database_factory(request)
@@ -30,7 +32,7 @@ def get_processes_view(request):
                          detail=s.Processes_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessesAPI.post(tags=[s.ProcessesTag],
+@s.ProcessesAPI.post(tags=[s.TagProcesses],
                      schema=s.Processes_POST_RequestSchema(), response_schemas=s.Processes_POST_responses)
 def post_processes_view(request):
     """Register a new process."""
@@ -40,7 +42,7 @@ def post_processes_view(request):
                          detail=s.Processes_POST_CreatedResponseSchema.description, request=request)
 
 
-@s.ProcessAPI.get(tags=[s.ProcessesTag],
+@s.ProcessAPI.get(tags=[s.TagProcesses],
                   schema=s.ProcessEndpoint(), response_schemas=s.Process_GET_responses)
 def get_process_view(request):
     """Get registered process information."""
@@ -50,7 +52,7 @@ def get_process_view(request):
                          detail=s.Process_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessJobsAPI.get(tags=[s.ProcessesTag],
+@s.ProcessJobsAPI.get(tags=[s.TagProcesses, s.TagJobs],
                       schema=s.ProcessJobsEndpoint(), response_schemas=s.ProcessJobs_GET_responses)
 def get_process_jobs_view(request):
     """Get registered process jobs."""
@@ -68,7 +70,7 @@ def get_process_jobs_view(request):
                          detail=s.ProcessJobs_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessJobsAPI.post(tags=[s.ProcessesTag],
+@s.ProcessJobsAPI.post(tags=[s.TagProcesses, s.TagJobs],
                        schema=s.ProcessJobs_POST_RequestSchema(), response_schemas=s.ProcessJobs_POST_responses)
 def post_process_jobs_view(request):
     """Execute a registered process job."""
@@ -87,28 +89,39 @@ def get_process_job_handler(request):
                          detail=s.Process_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessJobAPI.get(tags=[s.ProcessesTag],
-                     schema=s.ProcessJobEndpoint(), response_schemas=s.ProcessJob_GET_responses)
+@s.ProcessJobAPI.get(tags=[s.TagProcesses, s.TagJobs],
+                     schema=s.ProcessJob_GET_Endpoint(), response_schemas=s.ProcessJob_GET_responses)
 def get_process_job_view(request):
     """Get registered process job information."""
     return get_process_job_handler(request)
 
 
-@s.ProcessJobCurrentAPI.get(tags=[s.ProcessesTag],
+@s.ProcessJobCurrentAPI.get(tags=[s.TagProcesses, s.TagJobs],
                             schema=s.ProcessJobCurrentEndpoint(), response_schemas=s.ProcessJob_GET_responses)
 def get_process_job_current_view(request):
     """Get currently running process job information."""
     return get_process_job_handler(request)
 
 
-@s.ProcessJobLatestAPI.get(tags=[s.ProcessesTag],
+@s.ProcessJobLatestAPI.get(tags=[s.TagProcesses, s.TagJobs],
                            schema=s.ProcessJobLatestEndpoint(), response_schemas=s.ProcessJob_GET_responses)
 def get_process_job_latest_view(request):
     """Get latest successful process job execution."""
     return get_process_job_handler(request)
 
 
-@s.ProcessJobResultAPI.get(tags=[s.ProcessesTag], renderer="json",
+@s.ProcessJobAPI.put(tags=[s.TagProcesses, s.TagJobs],
+                     schema=s.ProcessJob_PUT_Endpoint(), response_schemas=s.ProcessJob_PUT_responses)
+def put_process_job_view(request):
+    """Update registered job information."""
+    job = update_job_params(request)
+    db = database_factory(request)
+    db.actions_store.save_action(job, OPERATION.UPDATE, request=request)
+    return ex.valid_http(httpSuccess=HTTPOk, content={"job": job.summary()},
+                         detail=s.ProcessJob_PUT_OkResponseSchema.description, request=request)
+
+
+@s.ProcessJobResultAPI.get(tags=[s.TagProcesses], renderer="json",
                            schema=s.ProcessJobResultEndpoint(), response_schemas=s.ProcessJobResult_GET_responses)
 def get_process_job_results(request):
     """
@@ -127,7 +140,7 @@ def get_process_job_results(request):
                          detail=s.ProcessJobResult_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessJobLogsAPI.get(tags=[s.ProcessesTag], renderer="json",
+@s.ProcessJobLogsAPI.get(tags=[s.TagProcesses], renderer="json",
                          schema=s.ProcessJobLogsEndpoint(), response_schemas=s.ProcessJobLogs_GET_responses)
 def get_process_job_logs(request):
     """
@@ -139,7 +152,7 @@ def get_process_job_logs(request):
                          detail=s.ProcessJobResult_GET_OkResponseSchema.description, request=request)
 
 
-@s.ProcessJobExceptionsAPI.get(tags=[s.ProcessesTag], renderer="json",
+@s.ProcessJobExceptionsAPI.get(tags=[s.TagProcesses], renderer="json",
                                schema=s.ProcessJobExceptionsEndpoint(),
                                response_schemas=s.ProcessJobExceptions_GET_responses)
 def get_process_job_exceptions(request):

@@ -3,6 +3,7 @@
 
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.status import STATUS
+from geoimagenet_ml.constants import VISIBILITY
 from cornice.service import Service
 from colander import drop, Boolean, DateTime, Integer, MappingSchema, OneOf, SchemaNode, SequenceSchema, String, Time
 from pyramid.httpexceptions import (
@@ -43,23 +44,29 @@ class CorniceSwaggerPredicate(object):
 URL = "url"
 
 # Tags
-APITag = "API"
-DatasetsTag = "Datasets"
-ModelsTag = "Models"
-ProcessesTag = "Processes"
+TagAPI = "API"
+TagDatasets = "Datasets"
+TagModels = "Models"
+TagProcesses = "Processes"
+TagJobs = "Jobs"
+
+# Route parameters
+ParamDatasetUUID = "dataset_uuid"
+ParamProcessUUID = "process_uuid"
+ParamModelUUID = "model_uuid"
+ParamJobUUID = "job_uuid"
 
 
-# Generic Endpoint parts
-dataset_uuid = SchemaNode(String(), description="Dataset UUID.", title="Dataset UUID.")
-model_uuid = SchemaNode(String(), description="Model UUID.", title="Model UUID.")
-process_uuid = SchemaNode(String(), description="Process UUID.", title="Process UUID or Identifier.")
-job_uuid = SchemaNode(String(), description="Job UUID.", title="Job UUID.")
+def make_param(variable):
+    return "{" + variable + "}"
 
-# Route variables
-DatasetVariableUUID = "{dataset_uuid}"
-ProcessVariableUUID = "{process_uuid}"
-ModelVariableUUID = "{model_uuid}"
-JobVariableUUID = "{job_uuid}"
+
+# Route parameters literals
+VariableDatasetUUID = make_param(ParamDatasetUUID)
+VariableProcessUUID = make_param(ParamProcessUUID)
+VariableModelUUID = make_param(ParamModelUUID)
+VariableJobUUID = make_param(ParamJobUUID)
+
 
 # Service Routes
 BaseAPI = Service(
@@ -81,54 +88,59 @@ DatasetLatestAPI = Service(
     path=BaseAPI.path + "datasets/latest",
     name="DatasetLatest")
 DatasetAPI = Service(
-    path=BaseAPI.path + "datasets/" + DatasetVariableUUID,
+    path=BaseAPI.path + "datasets/" + VariableDatasetUUID,
     name="Dataset")
 DatasetDownloadAPI = Service(
-    path=BaseAPI.path + "datasets/" + DatasetVariableUUID + "/download",
+    path=BaseAPI.path + "datasets/" + VariableDatasetUUID + "/download",
     name="DatasetDownload")
 ModelsAPI = Service(
     path=BaseAPI.path + "models",
     name="Models")
 ModelAPI = Service(
-    path=BaseAPI.path + "models/" + ModelVariableUUID,
+    path=BaseAPI.path + "models/" + VariableModelUUID,
     name="Model")
 ModelDownloadAPI = Service(
-    path=BaseAPI.path + "models/" + ModelVariableUUID + "/download",
+    path=BaseAPI.path + "models/" + VariableModelUUID + "/download",
     name="ModelDownload")
 ModelStatisticsAPI = Service(
-    path=BaseAPI.path + "models/" + ModelVariableUUID + "/statistics",
+    path=BaseAPI.path + "models/" + VariableModelUUID + "/statistics",
     name="ModelStatistics")
 ProcessesAPI = Service(
     path=BaseAPI.path + "processes",
     name="Processes")
 ProcessAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID,
+    path=BaseAPI.path + "processes/" + VariableProcessUUID,
     name="Process")
 ProcessJobsAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs",
     name="ProcessJobs")
 ProcessJobCurrentAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/current",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/current",
     name="ProcessJobCurrent")
 ProcessJobLatestAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/latest",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/latest",
     name="ProcessJobLatest")
 ProcessJobAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID,
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/" + VariableJobUUID,
     name="ProcessJob")
 ProcessJobResultAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/result",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/" + VariableJobUUID + "/result",
     name="ProcessJobResult")
 ProcessJobLogsAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/logs",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/" + VariableJobUUID + "/logs",
     name="ProcessJobLogs")
 ProcessJobExceptionsAPI = Service(
-    path=BaseAPI.path + "processes/" + ProcessVariableUUID + "/jobs/" + JobVariableUUID + "/exceptions",
+    path=BaseAPI.path + "processes/" + VariableProcessUUID + "/jobs/" + VariableJobUUID + "/exceptions",
     name="ProcessJobExceptions")
 VersionsAPI = Service(
     path=BaseAPI.path + "versions",
     name="Versions")
 
+# Generic Endpoint parts
+dataset_uuid = SchemaNode(String(), description="Dataset UUID.", title="Dataset UUID.")
+model_uuid = SchemaNode(String(), description="Model UUID.", title="Model UUID.")
+process_uuid = SchemaNode(String(), description="Process UUID.", title="Process UUID or Identifier.")
+job_uuid = SchemaNode(String(), description="Job UUID.", title="Job UUID.")
 
 # Security
 SecurityDefinitionAPI = {"securityDefinitions": {"cookieAuth": {"type": "apiKey", "in": "cookie", "name": "auth_tkt"}}}
@@ -517,7 +529,7 @@ class Models_POST_UnprocessableEntityResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPUnprocessableEntity.code, description=description)
 
 
-class ModelEndpoint(BaseRequestSchema):
+class Model_GET_Endpoint(BaseRequestSchema):
     model_uuid = model_uuid
 
 
@@ -555,6 +567,43 @@ class ModelDownload_GET_OkResponseSchema(BaseResponseSchema):
 
 
 ModelDownload_GET_NotFoundResponseSchema = Model_GET_NotFoundResponseSchema
+
+
+class Model_PUT_BodyRequestSchema(MappingSchema):
+    name = SchemaNode(String(), missing=drop,
+                      description="New name of the model.")
+    visibility = SchemaNode(String(), missing=drop,
+                            description="New visibility of the model.",
+                            validator=OneOf(VISIBILITY.values()))
+
+
+class Model_PUT_Endpoint(MappingSchema):
+    model_uuid = model_uuid
+    header = HeaderSchemaJSON()
+    body = Model_PUT_BodyRequestSchema()
+
+
+class Model_PUT_DataResponseSchema(MappingSchema):
+    model = ModelSummaryBodyResponseSchema()
+
+
+class Model_PUT_BodyResponseSchema(BaseBodyResponseSchema):
+    data = Model_PUT_DataResponseSchema()
+
+
+class Model_PUT_OkResponseSchema(BaseResponseSchema):
+    description = "Model update successful."
+    body = Model_PUT_BodyResponseSchema(code=HTTPOk.code, description=description)
+
+
+class Model_PUT_BadRequestResponseSchema(BaseResponseSchema):
+    description = "Model update is missing required inputs."
+    body = ErrorBodyResponseSchema(code=HTTPBadRequest.code, description=description)
+
+
+class Model_PUT_ForbiddenResponseSchema(BaseResponseSchema):
+    description = "Model update was refused by database."
+    body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
 
 
 class KeywordList(SequenceSchema):
@@ -717,7 +766,7 @@ class ProcessJobsEndpoint(BaseRequestSchema):
     job_uuid = job_uuid
 
 
-class ProcessJobEndpoint(BaseRequestSchema):
+class ProcessJob_GET_Endpoint(BaseRequestSchema):
     process_uuid = process_uuid
     job_uuid = job_uuid
 
@@ -800,7 +849,7 @@ class ProcessJob_GET_OkResponseSchema(BaseResponseSchema):
 
 class ProcessJob_GET_BadRequestResponseSchema(BaseResponseSchema):
     description = "Invalid parameter specified to retrieve job."
-    body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
+    body = ErrorBodyResponseSchema(code=HTTPBadRequest.code, description=description)
 
 
 class ProcessJob_GET_ForbiddenResponseSchema(BaseResponseSchema):
@@ -811,6 +860,36 @@ class ProcessJob_GET_ForbiddenResponseSchema(BaseResponseSchema):
 class ProcessJob_GET_NotFoundResponseSchema(BaseResponseSchema):
     description = "Process job could not be found in db."
     body = ErrorBodyResponseSchema(code=HTTPNotFound.code, description=description)
+
+
+class ProcessJob_PUT_BodyRequestSchema(MappingSchema):
+    visibility = SchemaNode(String(), missing=drop,
+                            description="New visibility of the job.",
+                            validator=OneOf(VISIBILITY.values()))
+
+
+class ProcessJob_PUT_Endpoint(MappingSchema):
+    model_uuid = model_uuid
+    header = HeaderSchemaJSON()
+    body = ProcessJob_PUT_BodyRequestSchema()
+
+
+class ProcessJob_PUT_BodyResponseSchema(BaseBodyResponseSchema):
+    data = ProcessJobSummaryDataResponseSchema()
+
+
+class ProcessJob_PUT_OkResponseSchema(BaseResponseSchema):
+    description = "Update process job successful."
+    body = ProcessJob_PUT_BodyResponseSchema(code=HTTPOk.code, description=description)
+
+
+class ProcessJob_PUT_BadRequestResponseSchema(BaseResponseSchema):
+    description = "Invalid parameter specified to update job."
+    body = ErrorBodyResponseSchema(code=HTTPBadRequest.code, description=description)
+
+
+ProcessJob_PUT_ForbiddenResponseSchema = ProcessJob_GET_ForbiddenResponseSchema
+ProcessJob_PUT_NotFoundResponseSchema = ProcessJob_GET_NotFoundResponseSchema
 
 
 class ProcessJobResultEndpoint(BaseRequestSchema):
@@ -1033,6 +1112,12 @@ Model_GET_responses = {
     "404": Model_GET_NotFoundResponseSchema(),
     "500": InternalServerErrorResponseSchema(),
 }
+Model_PUT_responses = {
+    "200": Model_PUT_OkResponseSchema(),
+    "400": Model_PUT_BadRequestResponseSchema(),
+    "403": Model_PUT_ForbiddenResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
+}
 ModelDownload_GET_responses = {
     "200": ModelDownload_GET_OkResponseSchema(),
     "404": ModelDownload_GET_NotFoundResponseSchema(),
@@ -1078,6 +1163,13 @@ ProcessJob_GET_responses = {
     "400": ProcessJob_GET_BadRequestResponseSchema(),
     "403": ProcessJob_GET_ForbiddenResponseSchema(),
     "404": ProcessJob_GET_NotFoundResponseSchema(),
+    "500": InternalServerErrorResponseSchema(),
+}
+ProcessJob_PUT_responses = {
+    "200": ProcessJob_PUT_OkResponseSchema(),
+    "400": ProcessJob_PUT_BadRequestResponseSchema(),
+    "403": ProcessJob_PUT_ForbiddenResponseSchema(),
+    "404": ProcessJob_PUT_NotFoundResponseSchema(),
     "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobResult_GET_responses = {

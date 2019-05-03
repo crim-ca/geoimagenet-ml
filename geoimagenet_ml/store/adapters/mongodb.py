@@ -168,9 +168,33 @@ class MongodbModelStore(ModelStore, MongodbStore):
         except ex.ModelError as exc:
             raise
         except DuplicateKeyError:
-            raise ex.ModelConflictError("Model '{}' conflicts with an existing model.".format(model.name))
+            raise ex.ModelConflictError("Model '{!s}' conflicts with an existing model.".format(model))
         except Exception as exc:
-            msg_exc = "Model '{}' could not be registered. Unhandled error: [{!r}].".format(model.name, exc)
+            msg_exc = "Model '{!s}' could not be registered. Unhandled error: [{!r}].".format(model, exc)
+            LOGGER.exception(msg_exc)
+            raise ex.ModelRegistrationError(msg_exc)
+        return self.fetch_by_uuid(model.uuid)
+
+    def update_model(self, model, request=None, **fields):
+        if not isinstance(model, Model):
+            raise ex.ModelInstanceError("Unsupported model type '{}'".format(type(model)))
+        if len(fields) == 0:
+            raise ex.ModelRegistrationError("No field specified for model update.")
+        try:
+            model_params = model.params
+            for f in fields:
+                if f not in model_params:
+                    raise ex.ModelRegistrationError("Invalid field '{}' for model update.".format(f))
+                # attempt setting field to enforce any validation rule
+                model[f] = fields[f]
+            result = self.collection.update_one({"uuid": model.uuid}, {"$set": fields})
+            if result.modified_count != 1:
+                raise ex.ModelRegistrationError("Expected only a single updated model instance. Got {}."
+                                                .format(result.modified_count))
+        except ex.ModelError:
+            raise
+        except Exception as exc:
+            msg_exc = "Model '{!s}' could not be updated. Unhandled error: [{!r}].".format(model, exc)
             LOGGER.exception(msg_exc)
             raise ex.ModelRegistrationError(msg_exc)
         return self.fetch_by_uuid(model.uuid)

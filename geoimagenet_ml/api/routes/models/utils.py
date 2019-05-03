@@ -11,6 +11,12 @@ from pyramid.request import Request  # noqa: F401
 
 def create_model(request):
     # type: (Request) -> Model
+    """
+    Creates a new model instance and registers it to database.
+
+    :returns: created model instance if all requirements and data validation are met.
+    :raises HTTPException: corresponding status to error encountered.
+    """
     model_name = r.get_multiformat_post(request, "model_name")
     model_path = r.get_multiformat_post(request, "model_path")
     ex.verify_param(model_name, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="model_name",
@@ -40,8 +46,14 @@ def create_model(request):
 
 def get_model(request):
     # type: (Request) -> Model
-    model_uuid = request.matchdict.get("model_uuid")
-    ex.verify_param(model_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName="model_uuid",
+    """
+    Searches for the model specified by path parameter.
+
+    :returns: valid model instance if found.
+    :raises HTTPException: corresponding status to error encountered.
+    """
+    model_uuid = request.matchdict.get(s.ParamModelUUID)
+    ex.verify_param(model_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName=s.ParamModelUUID,
                     msgOnFail=s.Model_GET_BadRequestResponseSchema.description, request=request)
     try:
         return database_factory(request).models_store.fetch_by_uuid(model_uuid)
@@ -51,3 +63,24 @@ def get_model(request):
     except exc.ModelNotFoundError:
         ex.raise_http(httpError=HTTPNotFound, request=request,
                       detail=s.Model_GET_NotFoundResponseSchema.description)
+
+
+def update_model(request):
+    # type: (Request) -> Model
+    """
+    Updates a matched model UUID in path with specified body parameter(s).
+
+    :returns: valid model instance if found and updated.
+    :raises HTTPException: corresponding status to error encountered.
+    """
+    model = get_model(request)
+    field_names = ["name", "visibility"]
+    model_fields = {field: r.get_multiformat_post(request, field) for field in field_names}
+    model_fields = {f: v for f, v in model_fields.items() if v}
+    ex.verify_param(len(model_fields), notEqual=True, paramCompare=0, httpError=HTTPBadRequest,
+                    msgOnFail=s.Model_PUT_BadRequestResponseSchema.description, request=request)
+
+    db = database_factory(request)
+    return ex.evaluate_call(lambda: db.models_store.update_model(model, request=request, **model_fields),
+                            fallback=lambda: db.rollback(), request=request, httpError=HTTPForbidden,
+                            msgOnFail=s.Model_PUT_ForbiddenResponseSchema.description)

@@ -64,11 +64,48 @@ class Base(dict):
     Dictionary with extended attributes auto-``getter``/``setter`` for convenience.
     Explicitly overridden ``getter``/``setter`` attributes are called instead of ``dict``-key ``get``/``set``-item
     to ensure corresponding checks and/or value adjustments are executed before applying it to the sub-``dict``.
+
+    .. code-block:: python
+
+        b = Base()
+
+        # all following cases will ensure validation of 'uuid' field with setter property, and therefore will raise
+        b.uuid = "1234"
+        b["uuid"] = "1234"
+        setattr(b, "uuid", "1234")
+
+        # these will not do any validation because no 'other' setter property exists
+        b["other"] = "blah"
+        setattr(b, "other", "blah")
+
+        # same checks applies for getter properties
+        b.uuid
+        >> "<valid-uuid>"
+        b["uuid"]
+        >> "<valid-uuid>"
+        getattr(b, "uuid", "1234")
+        >> "<valid-uuid>"
+
+    Property getter/setter implementations should use following methods to obtain the literal get/set after validation:
+
+    .. code-block:: python
+
+        value = dict.__getitem__(self, "<field>")
+        dict.__setitem__(self, "<field>", <value>)
+
     """
     def __init__(self, *args, **kwargs):
         super(Base, self).__init__(*args, **kwargs)
         if "uuid" not in self:
             setattr(self, "uuid", uuid.uuid4())
+        if "created" not in self:
+            setattr(self, "created", now())
+
+    def __getitem__(self, item):
+        return self.__getattr__(item)
+
+    def __setitem__(self, item, value):
+        self.__setattr__(item, value)
 
     def __setattr__(self, item, value):
         # use the existing property setter if defined
@@ -77,7 +114,7 @@ class Base(dict):
             # noinspection PyArgumentList
             prop.fset(self, value)
         elif item in self:
-            self[item] = value
+            dict.__setitem__(self, item, value)
         else:
             raise AttributeError("Can't set attribute '{}'.".format(item))
 
@@ -88,7 +125,7 @@ class Base(dict):
             # noinspection PyArgumentList
             return prop.fget(self)
         elif item in self:
-            return self[item]
+            return dict.__getitem__(self, item)
         else:
             raise AttributeError("Can't get attribute '{}'.".format(item))
 
@@ -132,23 +169,23 @@ class Base(dict):
     @property
     def uuid(self):
         # type: () -> UUID
-        return self["uuid"]
+        return dict.__getitem__(self, "uuid")
 
     @uuid.setter
     def uuid(self, _uuid):
         # type: (UUID) -> None
         if not is_uuid(_uuid):
             raise ValueError("Not a valid UUID: {!s}.".format(_uuid))
-        self["uuid"] = str(_uuid)
+        dict.__setitem__(self, "uuid", str(_uuid))
 
     @property
     def created(self):
         # type: () -> datetime
         created = self.get("created")
         if not created:
-            setattr(self, "created", now())
+            dict.__setitem__(self, "created", now())
         if isinstance(created, six.string_types):
-            setattr(self, "created", parse(self["created"]))
+            setattr(self, "created", parse(dict.__getitem__(self, "created")))
         return self.get("created")
 
     @created.setter
@@ -156,11 +193,15 @@ class Base(dict):
         # type: (datetime) -> None
         if not isinstance(dt, datetime):
             raise TypeError("Type 'datetime' expected.")
-        self["created"] = localize_datetime(dt)
+        dict.__setitem__(self, "created", localize_datetime(dt))
 
     @property
     def params(self):
         # type: () -> ParamsType
+        """
+        Method used to collect and convert parameters of the datatype to a format that the storage will accept.
+        Overloading by parent classes should include a call to :method:`_get_params`.
+        """
         return {
             "uuid": self.uuid,
             "created": self.created,
@@ -168,6 +209,10 @@ class Base(dict):
 
     def json(self):
         # type: () -> JSON
+        """
+        Method used to collect and convert parameters of the datatype to a format that will be JSON-serializable.
+        Overloading by parent classes should include a call to :method:`_get_json`.
+        """
         return {
             "uuid": self.uuid,
             "created": datetime2str(self.created) if self.created else None
@@ -332,22 +377,23 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
             dataset_root = str(settings["geoimagenet_ml.ml.datasets_path"])
             if not os.path.isdir(dataset_root):
                 raise RuntimeError("cannot find datasets root path")
-            self["path"] = os.path.join(dataset_root, self.uuid)
-            os.makedirs(self["path"], exist_ok=False, mode=0o744)
-        return self["path"]
+            path = os.path.join(dataset_root, self.uuid)
+            dict.__setitem__(self, "path", path)
+            os.makedirs(path, exist_ok=False, mode=0o744)
+        return dict.__getitem__(self, "path")
 
     @path.setter
     def path(self, path):
         # type: (AnyStr) -> None
         if not os.path.isdir(path):
             raise ValueError("Dataset path must be an existing directory.")
-        self["path"] = path
+        dict.__setitem__(self, "path", path)
 
     def reset_path(self):
         """Clear all the 'path' content as regenerates a clean directory state."""
         if isinstance(self.path, six.string_types) and os.path.isdir(self.path):
             shutil.rmtree(self.path)
-        self["path"] = None
+        dict.__setitem__(self, "path", None)
         if not os.path.isdir(self.path):  # trigger regeneration
             raise ValueError("Failed dataset path reset to clean state")
 
@@ -381,13 +427,15 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
 
     @property
     def status(self):
-        # type: () -> AnyStr
+        # type: () -> STATUS
         status = self.get("status")
         if not status:
             status = STATUS.RUNNING
-            setattr(self, "status", status)
-        if isinstance(status, STATUS):
-            status = status.value
+            dict.__setitem__(self, "status", status)
+        if isinstance(status, six.string_types):
+            status = STATUS.get(status)
+            if not isinstance(status, STATUS):
+                raise TypeError("Invalid 'STATUS' enum value: '{}'.")
         return status
 
     @status.setter
@@ -398,7 +446,7 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
             raise TypeError("Type 'STATUS' enum is expected.")
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
-        self["status"] = status.value
+        dict.__setitem__(self, "status", status)
 
     def mark_finished(self):
         # type: () -> None
@@ -409,25 +457,25 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
     def data(self):
         # type: () -> JSON
         """Raw data contained in the dataset definition."""
-        return self["data"]
+        return dict.__getitem__(self, "data")
 
     @data.setter
     def data(self, data):
         # type: (Optional[JSON]) -> None
-        self["data"] = data
+        dict.__setitem__(self, "data", data)
 
     @property
     def files(self):
         # type: () -> List[AnyStr]
         """All files referenced by the dataset."""
-        return self["files"]
+        return dict.__getitem__(self, "files")
 
     @files.setter
     def files(self, files):
         # type: (List[AnyStr]) -> None
         if not isinstance(files, list):
             raise TypeError("Type 'list' required.")
-        self["files"] = files
+        dict.__setitem__(self, "files", files)
 
     @property
     def params(self):
@@ -438,7 +486,7 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
             "type": self.type,
             "data": self.data,
             "files": self.files,
-            "status": self.status,
+            "status": self.status.name,
         })
 
     def json(self):
@@ -449,7 +497,7 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
             "type": self.type,
             "data": self.data,
             "files": self.files,
-            "status": self.status,
+            "status": self.status.value,
         })
 
     def summary(self):
@@ -472,7 +520,6 @@ class Model(Base, WithName, WithUser, WithVisibility):
             raise TypeError("Model 'name' is required.")
         if "path" not in self:
             raise TypeError("Model 'path' is required.")
-        self["created"] = datetime2str(self.created)
 
     @property
     def name(self):
@@ -656,37 +703,45 @@ class Process(Base, WithType, WithUser):
     @property
     def inputs(self):
         # type: () -> List[InputType]
-        return self.get("inputs")
+        return self.get("inputs", [])
 
     @inputs.setter
     def inputs(self, inputs):
         _check_io_format(inputs)
-        self["inputs"] = inputs
+        dict.__setitem__(self, "inputs", inputs)
 
     @property
     def outputs(self):
         # type: () -> List[OutputType]
-        return self.get("outputs")
+        return self.get("outputs", [])
 
     @outputs.setter
     def outputs(self, outputs):
         _check_io_format(outputs)
-        self["outputs"] = outputs
+        dict.__setitem__(self, "outputs", outputs)
 
     @property
     def execute_endpoint(self):
-        # type: () -> AnyStr
+        # type: () -> Optional[AnyStr]
         return self.get("execute_endpoint")
 
     @property
     def package(self):
         # type: () -> ParamsType
-        return self.get("package")
+        return dict.__getitem__(self, "package")
 
     @property
     def limit_single_job(self):
         # type: () -> bool
-        return self.get("limit_single_job", False)
+        if "limit_single_job" not in self:
+            setattr(self, "limit_single_job", False)
+        return dict.__getitem__(self, "limit_single_job")
+
+    @limit_single_job.setter
+    def limit_single_job(self, value):
+        if not isinstance(value, bool):
+            raise TypeError("Invalid bool for 'limit_single_job'.")
+        dict.__setitem__(self, "limit_single_job", False)
 
     @property
     def params(self):
@@ -860,14 +915,16 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def _get_inputs(self):
         # type: () -> List[JSON]
         if self.get("inputs") is None:
-            self["inputs"] = list()
-        return self["inputs"]
+            dict.__setitem__(self, "inputs", list())
+        return dict.__getitem__(self, "inputs")
 
     def _set_inputs(self, inputs):
         # type: (List[JSON]) -> None
         if not isinstance(inputs, list):
             raise TypeError("Type 'list' is required for '{}.inputs'".format(type(self)))
-        self["inputs"] = inputs
+        if not all(isinstance(i, dict) for i in inputs):
+            raise TypeError("Type 'dict' is required for elements of '{}.inputs'".format(type(self)))
+        dict.__setitem__(self, "inputs", inputs)
 
     # allows to correctly update list by ref using 'job.inputs.extend()'
     inputs = property(_get_inputs, _set_inputs)
@@ -875,7 +932,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @property
     def status(self):
         # type: () -> AnyStr
-        return self.get("status", STATUS.UNKNOWN.value)
+        return self.get("status", STATUS.UNKNOWN)
 
     @status.setter
     def status(self, status):
@@ -885,7 +942,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             raise TypeError("Type 'STATUS' enum is expected.")
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
-        self["status"] = status.value
+        dict.__setitem__(self, "status", status)
         if status in job_status_categories[CATEGORY.EXECUTING]:
             self.mark_started()
         if status in job_status_categories[CATEGORY.FINISHED]:
@@ -978,10 +1035,10 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
         if self.is_started():
             final_time = self.finished or now()
             duration = localize_datetime(final_time) - localize_datetime(self.started)
-            self["duration"] = str(duration).split(".")[0]
+            dict.__setitem__(self, "duration", str(duration).split(".")[0])
         else:
-            self["duration"] = None
-        return self["duration"]
+            dict.__setitem__(self, "duration", None)
+        return dict.__getitem__(self, "duration")
 
     @property
     def progress(self):
@@ -1006,7 +1063,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def _set_results(self, results):
         # type: (List[JSON]) -> None
         _check_io_format(results)
-        self["results"] = results
+        dict.__setitem__(self, "results", results)
 
     # allows to correctly update list by ref using 'job.results.extend()'
     results = property(_get_results, _set_results)
@@ -1088,7 +1145,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             "service": self.service,
             "process": self.process,
             "inputs": self.inputs,
-            "status": self.status,
+            "status": self.status.name,
             "status_message": self.status_message,
             "status_location": self.status_location,
             "execute_async": self.execute_async,
@@ -1111,7 +1168,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             "service": self.service,
             "process": self.process,
             "inputs": self.inputs,
-            "status": self.status,
+            "status": self.status.value,
             "status_message": self.status_message,
             "status_location": self.status_location,
             "execute_async": self.execute_async,
@@ -1167,7 +1224,7 @@ class Action(Base, WithUser):
         """Type of item affected by the action."""
         # enforce conversion in case loaded from db as string
         setattr(self, "type", self.get("type"))
-        return self["type"]
+        return dict.__getitem__(self, "type")
 
     @type.setter
     def type(self, _type):
@@ -1177,10 +1234,10 @@ class Action(Base, WithUser):
             raise TypeError("Class or instance derived from 'Base' required.")
         # add 'item' automatically if not explicitly provided and is available
         if isclass(_type):
-            self["type"] = _type
+            dict.__setitem__(self, "type", _type)
         else:
-            self["type"] = type(_type)
-            setattr(self, "item", self.item or _type.uuid)
+            dict.__setitem__(self, "type", type(_type))
+            dict.__setitem__(self, "item", self.item or _type.uuid)
 
     @property
     def item(self):
@@ -1200,16 +1257,16 @@ class Action(Base, WithUser):
     def operation(self):
         # type: () -> OPERATION
         """Operation accomplished by the action."""
-        return OPERATION.get(self["operation"])
+        return OPERATION.get(dict.__getitem__(self, "operation"))
 
     @operation.setter
     def operation(self, operation):
         # type: (Union[OPERATION, AnyStr]) -> None
         if isinstance(operation, six.string_types):
             operation = OPERATION.get(operation)
-        if operation not in OPERATION:
+        if not isinstance(operation, OPERATION):
             raise TypeError("Type 'OPERATION' required.")
-        self["operation"] = operation
+        dict.__setitem__(self, "operation", operation)
 
     @property
     def path(self):
@@ -1222,7 +1279,7 @@ class Action(Base, WithUser):
         # type: (Optional[AnyStr]) -> None
         if not isinstance(path, six.string_types) or path is None:
             raise TypeError("Type 'str' required.")
-        self["path"] = path
+        dict.__setitem__(self, "path", path)
 
     @property
     def method(self):
@@ -1235,7 +1292,7 @@ class Action(Base, WithUser):
         # type: (Optional[AnyStr]) -> None
         if not isinstance(method, six.string_types) or method is None:
             raise TypeError("Type 'str' required.")
-        self["method"] = method
+        dict.__setitem__(self, "method", method)
 
     @property
     def params(self):

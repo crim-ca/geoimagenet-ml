@@ -10,6 +10,7 @@ Tests for `GeoImageNet ML API` module.
 
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
+from geoimagenet_ml.constants import VISIBILITY
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model
 from geoimagenet_ml.store.factories import database_factory
@@ -126,8 +127,8 @@ class TestModelApi(unittest.TestCase):
             return buffer.read()
 
         with mock.patch("thelper.utils.load_checkpoint", side_effect=load_checkpoint_no_check):
-            self.db.models_store.save_model(self.model_1)
-            self.db.models_store.save_model(self.model_2)
+            self.model_1 = self.db.models_store.save_model(self.model_1)
+            self.model_2 = self.db.models_store.save_model(self.model_2)
 
     def tearDown(self):
         for f in [self.model_1.file, self.model_1.path, self.model_2.file, self.model_2.path]:
@@ -165,7 +166,7 @@ class TestModelApi(unittest.TestCase):
         utils.check_val_type(resp.json["data"]["model"]["created"], six.string_types)
 
         # validate that model can be retrieved from database after creation
-        path = schemas.ModelAPI.path.replace("{model_uuid}", resp.json["data"]["model"]["uuid"])
+        path = schemas.ModelAPI.path.replace(schemas.VariableModelUUID, resp.json["data"]["model"]["uuid"])
         resp = utils.request(self.app, "GET", path, headers=self.json_headers)
         utils.check_response_basic_info(resp, 200)
         utils.check_val_equal(resp.json["data"]["model"]["name"], model_json["model_name"])
@@ -190,9 +191,38 @@ class TestModelApi(unittest.TestCase):
         utils.check_response_basic_info(resp, 201)
 
         # validate download
-        path = schemas.ModelDownloadAPI.path.replace("{model_uuid}", resp.json["data"]["model"]["uuid"])
+        path = schemas.ModelDownloadAPI.path.replace(schemas.VariableModelUUID, resp.json["data"]["model"]["uuid"])
         resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
+
+    def test_UpdateModel(self):
+        path = schemas.ModelAPI.path.replace(schemas.VariableModelUUID, self.model_1.uuid)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PRIVATE.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": VISIBILITY.PUBLIC.value})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 400)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        model_new_name = "new-name"
+        resp = utils.request(self.app, "PUT", path, body={"name": model_new_name})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["name"] == model_new_name
+
+        # missing update fields
+        resp = utils.request(self.app, "PUT", path, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 400)
 
 
 if __name__ == "__main__":

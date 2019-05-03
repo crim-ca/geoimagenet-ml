@@ -121,3 +121,15 @@ def test_action_fields():
         None,
         None,
     )
+
+
+def test_enforced_field_checks():
+    """Verify that setting a datatype field with any method executes validation checks."""
+    model = Model(uuid="test", name="test", path="test", type="test", user=1)
+    assert model.user == 1
+    with pytest.raises(TypeError, message="Invalid datatype field check by property setter should raise"):
+        model.user = "1"
+    with pytest.raises(TypeError, message="Invalid datatype field check by key set attribute should raise"):
+        model["user"] = "1"
+    with pytest.raises(TypeError, message="Invalid datatype field check by setattr call should raise"):
+        setattr(model, "user", "1")
