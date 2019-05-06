@@ -14,7 +14,7 @@ import multiprocessing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (   # noqa: F401
-        Any, AnyStr, ErrorType, LevelType, Number, Dict, List, JSON, Optional, UUID, Union
+        Any, AnyStr, AnyUUID, ErrorType, LevelType, Number, Dict, List, JSON, Optional, Union
     )
     from geoimagenet_ml.store.datatypes import Job  # noqa: F401
     # noinspection PyProtectedMember
@@ -52,7 +52,7 @@ class ProcessRunner(ProcessBase):
         raise NotImplementedError
 
     def __init__(self, task, registry, request, job_uuid):
-        # type: (Task, Registry, Request, UUID) -> None
+        # type: (Task, Registry, Request, AnyUUID) -> None
 
         # imports to avoid circular references
         from geoimagenet_ml.store.factories import database_factory
@@ -135,7 +135,7 @@ class ProcessRunner(ProcessBase):
         self.db.jobs_store.update_job(self.job, request=self.request)
 
     def setup_job(self, registry, request, job_uuid):
-        # type: (Registry, Request, UUID) -> Job
+        # type: (Registry, Request, AnyUUID) -> Job
         job = self.db.jobs_store.fetch_by_uuid(job_uuid, request=request)
         job.task = request.id
         job.tags.append(self.type)
@@ -297,7 +297,7 @@ class ProcessRunnerModelTester(ProcessRunner):
 class ProcessRunnerBatchCreator(ProcessRunner):
     """
     Executes patches creation from a batch of annotated images with GeoJSON metadata.
-    Uses with GeoImageNet API requests format for annotation data extraction.
+    Uses GeoImageNet API requests format for annotation data extraction.
     """
 
     @classproperty

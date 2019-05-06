@@ -13,6 +13,8 @@ from geoimagenet_ml.utils import (
     get_job_log_msg,
     get_error_fmt,
     fully_qualified_name,
+    assert_sane_name,
+    clean_json_text_body,
     is_uuid,
     isclass,
 )
@@ -24,7 +26,10 @@ from pyramid_celery import celery_app as app
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
 from datetime import datetime
+from distutils.version import StrictVersion
 from zipfile import ZipFile
+# noinspection PyPackageRequirements
+from bson import ObjectId
 import json
 import boltons.tbutils
 import logging
@@ -37,29 +42,74 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # noinspection PyPackageRequirements
     from geoimagenet_ml.typedefs import (   # noqa: F401
-        AnyStr, AnyStatus, ErrorType, LevelType, List, LoggerType, Number, Union,
-        Optional, InputType, OutputType, UUID, JSON, ParamsType, Type,
+        Any, AnyStr, AnyStatus, AnyUUID, Callable, Dict, ErrorType, LevelType, List, LoggerType, Number, Iterable,
+        Union, Optional, InputType, OutputType, JSON, JsonValue, ParamsType, Type,
     )
     from pywps import Process as ProcessWPS  # noqa: F401
 
 
-def _check_io_format(io_items):
-    # type: (List[Union[InputType, OutputType]]) -> None
-    """
-    Basic validation of input/output for process and job results.
+class Validator(object):
 
-    :raises TypeError: on any invalid format encountered.
-    :raises ValueError: on invalid value conditions encountered.
-    """
-    if not isinstance(io_items, list) or \
-            not all(isinstance(_io, dict) and all(k in _io for k in ["id", "value"]) for _io in io_items):
-        raise TypeError("Expect a list of items with id/value keys.")
-    id_items = [_io["id"] for _io in io_items]
-    if len(id_items) != len(set(id_items)):
-        raise ValueError("Duplicate item id in list.")
+    def _is_of_type(self,
+                    param_name,             # type: AnyStr
+                    param_value,            # type: Any
+                    param_types=None,       # type: Union[Type, Iterable[Type]]
+                    allow_none=False,       # type: bool
+                    sub_item=None,          # type: Optional[Union[Type, Iterable[Type]]]
+                    sub_key=None,           # type: Optional[Union[Type, Iterable[Type]]]
+                    sub_value=None,         # type: Optional[Union[Type, Iterable[Type]]]
+                    valid_function=None,    # type: Optional[Callable[[Any], bool]]
+                    ):                      # type: (...) -> None
+        """
+        Validates that ``param_value`` is one of the type(s) specified by ``param_types``.
+
+        :param: param_name: name to display in the appropriate error message in case of invalid type.
+        :param param_value: value to be evaluated for typing.
+        :param param_types: type(s) for which the value must be validated. Also used for displaying appropriate message.
+        :param allow_none: used to allow 'None' type, and adjust the message accordingly.
+        :param sub_item: (optional) validates also that sub-item(s) type of a list/set/tuple `param_value` is respected.
+        :param sub_key: (optional) validates also that sub-key(s) type of a dict `param_value` is respected.
+        :param sub_value: (optional) validates also that sub-value(s) type of a dict `param_value` is respected.
+        :param valid_function: (optional) alternative function to call for `param_value` validation.
+        :raises TypeError: if type specification is not met.
+        """
+        # convert for backward compatibility and simplified calls with 'str'
+        if param_types is str:
+            param_types = six.string_types
+        elif param_types != six.string_types and isinstance(param_types, (list, set, tuple)) and str in param_types:
+            param_types = list(filter(lambda t: t is not str, param_types)) + six.string_types
+
+        # parameter validation
+        if allow_none and param_value is None:
+            return
+        valid_type = valid_function(param_value) if callable(valid_function) else isinstance(param_value, param_types)
+        if not valid_type:
+            if param_types == six.string_types:
+                param_types = str  # convert back for display
+            if param_types in (list, set, tuple):
+                param_types = [t.__name__ for t in param_types]
+                param_qualifier = "One of type"
+            else:
+                param_types = param_types.__name__
+                param_qualifier = "Type"
+            param_none = "or 'None' " if allow_none else ""
+            raise TypeError("{} '{!s}' {}required for '{}.{}'.".format(
+                param_qualifier, param_types, param_none, type(self), param_name)
+            )
+
+        # sub-element validation
+        if sub_item is not None and isinstance(param_value, (list, set, tuple)):
+            for param_item in param_value:
+                self._is_of_type("{}[<item>]".format(param_name), param_item, sub_item)
+        if sub_key is not None and isinstance(param_value, dict):
+            for param_key in param_value.keys():
+                self._is_of_type("{}[<key>]".format(param_name), param_key, sub_key)
+        if sub_value is not None and isinstance(param_value, dict):
+            for param_val in param_value.values():
+                self._is_of_type("{}[<value>]".format(param_name), param_val, sub_value)
 
 
-class Base(dict):
+class Base(dict, Validator):
     """
     Dictionary with extended attributes auto-``getter``/``setter`` for convenience.
     Explicitly overridden ``getter``/``setter`` attributes are called instead of ``dict``-key ``get``/``set``-item
@@ -93,9 +143,20 @@ class Base(dict):
         value = dict.__getitem__(self, "<field>")
         dict.__setitem__(self, "<field>", <value>)
 
+    Note that calling ``self.get(...)`` and ``self.setdefault(...)`` is also safe since they directly refer to the
+    underlying dictionary methods (unless overridden in another parent class).
+
+    To make a property `read-only`, it is possible to only define the ``@property`` method without its corresponding
+    ``@<field>.setter` method. By doing so, both ``Base["<field>"] = value`` and ``Base.<field> = value`` will raise
+    an ``AttributeError``.
     """
     def __init__(self, *args, **kwargs):
-        super(Base, self).__init__(*args, **kwargs)
+        super(Base, self).__init__()
+        # apply any property check or field value adjustment during assignment
+        for arg in args:
+            kwargs.update(arg)
+        for k, v in kwargs.items():
+            self[k] = v
         if "uuid" not in self:
             setattr(self, "uuid", uuid.uuid4())
         if "created" not in self:
@@ -167,15 +228,26 @@ class Base(dict):
         return base_json
 
     @property
+    def _id(self):
+        # type: () -> Optional[ObjectId]
+        """Internal ID assigned to this datatype by the db storage."""
+        return self.get("_id")
+
+    @_id.setter
+    def _id(self, _id):
+        # type: (ObjectId) -> None
+        self._is_of_type("_id", _id, ObjectId)
+        dict.__setitem__(self, "_id", _id)
+
+    @property
     def uuid(self):
-        # type: () -> UUID
+        # type: () -> AnyUUID
         return dict.__getitem__(self, "uuid")
 
     @uuid.setter
     def uuid(self, _uuid):
-        # type: (UUID) -> None
-        if not is_uuid(_uuid):
-            raise ValueError("Not a valid UUID: {!s}.".format(_uuid))
+        # type: (AnyUUID) -> None
+        self._is_of_type("uuid", _uuid, uuid.UUID, valid_function=is_uuid)
         dict.__setitem__(self, "uuid", str(_uuid))
 
     @property
@@ -219,7 +291,7 @@ class Base(dict):
         }
 
 
-class WithFinished(dict):
+class WithFinished(dict, Validator):
     """Adds property ``finished`` to corresponding class."""
     @property
     def finished(self):
@@ -252,18 +324,19 @@ class WithFinished(dict):
         return {"finished": datetime2str(self.finished) if self.finished else None}
 
 
-class WithName(dict):
+class WithName(dict, Validator):
     """Adds property ``name`` to corresponding class."""
 
     @property
     def name(self):
         # type: () -> AnyStr
-        return self["name"]
+        return dict.__getitem__(self, "name")
 
     @name.setter
     def name(self, name):
         # type: (AnyStr) -> None
-        self["name"] = name
+        self._is_of_type("name", name, str)
+        dict.__setitem__(self, "name", name)
 
     @property
     def params(self):
@@ -275,17 +348,18 @@ class WithName(dict):
         return {"name": self.name}
 
 
-class WithType(dict):
+class WithType(dict, Validator):
     """Adds property ``type`` to corresponding class."""
     @property
     def type(self):
         # type: () -> AnyStr
-        return self["type"]
+        return dict.__getitem__(self, "type")
 
     @type.setter
     def type(self, _type):
         # type: (AnyStr) -> None
-        self["type"] = _type
+        self._is_of_type("type", _type, str)
+        dict.__setitem__(self, "type", _type)
 
     @property
     def params(self):
@@ -297,7 +371,7 @@ class WithType(dict):
         return {"type": self.type}
 
 
-class WithUser(dict):
+class WithUser(dict, Validator):
     """Adds property ``user`` to corresponding class."""
     @property
     def user(self):
@@ -307,9 +381,8 @@ class WithUser(dict):
     @user.setter
     def user(self, user):
         # type: (Optional[int]) -> None
-        if not isinstance(user, int) and user is not None:
-            raise TypeError("Type 'int' or 'None' is required for '{}.user'".format(type(self)))
-        self["user"] = user
+        self._is_of_type("user", user, int, allow_none=True)
+        dict.__setitem__(self, "user", user)
 
     @property
     def params(self):
@@ -321,7 +394,7 @@ class WithUser(dict):
         return {"user": self.user}
 
 
-class WithVisibility(dict):
+class WithVisibility(dict, Validator):
     """Adds properties ``visibility`` to corresponding class."""
 
     # noinspection PyTypeChecker
@@ -335,9 +408,8 @@ class WithVisibility(dict):
         # type: (Union[VISIBILITY, AnyStr]) -> None
         if isinstance(visibility, six.string_types):
             visibility = VISIBILITY.get(visibility)
-        if visibility not in VISIBILITY:
-            raise TypeError("Type 'VISIBILITY' required.")
-        self["visibility"] = visibility
+        self._is_of_type("visibility", visibility, VISIBILITY)
+        dict.__setitem__(self, "visibility", visibility)
 
     @property
     def params(self):
@@ -522,15 +594,16 @@ class Model(Base, WithName, WithUser, WithVisibility):
             raise TypeError("Model 'path' is required.")
 
     @property
-    def name(self):
-        # type: () -> AnyStr
-        return self["name"]
-
-    @property
     def path(self):
         # type: () -> AnyStr
         """Original path specified for model creation."""
-        return self["path"]
+        return dict.__getitem__(self, "path")
+
+    @path.setter
+    def path(self, path):
+        # type: (AnyStr) -> None
+        self._is_of_type("path", path, str)
+        dict.__setitem__(self, "path", path)
 
     @property
     def format(self):
@@ -538,11 +611,23 @@ class Model(Base, WithName, WithUser, WithVisibility):
         """Original file format (extension)."""
         return os.path.splitext(self.path)[-1]
 
+    @format.setter
+    def format(self, fmt):
+        # type: (AnyStr) -> None
+        self._is_of_type("format", fmt, str)
+        dict.__setitem__(self, "format", fmt)
+
     @property
     def file(self):
         # type: () -> AnyStr
         """Stored file path of the created model."""
         return self.get("file")
+
+    @file.setter
+    def file(self, file):
+        # type: (AnyStr) -> None
+        self._is_of_type("file", file, str)
+        dict.__setitem__(self, "file", file)
 
     @property
     def data(self):
@@ -552,10 +637,10 @@ class Model(Base, WithName, WithUser, WithVisibility):
         If data was already loaded and cached in the object, it is returned instead.
         """
         if self.get("data") is not None:
-            return self["data"]
+            return dict.__getitem__(self, "data")
         if self.file:
             data, _ = self._load_check_data(self.file)
-            self["data"] = data
+            dict.__setitem__(self, "data", data)
             return data
         return None
 
@@ -588,12 +673,16 @@ class Model(Base, WithName, WithUser, WithVisibility):
         location = os.path.abspath(location)
         os.makedirs(os.path.dirname(location), exist_ok=True)
 
+        # noinspection PyCallByClass
+        def _reset_file_link():
+            dict.__setitem__(self, "file", location)
+            dict.__setitem__(self, "data", None)
+
         if self.file and os.path.isfile(self.file) and self.file != location:
             if os.path.isfile(location):
                 raise ex.ModelConflictError("Model save location already exists.")
             shutil.copyfile(self.file, location)
-            self["file"] = location
-            self["data"] = None
+            _reset_file_link()
             return
 
         def _write_buffer(_buffer):
@@ -605,15 +694,13 @@ class Model(Base, WithName, WithUser, WithVisibility):
 
         if isinstance(self.data, io.BufferedIOBase):
             _write_buffer(self["data"])
-            self["file"] = location
-            self["data"] = None
+            _reset_file_link()
             return
 
         if not self.file and not self.data and self.path:
             _, buffer = self._load_check_data(self.path)
             _write_buffer(buffer)
-            self["file"] = location
-            self["data"] = None
+            _reset_file_link()
             return
 
         raise ex.ModelInstanceError("Model is expected to provided one of valid field: [file, data, path]")
@@ -673,32 +760,74 @@ class Process(Base, WithType, WithUser):
     @property
     def identifier(self):
         # type: () -> AnyStr
-        return self["identifier"]
+        return dict.__getitem__(self, "identifier")
+
+    @identifier.setter
+    def identifier(self, identifier):
+        # type: (AnyStr) -> None
+        self._is_of_type("identifier", identifier, str)
+        assert_sane_name(identifier)
+        dict.__setitem__(self, "identifier", identifier)
 
     @property
     def title(self):
         # type: () -> AnyStr
         return self.get("title", self.identifier)
 
+    @title.setter
+    def title(self, title):
+        self._is_of_type("title", title, str)
+        dict.__setitem__(self, "title", title)
+
     @property
     def abstract(self):
         # type: () -> AnyStr
         return self.get("abstract", "")
+
+    @abstract.setter
+    def abstract(self, abstract):
+        # type: (AnyStr) -> None
+        self._is_of_type("abstract", abstract, str)
+        dict.__setitem__(self, "abstract", clean_json_text_body(abstract))
 
     @property
     def keywords(self):
         # type: () -> List[AnyStr]
         return self.get("keywords", [])
 
+    @keywords.setter
+    def keywords(self, keywords):
+        if not isinstance(keywords, list) or not all(isinstance(k, six.string_types) for k in keywords):
+            raise TypeError("Type 'list[str]' required for '{}.keywords'.".format(type(self)))
+        dict.__setitem__(self, "keywords", keywords)
+
     @property
     def metadata(self):
         # type: () -> List[AnyStr]
         return self.get("metadata", [])
 
+    @metadata.setter
+    def metadata(self, metadata):
+        # type: (List[Dict[AnyStr, JsonValue]]) -> None
+        self._is_of_type("metadata", metadata, list, sub_item=dict)
+        for metainfo in metadata:
+            self._is_of_type("metadata[<item>]", metainfo, sub_key=str, sub_value=(float, int, bool, str))
+        dict.__setitem__(self, "metadata", metadata)
+
     @property
     def version(self):
         # type: () -> AnyStr
         return self.get("version")
+
+    @version.setter
+    def version(self, version):
+        # type: (AnyStr) -> None
+        self._is_of_type("version", version, str, allow_none=True)
+        try:
+            StrictVersion(version)
+        except ValueError:
+            raise ValueError("Invalid version '{!s}' for '{}.version'.".format(version, type(self)))
+        dict.__setitem__(self, "version", version)
 
     @property
     def inputs(self):
@@ -707,7 +836,9 @@ class Process(Base, WithType, WithUser):
 
     @inputs.setter
     def inputs(self, inputs):
-        _check_io_format(inputs)
+        self._is_of_type("inputs", inputs, list)
+        for i in inputs:
+            self._is_of_type("inputs[<item>]", i, dict, sub_key=str)
         dict.__setitem__(self, "inputs", inputs)
 
     @property
@@ -717,7 +848,9 @@ class Process(Base, WithType, WithUser):
 
     @outputs.setter
     def outputs(self, outputs):
-        _check_io_format(outputs)
+        self._is_of_type("outputs", outputs, list)
+        for o in outputs:
+            self._is_of_type("outputs[<item>]", o, dict, sub_key=str)
         dict.__setitem__(self, "outputs", outputs)
 
     @property
@@ -725,10 +858,37 @@ class Process(Base, WithType, WithUser):
         # type: () -> Optional[AnyStr]
         return self.get("execute_endpoint")
 
+    @execute_endpoint.setter
+    def execute_endpoint(self, location):
+        # type: (AnyStr) -> None
+        self._is_of_type("execute_endpoint", location, str)
+        if not location.startswith("http"):
+            raise ValueError("Field 'execute_endpoint' must be an HTTP(S) location.")
+        dict.__setitem__(self, "execute_endpoint", location)
+
     @property
     def package(self):
-        # type: () -> ParamsType
-        return dict.__getitem__(self, "package")
+        # type: () -> Optional[JSON]
+        return self.get("package", None)
+
+    @package.setter
+    def package(self, package):
+        # type: (Optional[JSON]) -> None
+        self._is_of_type("package", package, param_types=dict, sub_key=str, allow_none=True)
+        dict.__setitem__(self, "package", package)
+
+    @property
+    def reference(self):
+        # type: () -> Optional[AnyStr]
+        return self.get("reference", None)
+
+    @reference.setter
+    def reference(self, reference):
+        # type: (Optional[AnyStr]) -> None
+        self._is_of_type("reference", reference, str, allow_none=True)
+        if reference and not reference.startswith("http"):
+            raise ValueError("Field 'reference' must be an HTTP(S) location.")
+        dict.__setitem__(self, "reference", None)
 
     @property
     def limit_single_job(self):
@@ -739,8 +899,7 @@ class Process(Base, WithType, WithUser):
 
     @limit_single_job.setter
     def limit_single_job(self, value):
-        if not isinstance(value, bool):
-            raise TypeError("Invalid bool for 'limit_single_job'.")
+        self._is_of_type("limit_single_job", value, bool)
         dict.__setitem__(self, "limit_single_job", False)
 
     @property
@@ -878,39 +1037,36 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
 
     @property
     def task(self):
-        # type: () -> UUID
+        # type: () -> AnyUUID
         return self.get("task")
 
     @task.setter
     def task(self, task):
-        # type: (UUID) -> None
-        if not is_uuid(task):
-            raise TypeError("Type 'UUID' is required for '{}.task'".format(type(self)))
-        self["task"] = task
+        # type: (AnyUUID) -> None
+        self._is_of_type("task", task, uuid.UUID, valid_function=is_uuid)
+        dict.__setitem__(self, "task", task)
 
     @property
     def service(self):
-        # type: () -> Optional[UUID]
+        # type: () -> Optional[AnyUUID]
         return self.get("service", None)
 
     @service.setter
     def service(self, service):
-        # type: (UUID) -> None
-        if not is_uuid(service):
-            raise TypeError("Type 'UUID' is required for '{}.service'".format(type(self)))
-        self["service"] = service
+        # type: (Optional[AnyUUID]) -> None
+        self._is_of_type("service", service, uuid.UUID, valid_function=is_uuid, allow_none=True)
+        dict.__setitem__(self, "service", service)
 
     @property
     def process(self):
-        # type: () -> Optional[UUID]
+        # type: () -> Optional[AnyUUID]
         return self.get("process", None)
 
     @process.setter
     def process(self, process):
-        # type: (UUID) -> None
-        if not is_uuid(process):
-            raise TypeError("Type 'UUID' is required for '{}.process'".format(type(self)))
-        self["process"] = process
+        # type: (AnyUUID) -> None
+        self._is_of_type("process", process, uuid.UUID, valid_function=is_uuid)
+        dict.__setitem__(self, "process", process)
 
     def _get_inputs(self):
         # type: () -> List[JSON]
@@ -920,10 +1076,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
 
     def _set_inputs(self, inputs):
         # type: (List[JSON]) -> None
-        if not isinstance(inputs, list):
-            raise TypeError("Type 'list' is required for '{}.inputs'".format(type(self)))
-        if not all(isinstance(i, dict) for i in inputs):
-            raise TypeError("Type 'dict' is required for elements of '{}.inputs'".format(type(self)))
+        self._is_of_type("inputs", inputs, list, sub_item=dict)
         dict.__setitem__(self, "inputs", inputs)
 
     # allows to correctly update list by ref using 'job.inputs.extend()'
@@ -938,8 +1091,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def status(self, status):
         # type: (STATUS) -> None
         status = map_status(status, COMPLIANT.LITERAL)
-        if not isinstance(status, STATUS):
-            raise TypeError("Type 'STATUS' enum is expected.")
+        self._is_of_type("status", status, STATUS)
         if status == STATUS.UNKNOWN:
             raise ValueError("Unknown status not allowed.")
         dict.__setitem__(self, "status", status)
@@ -958,9 +1110,8 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
         # type: (Optional[AnyStr]) -> None
         if message is None:
             return
-        if not isinstance(message, six.string_types):
-            raise TypeError("Type 'str' is required for '{}.status_message'".format(type(self)))
-        self["status_message"] = message
+        self._is_of_type("status_message", message, str)
+        dict.__setitem__(self, "status_message", message)
 
     @property
     def status_location(self):
@@ -970,9 +1121,8 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @status_location.setter
     def status_location(self, location_url):
         # type: (Optional[AnyStr]) -> None
-        if not isinstance(location_url, six.string_types) or location_url is None:
-            raise TypeError("Type 'str' is required for '{}.status_location'".format(type(self)))
-        self["status_location"] = location_url
+        self._is_of_type("status_location", location_url, str, allow_none=True)
+        dict.__setitem__(self, "status_location", location_url)
 
     @property
     def execute_async(self):
@@ -982,9 +1132,8 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @execute_async.setter
     def execute_async(self, execute_async):
         # type: (bool) -> None
-        if not isinstance(execute_async, bool):
-            raise TypeError("Type 'bool' is required for '{}.execute_async'".format(type(self)))
-        self["execute_async"] = execute_async
+        self._is_of_type("execute_async", execute_async, bool)
+        dict.__setitem__(self, "execute_async", execute_async)
 
     @property
     def is_workflow(self):
@@ -994,9 +1143,8 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @is_workflow.setter
     def is_workflow(self, is_workflow):
         # type: (bool) -> None
-        if not isinstance(is_workflow, bool):
-            raise TypeError("Type 'bool' is required for '{}.is_workflow'".format(type(self)))
-        self["is_workflow"] = is_workflow
+        self._is_of_type("is_workflow", is_workflow, bool)
+        dict.__setitem__(self, "is_workflow", is_workflow)
 
     @property
     def started(self):
@@ -1011,9 +1159,8 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @started.setter
     def started(self, dt):
         # type: (datetime) -> None
-        if not isinstance(dt, datetime):
-            raise TypeError("Type 'datetime' required.")
-        self["started"] = localize_datetime(dt)
+        self._is_of_type("started", dt, datetime)
+        dict.__setitem__(self, "started", localize_datetime(dt))
 
     def is_started(self):
         # type: () -> bool
@@ -1048,52 +1195,65 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @progress.setter
     def progress(self, progress):
         # type: (Number) -> None
-        if not isinstance(progress, (int, float)):
-            raise TypeError("Number is required for '{}.progress'".format(type(self)))
+        self._is_of_type("progress", progress, (int, float))
         if progress < 0 or progress > 100:
             raise ValueError("Value must be in range [0,100] for '{}.progress'".format(type(self)))
-        self["progress"] = progress
+        dict.__setitem__(self, "progress", progress)
+
+    @staticmethod
+    def _check_results_io_format(io_items):
+        # type: (List[Union[InputType, OutputType]]) -> None
+        """
+        Basic validation of input/output for process and job results.
+
+        :raises TypeError: on any invalid format encountered.
+        :raises ValueError: on invalid value conditions encountered.
+        """
+        if not isinstance(io_items, list) or \
+                not all(isinstance(_io, dict) and all(k in _io for k in ["id", "value"]) for _io in io_items):
+            raise TypeError("Expect a list of items with id/value keys.")
+        id_items = [_io["id"] for _io in io_items]
+        if len(id_items) != len(set(id_items)):
+            raise ValueError("Duplicate item id in list.")
 
     def _get_results(self):
         # type: () -> List[JSON]
         if self.get("results") is None:
-            self["results"] = list()
-        return self["results"]
+            self.results = []
+        return dict.__getitem__(self, "results")
 
     def _set_results(self, results):
         # type: (List[JSON]) -> None
-        _check_io_format(results)
+        self._check_results_io_format(results)
         dict.__setitem__(self, "results", results)
 
     # allows to correctly update list by ref using 'job.results.extend()'
     results = property(_get_results, _set_results)
 
     def _get_exceptions(self):
-        # type: () -> List[JSON]
+        # type: () -> List[Union[JSON, AnyStr]]
         if self.get("exceptions") is None:
-            self["exceptions"] = list()
-        return self["exceptions"]
+            self.exceptions = []
+        return dict.__getitem__(self, "exceptions")
 
     def _set_exceptions(self, exceptions):
-        # type: (List[JSON]) -> None
-        if not isinstance(exceptions, list):
-            raise TypeError("Type 'list' is required for '{}.exceptions'".format(type(self)))
-        self["exceptions"] = exceptions
+        # type: (List[Union[JSON, AnyStr]]) -> None
+        self._is_of_type("exceptions", exceptions, list, sub_item=(dict, str))
+        dict.__setitem__(self, "exceptions", exceptions)
 
     # allows to correctly update list by ref using 'job.exceptions.extend()'
     exceptions = property(_get_exceptions, _set_exceptions)
 
     def _get_logs(self):
-        # type: () -> List[JSON]
+        # type: () -> List[AnyStr]
         if self.get("logs") is None:
-            self["logs"] = list()
-        return self["logs"]
+            self.logs = []
+        return dict.__getitem__(self, "logs")
 
     def _set_logs(self, logs):
-        # type: (List[JSON]) -> None
-        if not isinstance(logs, list):
-            raise TypeError("Type 'list' is required for '{}.logs'".format(type(self)))
-        self["logs"] = logs
+        # type: (List[AnyStr]) -> None
+        self._is_of_type("logs", logs, list, sub_item=str)
+        dict.__setitem__(self, "logs", logs)
 
     # allows to correctly update list by ref using 'job.logs.extend()'
     logs = property(_get_logs, _set_logs)
@@ -1101,14 +1261,13 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def _get_tags(self):
         # type: () -> List[AnyStr]
         if self.get("tags") is None:
-            self["tags"] = list()
-        return self["tags"]
+            self.tags = []
+        return dict.__getitem__(self, "tags")
 
     def _set_tags(self, tags):
         # type: (List[AnyStr]) -> None
-        if not isinstance(tags, list):
-            raise TypeError("Type 'list' is required for '{}.tags'".format(type(self)))
-        self["tags"] = tags
+        self._is_of_type("tags", tags, list, sub_item=str)
+        dict.__setitem__(self, "tags", tags)
 
     # allows to correctly update list by ref using 'job.tags.extend()'
     tags = property(_get_tags, _set_tags)
@@ -1123,7 +1282,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def request(self, request):
         # type: (Optional[AnyStr]) -> None
         """XML request for WPS execution submission as string."""
-        self["request"] = request
+        dict.__setitem__(self, "request", request)
 
     @property
     def response(self):
@@ -1135,7 +1294,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     def response(self, response):
         # type: (Optional[AnyStr]) -> None
         """XML status response from WPS execution submission as string."""
-        self["response"] = response
+        dict.__setitem__(self, "response", response)
 
     @property
     def params(self):
@@ -1241,16 +1400,15 @@ class Action(Base, WithUser):
 
     @property
     def item(self):
-        # type: () -> Optional[UUID]
+        # type: () -> Optional[AnyUUID]
         """Reference to a specific item affected by the action."""
         return self.get("item", None)
 
     @item.setter
     def item(self, item):
-        # type: (Optional[UUID]) -> None
-        if item is not None and not is_uuid(item):
-            raise TypeError("Item of type 'UUID' required.")
-        self["item"] = str(item)
+        # type: (Optional[AnyUUID]) -> None
+        self._is_of_type("item", item, uuid.UUID, valid_function=is_uuid, allow_none=True)
+        dict.__setitem__(self, "item", str(item) if item else None)
 
     # noinspection PyTypeChecker
     @property
@@ -1264,8 +1422,7 @@ class Action(Base, WithUser):
         # type: (Union[OPERATION, AnyStr]) -> None
         if isinstance(operation, six.string_types):
             operation = OPERATION.get(operation)
-        if not isinstance(operation, OPERATION):
-            raise TypeError("Type 'OPERATION' required.")
+        self._is_of_type("operation", operation, OPERATION)
         dict.__setitem__(self, "operation", operation)
 
     @property
@@ -1277,8 +1434,7 @@ class Action(Base, WithUser):
     @path.setter
     def path(self, path):
         # type: (Optional[AnyStr]) -> None
-        if not isinstance(path, six.string_types) or path is None:
-            raise TypeError("Type 'str' required.")
+        self._is_of_type("path", path, str, allow_none=True)
         dict.__setitem__(self, "path", path)
 
     @property
@@ -1290,8 +1446,7 @@ class Action(Base, WithUser):
     @method.setter
     def method(self, method):
         # type: (Optional[AnyStr]) -> None
-        if not isinstance(method, six.string_types) or method is None:
-            raise TypeError("Type 'str' required.")
+        self._is_of_type("method", method, str, allow_none=True)
         dict.__setitem__(self, "method", method)
 
     @property

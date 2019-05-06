@@ -283,6 +283,10 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         if isclass(wps_process):
             wps_process = wps_process()
         process = wps_process.json
+        process_properties = Process.__dict__.keys()
+        process_prop_to_rm = [p for p in process if p not in process_properties]
+        for prop in process_prop_to_rm:
+            process.pop(prop)
         process.update({
             "type": PROCESS_WPS,
             "package": None,
@@ -307,7 +311,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             new_process["identifier"] = process_name
             new_process["type"] = self._get_process_type(process)
             new_process["execute_endpoint"] = process_exec
-            self.collection.insert_one(new_process)
+            self.collection.insert_one(new_process.params)
         except Exception as exc:
             raise ex.ProcessRegistrationError(
                 "Process '{}' could not be registered. [{!r}]".format(process_name, exc))

@@ -60,7 +60,7 @@ class MongoDatabase(DatabaseInterface):
 
     def run_migration(self):
         if self._database.version.count_documents({}) < 1:
-            self._database.version.insert_one({"version_num": "3"})
+            self._database.version.insert_one({"version_num": "4"})
         else:
             # TODO: do migration according to found version
             pass

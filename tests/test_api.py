@@ -208,7 +208,7 @@ class TestModelApi(unittest.TestCase):
         assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
 
         resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
-        utils.check_val_equal(resp.status_code, 400)
+        utils.check_val_equal(resp.status_code, 403)
         resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
         assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value

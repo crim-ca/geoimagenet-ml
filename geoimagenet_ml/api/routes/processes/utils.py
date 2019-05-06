@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from celery import Task                                     # noqa: F401
     from pyramid.request import Request                         # noqa: F401
     from typing import Optional                                 # noqa: F401
-    from geoimagenet_ml.typedefs import AnyStr, UUID            # noqa: F401
+    from geoimagenet_ml.typedefs import AnyStr, AnyUUID         # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -225,7 +225,7 @@ def create_process_job(request, process):
 
 @app.task(bind=True)
 def process_job_runner(task, job_uuid, runner_key):
-    # type: (Task, UUID, AnyStr) -> AnyStr
+    # type: (Task, AnyUUID, AnyStr) -> AnyStr
     LOGGER.debug("Celery task for job '{}' [{}] received.".format(job_uuid, runner_key))
     registry = app.conf["PYRAMID_REGISTRY"]
     runner = process_mapping[runner_key]

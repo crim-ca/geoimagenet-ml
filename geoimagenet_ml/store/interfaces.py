@@ -6,7 +6,9 @@ if TYPE_CHECKING:
     from geoimagenet_ml.constants import SORT, ORDER, OPERATION                                             # noqa: F401
     from geoimagenet_ml.status import STATUS, CATEGORY                                                      # noqa: F401
     from geoimagenet_ml.store.datatypes import Base, Dataset, Process, Model, Job, Action                   # noqa: F401
-    from geoimagenet_ml.typedefs import ParamsType, UUID, Any, AnyStr, List, Optional, Tuple, Type, Union   # noqa: F401
+    from geoimagenet_ml.typedefs import (                                                                   # noqa: F401
+        ParamsType, AnyUUID, Any, AnyStr, List, Optional, Tuple, Type, Union
+    )
     from datetime import datetime                                                                           # noqa: F401
     from pyramid.request import Request                                                                     # noqa: F401
 
@@ -83,7 +85,7 @@ class DatasetStore(object):
         raise NotImplementedError
 
     def delete_dataset(self, dataset_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> bool
+        # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes dataset from database.
         """
@@ -112,7 +114,7 @@ class DatasetStore(object):
         raise NotImplementedError
 
     def fetch_by_uuid(self, dataset_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> Dataset
+        # type: (AnyUUID, Optional[Request]) -> Dataset
         """
         Get dataset for given ``uuid`` from storage.
         """
@@ -139,7 +141,7 @@ class ModelStore(object):
         raise NotImplementedError
 
     def delete_model(self, process_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> bool
+        # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes model from database.
         """
@@ -153,7 +155,7 @@ class ModelStore(object):
         raise NotImplementedError
 
     def fetch_by_uuid(self, model_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> Model
+        # type: (AnyUUID, Optional[Request]) -> Model
         """
         Get model for given ``uuid`` from storage.
         """
@@ -180,7 +182,7 @@ class ProcessStore(object):
         raise NotImplementedError
 
     def delete_process(self, process_id, request=None):
-        # type: (UUID, Optional[Request]) -> bool
+        # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes process from database.
         """
@@ -194,7 +196,7 @@ class ProcessStore(object):
         raise NotImplementedError
 
     def fetch_by_uuid(self, process_id, request=None):
-        # type: (UUID, Optional[Request]) -> Process
+        # type: (AnyUUID, Optional[Request]) -> Process
         """
         Get process for given ``uuid`` from storage.
         """
@@ -228,7 +230,7 @@ class JobStore(object):
         raise NotImplementedError
 
     def delete_job(self, process_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> bool
+        # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes job from database.
         """
@@ -244,8 +246,8 @@ class JobStore(object):
     def find_jobs(self,
                   page=0,           # type: int
                   limit=10,         # type: int
-                  process=None,     # type: Optional[UUID]
-                  service=None,     # type: Optional[UUID]
+                  process=None,     # type: Optional[AnyUUID]
+                  service=None,     # type: Optional[AnyUUID]
                   tags=None,        # type: Optional[List[AnyStr]]
                   user=None,        # type: Optional[int]
                   status=None,      # type: Optional[Union[STATUS, CATEGORY]]
@@ -262,7 +264,7 @@ class JobStore(object):
         raise NotImplementedError
 
     def fetch_by_uuid(self, job_uuid, request=None):
-        # type: (UUID, Optional[Request]) -> Job
+        # type: (AnyUUID, Optional[Request]) -> Job
         """
         Get job for given ``uuid`` from storage.
         """
@@ -280,7 +282,7 @@ class ActionStore(object):
 
     def find_actions(self,
                      item_type=None,    # type: Optional[Any]
-                     item=None,         # type: Optional[UUID]
+                     item=None,         # type: Optional[AnyUUID]
                      operation=None,    # type: Optional[OPERATION]
                      user=None,         # type: Optional[int]
                      start=None,        # type: Optional[datetime]
