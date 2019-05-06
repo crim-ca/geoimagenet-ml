@@ -9,7 +9,7 @@ from geoimagenet_ml.processes.types import process_mapping, process_categories, 
 from geoimagenet_ml.status import map_status, STATUS
 from geoimagenet_ml.utils import get_base_url, get_user_id, is_uuid
 from pyramid.httpexceptions import (
-    HTTPCreated,
+    HTTPAccepted,
     HTTPBadRequest,
     HTTPForbidden,
     HTTPNotFound,
@@ -17,6 +17,7 @@ from pyramid.httpexceptions import (
     HTTPUnprocessableEntity,
     HTTPInternalServerError,
     HTTPNotImplemented,
+    HTTPException,
 )
 from pyramid_celery import celery_app as app
 from typing import TYPE_CHECKING
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from celery import Task                                     # noqa: F401
     from pyramid.request import Request                         # noqa: F401
     from typing import Optional                                 # noqa: F401
-    from geoimagenet_ml.typedefs import AnyStr, AnyUUID         # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, AnyUUID    # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -166,7 +167,7 @@ def get_job_status_location(request, process, job):
 
 
 def create_process_job(request, process):
-    # type: (Request, Process) -> HTTPCreated
+    # type: (Request, Process) -> HTTPException
     """Creates a job for the requested process and dispatches it to the celery runner."""
 
     # validate body with expected JSON content and schema
@@ -208,7 +209,7 @@ def create_process_job(request, process):
 
     db = database_factory(request)
     jobs_store = db.jobs_store
-    job = Job(process=process.uuid, inputs=job_inputs, user=get_user_id(request))
+    job = Job(process=process.uuid, inputs=job_inputs, user=get_user_id(request), status=STATUS.ACCEPTED)
     job = jobs_store.save_job(job)
     LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
     result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)
@@ -217,18 +218,19 @@ def create_process_job(request, process):
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
     job.status_location = get_job_status_location(request, process, job)
     job = jobs_store.update_job(job)
+    job_json = job.json()
     body_data = {
-        "jobID": job.uuid,
-        "status": job.status,
-        "location": job.status_location
+        "job_uuid": job_json.get("uuid"),
+        "status": job_json.get("status"),
+        "location": job_json.get("status_location")
     }
     db.actions_store.save_action(job, OPERATION.SUBMIT, request=request)
-    return HTTPCreated(location=job.status_location, json=body_data)
+    return HTTPAccepted(location=job.status_location, json=body_data)
 
 
 @app.task(bind=True)
 def process_job_runner(task, job_uuid, runner_key):
-    # type: (Task, AnyUUID, AnyStr) -> AnyStr
+    # type: (Task, AnyUUID, AnyStr) -> Any
     LOGGER.debug("Celery task for job '{}' [{}] received.".format(job_uuid, runner_key))
     registry = app.conf["PYRAMID_REGISTRY"]
     runner = process_mapping[runner_key]

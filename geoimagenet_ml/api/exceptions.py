@@ -310,7 +310,7 @@ def validate_params(httpClass,      # type: HTTPException
     detail = repr(detail) if type(detail) not in six.string_types else detail
     if not isclass(httpClass):
         raise_http(httpError=HTTPInternalServerError,
-                   detail="Object specified is not of type `HTTPError`",
+                   detail="Object specified is not of type `HTTPException`",
                    contentType='application/json',
                    content={u'caller': format_content_meta_data(520, detail, content, contentType, request)},
                    request=request)

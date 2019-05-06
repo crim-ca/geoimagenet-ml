@@ -14,6 +14,7 @@ from pyramid.httpexceptions import (
     HTTPForbidden,
     HTTPNotFound,
     HTTPInternalServerError,
+    HTTPException,
 )
 
 
@@ -75,7 +76,15 @@ def get_process_jobs_view(request):
 def post_process_jobs_view(request):
     """Execute a registered process job."""
     process = get_process(request)
-    return create_process_job(request, process)
+    try:
+        http = create_process_job(request, process)
+        http_meta = ex.valid_http(httpSuccess=type(http), detail=s.ProcessJobs_POST_AcceptedResponseSchema.description,
+                                  content=http.json, request=request)
+        http_meta.location = http.location
+        return http_meta
+    except HTTPException as http_err:
+        # re-raise with additional metadata
+        ex.raise_http(httpError=type(http_err), detail=http_err.detail, request=request)
 
 
 def get_process_job_handler(request):

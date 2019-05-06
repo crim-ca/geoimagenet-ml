@@ -291,8 +291,6 @@ class ProcessRunnerModelTester(ProcessRunner):
         finally:
             self.update_job_status(self.job.status, "done")
 
-        return self.job.status
-
 
 class ProcessRunnerBatchCreator(ProcessRunner):
     """
@@ -458,5 +456,3 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             self.update_job_status(STATUS.FAILED, message, errors=task_exc)
         finally:
             self.update_job_status(self.job.status, "done")
-
-        return self.job.status

@@ -16,6 +16,8 @@ from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model, Process, Job
 from geoimagenet_ml.store.exceptions import ModelNotFoundError
 from geoimagenet_ml.store.factories import database_factory
+from geoimagenet_ml.utils import now
+from dateutil.parser import parse as dt_parse
 from tests import utils
 import pyramid.testing
 # noinspection PyPackageRequirements
@@ -263,6 +265,60 @@ class TestModelApi(unittest.TestCase):
         resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
         assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
+
+    def test_PostJob_BatchCreation(self):
+        """
+        Validate basic job submission is working and that corresponding routes return expected bodies.
+        No job execution is executed here (assumed there is no Celery worker).
+        """
+        path_proc = schemas.ProcessAPI.path.replace(schemas.VariableProcessUUID, "batch-creation")
+        path_jobs = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, "batch-creation")
+        body = {
+            "inputs": [
+                {"id": "name", "value": "test-batch"},
+                {"id": "geojson_urls", "value": ["https://geoimagenet.crim.ca/api/v1/batches/annotations"]},
+                {"id": "overwrite", "value": True},
+            ]
+        }
+
+        class DummyResult(object):
+            id = "test-task"
+            status = STATUS.ACCEPTED
+
+        # avoid errors from uninitialized Celery backend
+        with mock.patch("geoimagenet_ml.api.routes.processes.utils.process_job_runner.delay",
+                        return_value=DummyResult()):
+            dt_before = now()
+            resp = utils.request(self.app, "POST", path_jobs, body=body)
+            dt_after = now()
+        utils.check_val_equal(resp.status_code, 202)
+        location = resp.json["data"]["location"]
+        job_uuid = resp.json["data"]["job_uuid"]
+        assert resp.headers["Location"] == location
+
+        resp = utils.request(self.app, "GET", path_proc)
+        utils.check_val_equal(resp.status_code, 200)
+        process_uuid = resp.json["data"]["process"]["uuid"]
+
+        resp = utils.request(self.app, "GET", location)
+        utils.check_val_equal(resp.status_code, 200)
+        dt_submit = dt_parse(resp.json["data"]["job"]["created"])
+        assert dt_after > dt_submit > dt_before  # entry must indicate job creation timestamp although not executed yet
+        assert resp.json["data"]["job"]["uuid"] == job_uuid
+        assert resp.json["data"]["job"]["inputs"] == body["inputs"]
+        assert resp.json["data"]["job"]["status"] == STATUS.ACCEPTED.value
+        assert resp.json["data"]["job"]["process"] == process_uuid
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PRIVATE.value
+        assert resp.json["data"]["job"]["user"] is None  # no cookies to fetch id
+        assert resp.json["data"]["job"]["task"] is None
+        assert resp.json["data"]["job"]["started"] is None
+        assert resp.json["data"]["job"]["finished"] is None
+        assert resp.json["data"]["job"]["duration"] is None
+        assert resp.json["data"]["job"]["progress"] == 0
+        assert resp.json["data"]["job"]["service"] is None
+        assert resp.json["data"]["job"]["tags"] == []
+        assert resp.json["data"]["job"]["execute_async"] is True
+        assert resp.json["data"]["job"]["is_workflow"] is False
 
 
 if __name__ == "__main__":

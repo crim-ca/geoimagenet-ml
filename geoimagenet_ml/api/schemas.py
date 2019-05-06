@@ -9,6 +9,7 @@ from colander import drop, Boolean, DateTime, Integer, MappingSchema, OneOf, Sch
 from pyramid.httpexceptions import (
     HTTPOk,
     HTTPCreated,
+    HTTPAccepted,
     HTTPBadRequest,
     HTTPUnauthorized,
     HTTPForbidden,
@@ -979,9 +980,24 @@ class ProcessJobs_POST_RequestSchema(BaseRequestSchema):
     body = ProcessJobsExecuteBodySchema()
 
 
-class ProcessJobs_POST_OkResponseSchema(BaseResponseSchema):
+class ProcessJobs_POST_DataResponseSchema(MappingSchema):
+    job_uuid = job_uuid
+    status = SchemaNode(String(), validator=OneOf(STATUS.values()))
+    location = SchemaNode(String(), format=URL, description="Location of the job status for monitoring execution.")
+
+
+class ProcessJobs_POST_BodyResponseSchema(BaseBodyResponseSchema):
+    data = ProcessJobs_POST_DataResponseSchema()
+
+
+class ProcessJobs_POST_Headers(AcceptHeader):
+    Location = SchemaNode(String(), format=URL, description="Location of the job status for monitoring execution.")
+
+
+class ProcessJobs_POST_AcceptedResponseSchema(BaseResponseSchema):
     description = "Process job execute submission successful."
-    body = Process_GET_BodyResponseSchema(code=HTTPOk.code, description=description)
+    header = ProcessJobs_POST_Headers()
+    body = ProcessJobs_POST_BodyResponseSchema(code=HTTPAccepted.code, description=description)
 
 
 class ProcessJobs_POST_BadRequestResponseSchema(BaseResponseSchema):
@@ -1155,7 +1171,7 @@ ProcessJobs_GET_responses = {
     "500": InternalServerErrorResponseSchema(),
 }
 ProcessJobs_POST_responses = {
-    "200": ProcessJobs_POST_OkResponseSchema(),
+    "202": ProcessJobs_POST_AcceptedResponseSchema(),
     "400": ProcessJobs_POST_BadRequestResponseSchema(),
     "403": ProcessJobs_POST_ForbiddenResponseSchema(),
     "404": ProcessJobs_POST_NotFoundResponseSchema(),
