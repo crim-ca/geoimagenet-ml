@@ -306,9 +306,8 @@ class WithFinished(dict, Validator):
     @finished.setter
     def finished(self, dt):
         # type: (datetime) -> None
-        if not isinstance(dt, datetime):
-            raise TypeError("Type 'datetime' required.")
-        self["finished"] = localize_datetime(dt)
+        self._is_of_type("finished", dt, datetime, allow_none=True)
+        dict.__setitem__(self, "finished", localize_datetime(dt) if dt else None)
 
     def is_finished(self):
         # type: () -> bool
@@ -1178,14 +1177,12 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
 
     @property
     def duration(self):
-        # type: () -> AnyStr
+        # type: () -> Optional[AnyStr]
         if self.is_started():
             final_time = self.finished or now()
             duration = localize_datetime(final_time) - localize_datetime(self.started)
-            dict.__setitem__(self, "duration", str(duration).split(".")[0])
-        else:
-            dict.__setitem__(self, "duration", None)
-        return dict.__getitem__(self, "duration")
+            return str(duration).split(".")[0]
+        return None
 
     @property
     def progress(self):

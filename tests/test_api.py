@@ -12,7 +12,7 @@ from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
 from geoimagenet_ml.constants import VISIBILITY
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
-from geoimagenet_ml.store.datatypes import Model
+from geoimagenet_ml.store.datatypes import Model, Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from tests import utils
 import pyramid.testing
@@ -25,6 +25,7 @@ import tempfile
 import pyramid
 import warnings
 import json
+import uuid
 import six
 import os
 
@@ -223,6 +224,32 @@ class TestModelApi(unittest.TestCase):
         # missing update fields
         resp = utils.request(self.app, "PUT", path, expect_errors=True)
         utils.check_val_equal(resp.status_code, 400)
+
+    def test_UpdateJob(self):
+        process_uuid = str(uuid.uuid4())
+        process = Process(uuid=process_uuid, type="test", identifier="test")
+        job = Job(uuid=uuid.uuid4(), process=process.uuid)
+        path = schemas.ProcessJobAPI.path \
+            .replace(schemas.VariableProcessUUID, process_uuid) \
+            .replace(schemas.VariableJobUUID, job.uuid)
+        self.db.processes_store.save_process(process)
+        self.db.jobs_store.save_job(job)
+
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PRIVATE.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": VISIBILITY.PUBLIC.value})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 403)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
 
 
 if __name__ == "__main__":
