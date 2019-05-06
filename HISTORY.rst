@@ -3,6 +3,15 @@
 History
 =======
 
+1.0.0
+---------------------
+
+* add visibility update ``PUT`` requests for ``Job`` and ``Model`` (GEOIM-137)
+* add strong and enforced input validation of datatype parameters
+* upgrade db to version ``"4"``, loading previous objects could cause errors (input validation failures)
+* add more unittests for input validation and for new routes (GEOIM-137)
+* fix multiple API schema definitions
+
 0.8.0
 ---------------------
 
