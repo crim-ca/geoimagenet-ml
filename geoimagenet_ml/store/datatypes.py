@@ -1042,7 +1042,7 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @task.setter
     def task(self, task):
         # type: (AnyUUID) -> None
-        self._is_of_type("task", task, uuid.UUID, valid_function=is_uuid)
+        self._is_of_type("task", task, uuid.UUID, valid_function=is_uuid, allow_none=True)
         dict.__setitem__(self, "task", task)
 
     @property
@@ -1156,10 +1156,10 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
         return None
 
     @started.setter
-    def started(self, dt):
-        # type: (datetime) -> None
-        self._is_of_type("started", dt, datetime)
-        dict.__setitem__(self, "started", localize_datetime(dt))
+    def started(self, started):
+        # type: (Union[AnyStr, datetime]) -> None
+        self._is_of_type("started", started, datetime, allow_none=True)
+        dict.__setitem__(self, "started", localize_datetime(started) if started else None)
 
     def is_started(self):
         # type: () -> bool
@@ -1178,6 +1178,10 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
     @property
     def duration(self):
         # type: () -> Optional[AnyStr]
+        """
+        Execution time since ``started``, up to ``finished`` if job was marked as finished.
+        If job has not yet started, returns ``None``.
+        """
         if self.is_started():
             final_time = self.finished or now()
             duration = localize_datetime(final_time) - localize_datetime(self.started)
@@ -1307,7 +1311,6 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             "execute_async": self.execute_async,
             "is_workflow": self.is_workflow,
             "started": self.started,
-            "duration": self.duration,
             "progress": self.progress,
             "results": self.results,
             "exceptions": self.exceptions,

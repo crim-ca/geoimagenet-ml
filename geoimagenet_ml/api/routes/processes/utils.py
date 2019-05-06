@@ -146,7 +146,10 @@ def update_job_params(request):
                          msgOnFail=s.ProcessJob_PUT_BadRequestResponseSchema.description,
                          content={"param": {"name": param, "value": str(value)}})
     db = database_factory(request)
-    job = db.jobs_store.update_job(job, request=request)
+    job = ex.evaluate_call(lambda: db.jobs_store.update_job(job, request=request),
+                           httpError=HTTPForbidden,
+                           msgOnFail=s.ProcessJob_PUT_ForbiddenResponseSchema.description,
+                           content={"param": {"name": "job", "value": job.uuid}})
     return job
 
 

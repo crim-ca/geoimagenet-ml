@@ -118,7 +118,7 @@ def test_job_fields():
     check_fields(
         Job(uuid=uuid.uuid4(), process=uuid.uuid4(), user=1),
         ["uuid", "task", "service", "process", "user", "inputs", "status", "status_message", "status_location",
-         "execute_async", "is_workflow", "started", "created", "finished", "duration", "progress", "tags",
+         "execute_async", "is_workflow", "started", "created", "finished", "progress", "tags",
          "results", "logs", "exceptions", "request", "response", "visibility"],
         ["uuid", "task", "service", "process", "user", "inputs", "status", "status_message", "status_location",
          "execute_async", "is_workflow", "started", "created", "finished", "duration", "progress", "tags"],

@@ -351,7 +351,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Stores a WPS process in storage.
         """
         sane_name = self._get_process_id(process)
-        if self.collection.count({"identifier": sane_name}) > 0:
+        if self.collection.count_documents({"identifier": sane_name}) > 0:
             if overwrite:
                 self.collection.delete_one({"identifier": sane_name})
             else:
@@ -411,7 +411,7 @@ class MongodbJobStore(JobStore, MongodbStore):
         if not isinstance(job, Job):
             raise ex.JobInstanceError("Unsupported job type '{}'".format(type(job)))
         try:
-            result = self.collection.insert_one(job)
+            result = self.collection.insert_one(job.params)
             if not result.acknowledged:
                 raise Exception("Job insertion not acknowledged")
         except DuplicateKeyError:

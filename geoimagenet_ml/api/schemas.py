@@ -888,7 +888,11 @@ class ProcessJob_PUT_BadRequestResponseSchema(BaseResponseSchema):
     body = ErrorBodyResponseSchema(code=HTTPBadRequest.code, description=description)
 
 
-ProcessJob_PUT_ForbiddenResponseSchema = ProcessJob_GET_ForbiddenResponseSchema
+class ProcessJob_PUT_ForbiddenResponseSchema(BaseResponseSchema):
+    description = "Failed to update process job to db."
+    body = ErrorBodyResponseSchema(code=HTTPForbidden.code, description=description)
+
+
 ProcessJob_PUT_NotFoundResponseSchema = ProcessJob_GET_NotFoundResponseSchema
 
 

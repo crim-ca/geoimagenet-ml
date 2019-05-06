@@ -11,8 +11,10 @@ Tests for `GeoImageNet ML API` module.
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
 from geoimagenet_ml.constants import VISIBILITY
+from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model, Process, Job
+from geoimagenet_ml.store.exceptions import ModelNotFoundError
 from geoimagenet_ml.store.factories import database_factory
 from tests import utils
 import pyramid.testing
@@ -116,12 +118,20 @@ class TestModelApi(unittest.TestCase):
         tmp.close()
         return Model(name=name, path=tmp.name)
 
+    def delete_models(self):
+        for m in [self.model_1, self.model_2]:
+            try:
+                self.db.models_store.delete_model(m.uuid)
+            except ModelNotFoundError:
+                pass
+
     def setUp(self):
         if not self.db.models_store.clear_models():
             warnings.warn("Models could not be cleared, future tests might fail due to unexpected values.", Warning)
 
         self.model_1 = self.make_model("model-1", data={"model": "test-1"})
         self.model_2 = self.make_model("model-2", data={"model": "test-2"})
+        self.delete_models()
 
         def load_checkpoint_no_check(buffer):
             buffer.seek(0)
@@ -131,10 +141,16 @@ class TestModelApi(unittest.TestCase):
             self.model_1 = self.db.models_store.save_model(self.model_1)
             self.model_2 = self.db.models_store.save_model(self.model_2)
 
+        self.process = Process(uuid=uuid.uuid4(), type="test", identifier="test")
+        self.db.processes_store.delete_process(self.process.identifier)
+        self.db.processes_store.save_process(self.process)
+
     def tearDown(self):
         for f in [self.model_1.file, self.model_1.path, self.model_2.file, self.model_2.path]:
             if os.path.isfile(f):
                 os.remove(f)
+        self.delete_models()
+        self.db.processes_store.delete_process(self.process.identifier)
 
     def test_GetModels_valid(self):
         resp = utils.request(self.app, "GET", schemas.ModelsAPI.path, headers=self.json_headers)
@@ -209,7 +225,7 @@ class TestModelApi(unittest.TestCase):
         assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
 
         resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
-        utils.check_val_equal(resp.status_code, 403)
+        utils.check_val_is_in(resp.status_code, [400, 403])
         resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
         assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
@@ -226,13 +242,10 @@ class TestModelApi(unittest.TestCase):
         utils.check_val_equal(resp.status_code, 400)
 
     def test_UpdateJob(self):
-        process_uuid = str(uuid.uuid4())
-        process = Process(uuid=process_uuid, type="test", identifier="test")
-        job = Job(uuid=uuid.uuid4(), process=process.uuid)
+        job = Job(uuid=uuid.uuid4(), process=self.process.uuid, status=STATUS.ACCEPTED)
         path = schemas.ProcessJobAPI.path \
-            .replace(schemas.VariableProcessUUID, process_uuid) \
+            .replace(schemas.VariableProcessUUID, self.process.uuid) \
             .replace(schemas.VariableJobUUID, job.uuid)
-        self.db.processes_store.save_process(process)
         self.db.jobs_store.save_job(job)
 
         resp = utils.request(self.app, "GET", path)
@@ -246,7 +259,7 @@ class TestModelApi(unittest.TestCase):
         assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
 
         resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
-        utils.check_val_equal(resp.status_code, 403)
+        utils.check_val_is_in(resp.status_code, [400, 403])
         resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
         assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
