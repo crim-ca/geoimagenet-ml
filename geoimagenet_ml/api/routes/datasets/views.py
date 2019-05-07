@@ -7,7 +7,7 @@ from pyramid.response import FileResponse
 from pyramid.httpexceptions import HTTPOk, HTTPCreated, HTTPForbidden, HTTPInternalServerError
 
 
-@s.DatasetsAPI.get(tags=[s.DatasetsTag], response_schemas=s.Datasets_GET_responses)
+@s.DatasetsAPI.get(tags=[s.TagDatasets], response_schemas=s.Datasets_GET_responses)
 def get_datasets_view(request):
     """Get registered datasets."""
     db = database_factory(request)
@@ -22,7 +22,7 @@ def get_datasets_view(request):
                          detail=s.Datasets_GET_OkResponseSchema.description, request=request)
 
 
-@s.DatasetsAPI.post(tags=[s.DatasetsTag],
+@s.DatasetsAPI.post(tags=[s.TagDatasets],
                     schema=s.Datasets_POST_RequestSchema(), response_schemas=s.Datasets_POST_responses)
 def post_datasets_view(request):
     """Register a new dataset."""
@@ -47,21 +47,21 @@ def get_dataset_handler(request):
                          detail=s.Dataset_GET_OkResponseSchema.description, request=request)
 
 
-@s.DatasetAPI.get(tags=[s.DatasetsTag],
+@s.DatasetAPI.get(tags=[s.TagDatasets],
                   schema=s.DatasetEndpoint(), response_schemas=s.Dataset_GET_responses)
 def get_dataset_view(request):
     """Get registered dataset information."""
     return get_dataset_handler(request)
 
 
-@s.DatasetLatestAPI.get(tags=[s.DatasetsTag],
+@s.DatasetLatestAPI.get(tags=[s.TagDatasets],
                         schema=s.DatasetLatestEndpoint(), response_schemas=s.Dataset_GET_responses)
 def get_dataset_latest_view(request):
     """Get latest dataset information matching criterion."""
     return get_dataset_handler(request)
 
 
-@s.DatasetAPI.delete(tags=[s.DatasetsTag],
+@s.DatasetAPI.delete(tags=[s.TagDatasets],
                      schema=s.DatasetEndpoint(), response_schemas=s.Dataset_DELETE_responses)
 def delete_dataset_view(request):
     """Get registered dataset information."""
@@ -71,7 +71,7 @@ def delete_dataset_view(request):
                          detail=s.Dataset_DELETE_OkResponseSchema.description, request=request)
 
 
-@s.DatasetDownloadAPI.get(tags=[s.DatasetsTag],
+@s.DatasetDownloadAPI.get(tags=[s.TagDatasets],
                           schema=s.DatasetDownloadEndpoint(), response_schemas=s.DatasetDownload_GET_responses)
 def download_dataset_view(request):
     """Download registered dataset file."""

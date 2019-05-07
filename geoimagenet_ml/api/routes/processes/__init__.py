@@ -23,6 +23,8 @@ def includeme(config):
                     request_method="POST", renderer="json")
     config.add_view(v.get_process_view, route_name=s.ProcessAPI.name,
                     request_method="GET", renderer="json")
+    config.add_view(v.put_process_job_view, route_name=s.ProcessJobAPI.name,
+                    request_method="PUT", renderer="json")
     config.add_view(v.get_process_job_view, route_name=s.ProcessJobAPI.name,
                     request_method="GET", renderer="json")
     config.add_view(v.get_process_job_current_view, route_name=s.ProcessJobCurrentAPI.name,

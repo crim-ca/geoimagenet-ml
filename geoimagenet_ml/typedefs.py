@@ -15,15 +15,16 @@ if TYPE_CHECKING:
     from pywps import Process as ProcessWPS                                                                 # noqa: F401
     # noinspection PyProtectedMember
     from logging import _loggerClass                                                                        # noqa: F401
-    from uuid import UUID as _UUID
+    from uuid import UUID
 
-    UUID = Union[AnyStr, _UUID]
+    StrUUID = AnyStr
+    AnyUUID = Union[StrUUID, UUID]
     AnyKey = Union[AnyStr, int]
     AnyProcess = Union[ProcessDB, ProcessWPS, ProcessRunner]
     Number = Union[float, int]
     JsonValue = Union[AnyStr, Number, bool, None]
     JSON = Dict[AnyKey, Union[JsonValue, List["JSON"], Dict[AnyKey, "JSON"]]]
-    OptionType = Dict[AnyStr, Any]
+    ParamsType = Dict[AnyStr, Any]
     InputType = Dict[AnyStr, JSON]
     OutputType = Dict[AnyStr, JSON]
     LoggerType = _loggerClass

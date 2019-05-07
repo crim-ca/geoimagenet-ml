@@ -18,7 +18,6 @@ import pymongo
 import shutil
 import six
 import os
-import io
 import logging
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -157,33 +156,47 @@ class MongodbModelStore(ModelStore, MongodbStore):
         self.models_path = settings.get("geoimagenet_ml.ml.models_path")
         os.makedirs(self.models_path, exist_ok=True)
 
-    def save_model(self, model, data=None, request=None):
+    def save_model(self, model, request=None):
         if not isinstance(model, Model):
             raise ex.ModelInstanceError("Unsupported model type '{}'".format(type(model)))
-        data = data or model.data
         try:
-            if isinstance(data, io.BufferedIOBase):
-                # transfer loaded data buffer to storage file
-                model_path = os.path.join(self.models_path, model.uuid + self._model_ext)
-                with open(model_path, 'wb') as model_file:
-                    data.seek(0)
-                    model_file.write(data.read())
-                    data.close()
-                model["data"] = None        # force reload from stored file when calling `model.data` retrieved from db
-                model["file"] = model_path
-            elif isinstance(data, dict):
-                model["data"] = data
-                model["file"] = None
-            else:
-                raise ex.ModelInstanceError("Model data is expected to be a buffer or dict, got {!r}.".format(data))
-            result = self.collection.insert_one(model)
+            model_path = os.path.join(self.models_path, model.uuid + self._model_ext)
+            model.save(model_path)  # apply the database's known storage location and prepare to write to db
+            result = self.collection.insert_one(model.params)
             if not result.acknowledged:
                 raise Exception("Model insertion not acknowledged")
+        except ex.ModelError as exc:
+            raise
         except DuplicateKeyError:
-            raise ex.ModelConflictError("Model '{}' conflicts with an existing model.".format(model.name))
+            raise ex.ModelConflictError("Model '{!s}' conflicts with an existing model.".format(model))
         except Exception as exc:
-            LOGGER.exception("Model '{}' registration generated error: [{!r}].".format(model.name, exc))
-            raise ex.ModelRegistrationError("Model '{}' could not be registered.".format(model.name))
+            msg_exc = "Model '{!s}' could not be registered. Unhandled error: [{!r}].".format(model, exc)
+            LOGGER.exception(msg_exc)
+            raise ex.ModelRegistrationError(msg_exc)
+        return self.fetch_by_uuid(model.uuid)
+
+    def update_model(self, model, request=None, **fields):
+        if not isinstance(model, Model):
+            raise ex.ModelInstanceError("Unsupported model type '{}'".format(type(model)))
+        if len(fields) == 0:
+            raise ex.ModelRegistrationError("No field specified for model update.")
+        try:
+            model_params = model.params
+            for f in fields:
+                if f not in model_params:
+                    raise ex.ModelRegistrationError("Invalid field '{}' for model update.".format(f))
+                # attempt setting field to enforce any validation rule
+                model[f] = fields[f]
+            result = self.collection.update_one({"uuid": model.uuid}, {"$set": fields})
+            if result.modified_count != 1:
+                raise ex.ModelRegistrationError("Expected only a single updated model instance. Got {}."
+                                                .format(result.modified_count))
+        except ex.ModelError:
+            raise
+        except Exception as exc:
+            msg_exc = "Model '{!s}' could not be updated. Unhandled error: [{!r}].".format(model, exc)
+            LOGGER.exception(msg_exc)
+            raise ex.ModelRegistrationError(msg_exc)
         return self.fetch_by_uuid(model.uuid)
 
     def delete_model(self, model_uuid, request=None):
@@ -270,6 +283,10 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         if isclass(wps_process):
             wps_process = wps_process()
         process = wps_process.json
+        process_properties = Process.__dict__.keys()
+        process_prop_to_rm = [p for p in process if p not in process_properties]
+        for prop in process_prop_to_rm:
+            process.pop(prop)
         process.update({
             "type": PROCESS_WPS,
             "package": None,
@@ -294,7 +311,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
             new_process["identifier"] = process_name
             new_process["type"] = self._get_process_type(process)
             new_process["execute_endpoint"] = process_exec
-            self.collection.insert_one(new_process)
+            self.collection.insert_one(new_process.params)
         except Exception as exc:
             raise ex.ProcessRegistrationError(
                 "Process '{}' could not be registered. [{!r}]".format(process_name, exc))
@@ -334,7 +351,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         Stores a WPS process in storage.
         """
         sane_name = self._get_process_id(process)
-        if self.collection.count({"identifier": sane_name}) > 0:
+        if self.collection.count_documents({"identifier": sane_name}) > 0:
             if overwrite:
                 self.collection.delete_one({"identifier": sane_name})
             else:
@@ -394,7 +411,7 @@ class MongodbJobStore(JobStore, MongodbStore):
         if not isinstance(job, Job):
             raise ex.JobInstanceError("Unsupported job type '{}'".format(type(job)))
         try:
-            result = self.collection.insert_one(job)
+            result = self.collection.insert_one(job.params)
             if not result.acknowledged:
                 raise Exception("Job insertion not acknowledged")
         except DuplicateKeyError:

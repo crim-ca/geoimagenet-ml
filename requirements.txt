@@ -20,11 +20,13 @@ pyramid_celery
 pyramid_chameleon==0.3
 pyramid_mako>=1.0.2
 pyramid_tm>=2.2.1
+python-dateutil
 pytz
 pywps>=4.2
 PyYAML>=5.1
 requests
 setuptools
+sentry-sdk
 six
 Sphinx==1.3.1
 tox

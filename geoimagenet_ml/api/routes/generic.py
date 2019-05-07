@@ -26,7 +26,7 @@ def internal_server_error(request):
                          detail=s.InternalServerErrorResponseSchema.description, request=request)
 
 
-@s.BaseAPI.get(tags=[s.APITag], response_schemas=s.Base_GET_responses)
+@s.BaseAPI.get(tags=[s.TagAPI], response_schemas=s.Base_GET_responses)
 def get_api_base_view(request):
     """
     GeoImageNet ML REST API information. Base path of the API.
@@ -42,7 +42,7 @@ def get_api_base_view(request):
                          contentType="application/json", request=request)
 
 
-@s.VersionsAPI.get(tags=[s.APITag], response_schemas=s.Versions_GET_responses)
+@s.VersionsAPI.get(tags=[s.TagAPI], response_schemas=s.Versions_GET_responses)
 def get_version_view(request):
     """API version information."""
     db_info = database_factory(request).get_information()
@@ -56,7 +56,7 @@ def get_version_view(request):
                          contentType="application/json", request=request)
 
 
-@s.SwaggerJSON.get(tags=[s.APITag], renderer="json", response_schemas=s.SwaggerJSON_GET_responses)
+@s.SwaggerJSON.get(tags=[s.TagAPI], renderer="json", response_schemas=s.SwaggerJSON_GET_responses)
 def api_swagger_json_view(request):
     """REST API schema generation in JSON format."""
     swagger = CorniceSwagger(get_services())
@@ -68,7 +68,7 @@ def api_swagger_json_view(request):
     return swagger.generate(title=s.TitleAPI, version=__meta__.__version__, base_path=base_path)
 
 
-@s.SwaggerAPI.get(tags=[s.APITag], response_schemas=s.SwaggerAPI_GET_responses)
+@s.SwaggerAPI.get(tags=[s.TagAPI], response_schemas=s.SwaggerAPI_GET_responses)
 def api_swagger_ui_view(request):
     """REST API swagger-ui schema documentation (this page)."""
     json_path = s.SwaggerJSON.path.lstrip('/')   # if path starts by '/', swagger-ui doesn't find it on remote

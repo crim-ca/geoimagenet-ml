@@ -12,7 +12,7 @@ import osgeo.gdal
 # noinspection PyPackageRequirements
 import numpy as np
 # noinspection PyPackageRequirements
-import ogr
+import osgeo.ogr
 # noinspection PyPackageRequirements
 import osr
 # noinspection PyPackageRequirements
@@ -136,7 +136,7 @@ def parse_coordinate_system(body):
     crs_body = body.get("crs") or body.get("srs")
     crs_type = crs_body.get("type", "").upper()
     crs_opts = list(crs_body.get("properties").values())    # FIXME: no specific mapping of inputs, each is different
-    crs = ogr.osr.SpatialReference()
+    crs = osgeo.ogr.osr.SpatialReference()
     err = -1
     if crs_type == "EPSG":
         err = crs.ImportFromEPSG(*crs_opts)
@@ -184,7 +184,7 @@ def parse_geojson(geojson,          # type: JSON
                 raise AssertionError("unexpected poly coord format")
             poly = shapely.geometry.Polygon(coords[0])
             if shapes_srs_transform is not None:
-                ogr_geometry = ogr.CreateGeometryFromWkb(poly.wkb)
+                ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(poly.wkb)
                 ogr_geometry.Transform(shapes_srs_transform)
                 poly = shapely.wkt.loads(ogr_geometry.ExportToWkt())
             feature["geometry"] = poly
@@ -205,7 +205,7 @@ def parse_geojson(geojson,          # type: JSON
 def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
                     uncertain_flags=None, roi=None, target_category=None, target_id=None):
     uncertain_flags = [] if uncertain_flags is None else uncertain_flags
-    shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
+    shapefile_driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
     shapefile = shapefile_driver.Open(shapefile_path, 0)
     if shapefile is None:
         raise AssertionError("could not open vector data file at '{!s}'".format(shapefile_path))
@@ -372,7 +372,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
         local_roi = shapely.geometry.Polygon([list(pt) for pt in raster_extent]).buffer(0.01)
         if not raster_curr_srs.IsSame(default_srs):
             shapes_srs_transform = osr.CoordinateTransformation(raster_curr_srs, default_srs)
-            ogr_geometry = ogr.CreateGeometryFromWkb(local_roi.wkb)
+            ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(local_roi.wkb)
             ogr_geometry.Transform(shapes_srs_transform)
             global_roi = shapely.wkt.loads(ogr_geometry.ExportToWkt())
         else:
@@ -432,7 +432,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
         return None, None, None  # exact shape should be fully contained in a single raster
     if not raster_data["srs"].IsSame(crop_geom_srs):
         shapes_srs_transform = osr.CoordinateTransformation(crop_geom_srs, raster_data["srs"])
-        ogr_geometry = ogr.CreateGeometryFromWkb(crop_geom.wkb)
+        ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(crop_geom.wkb)
         ogr_geometry.Transform(shapes_srs_transform)
         crop_geom = shapely.wkt.loads(ogr_geometry.ExportToWkt())
     if crop_fixed_size:
@@ -487,10 +487,10 @@ def process_feature_crop(crop_geom,             # type: GeometryType
     local_target_ds.SetGeoTransform(local_geotransform)
     local_target_ds.SetProjection(raster_data["srs"].ExportToWkt())
     local_target_ds.GetRasterBand(1).WriteArray(np.zeros((local_roi_rows, local_roi_cols), dtype=np.uint8))
-    ogr_dataset = ogr.GetDriverByName("Memory").CreateDataSource("masks")
+    ogr_dataset = osgeo.ogr.GetDriverByName("Memory").CreateDataSource("masks")
     ogr_layer = ogr_dataset.CreateLayer("feature_mask", srs=raster_data["srs"])
-    ogr_feature = ogr.Feature(ogr_layer.GetLayerDefn())
-    ogr_geometry = ogr.CreateGeometryFromWkt(crop_geom.wkt)
+    ogr_feature = osgeo.ogr.Feature(ogr_layer.GetLayerDefn())
+    ogr_geometry = osgeo.ogr.CreateGeometryFromWkt(crop_geom.wkt)
     ogr_feature.SetGeometry(ogr_geometry)
     ogr_layer.CreateFeature(ogr_feature)
     osgeo.gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
@@ -499,7 +499,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
         raise AssertionError("layer rasterization failed")
     local_target_ds.GetRasterBand(2).WriteArray(np.ones((local_roi_rows, local_roi_cols), dtype=np.uint8))
     ogr_layer_inv = ogr_dataset.CreateLayer("bg_mask", srs=raster_data["srs"])
-    ogr_feature_inv = ogr.Feature(ogr_layer_inv.GetLayerDefn())
+    ogr_feature_inv = osgeo.ogr.Feature(ogr_layer_inv.GetLayerDefn())
     ogr_feature_inv.SetGeometry(ogr_geometry)
     ogr_layer_inv.CreateFeature(ogr_feature_inv)
     osgeo.gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])

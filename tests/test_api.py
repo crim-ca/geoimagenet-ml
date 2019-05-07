@@ -8,20 +8,31 @@ test_api
 Tests for `GeoImageNet ML API` module.
 """
 
-import os
-import six
-# noinspection PyPackageRequirements
-import pytest
-import unittest
-import pyramid
-import pyramid.testing
-import warnings
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
+from geoimagenet_ml.constants import VISIBILITY
+from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
-from geoimagenet_ml.store.datatypes import Model
+from geoimagenet_ml.store.datatypes import Model, Process, Job
+from geoimagenet_ml.store.exceptions import ModelNotFoundError
 from geoimagenet_ml.store.factories import database_factory
+from geoimagenet_ml.utils import now
+from dateutil.parser import parse as dt_parse
 from tests import utils
+import pyramid.testing
+# noinspection PyPackageRequirements
+import pytest
+# noinspection PyPackageRequirements
+import mock
+import unittest
+import tempfile
+import pyramid
+import warnings
+import json
+import uuid
+import six
+import os
+
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -49,7 +60,7 @@ class TestGenericApi(unittest.TestCase):
     def setUpClass(cls):
         cls.conf = utils.setup_config_with_mongodb()
         cls.app = utils.setup_test_app(config=cls.conf)
-        cls.json_headers = [('Content-Type', schemas.ContentTypeJSON), ('Accept', schemas.ContentTypeJSON)]
+        cls.json_headers = [("Content-Type", schemas.ContentTypeJSON), ("Accept", schemas.ContentTypeJSON)]
         # cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
 
     # noinspection PyUnresolvedReferences
@@ -58,26 +69,26 @@ class TestGenericApi(unittest.TestCase):
         pyramid.testing.tearDown()
 
     def test_GetVersion_valid(self):
-        resp = utils.request(self.app, 'GET', schemas.VersionsAPI.path, headers=self.json_headers)
+        resp = utils.request(self.app, "GET", schemas.VersionsAPI.path, headers=self.json_headers)
         utils.check_response_basic_info(resp, 200)
-        utils.check_val_equal(resp.json['data']['versions'][0]['name'], 'api')
-        utils.check_val_type(resp.json['data']['versions'][0]['version'], six.string_types)
-        utils.check_val_equal(resp.json['data']['versions'][0]['version'], __meta__.__version__)
-        utils.check_val_equal(resp.json['data']['versions'][1]['name'], 'db')
-        utils.check_val_type(resp.json['data']['versions'][1]['version'], six.string_types)
-        utils.check_val_type(resp.json['data']['versions'][1]['type'], six.string_types)
-        utils.check_val_is_in(resp.json['data']['versions'][1]['type'], [MEMORY_TYPE, MONGODB_TYPE])
-        utils.check_val_equal(resp.json['data']['versions'][2]['name'], 'ml')
-        utils.check_val_type(resp.json['data']['versions'][2]['version'], six.string_types)
-        utils.check_val_type(resp.json['data']['versions'][2]['type'], six.string_types)
+        utils.check_val_equal(resp.json["data"]["versions"][0]["name"], "api")
+        utils.check_val_type(resp.json["data"]["versions"][0]["version"], six.string_types)
+        utils.check_val_equal(resp.json["data"]["versions"][0]["version"], __meta__.__version__)
+        utils.check_val_equal(resp.json["data"]["versions"][1]["name"], "db")
+        utils.check_val_type(resp.json["data"]["versions"][1]["version"], six.string_types)
+        utils.check_val_type(resp.json["data"]["versions"][1]["type"], six.string_types)
+        utils.check_val_is_in(resp.json["data"]["versions"][1]["type"], [MEMORY_TYPE, MONGODB_TYPE])
+        utils.check_val_equal(resp.json["data"]["versions"][2]["name"], "ml")
+        utils.check_val_type(resp.json["data"]["versions"][2]["version"], six.string_types)
+        utils.check_val_type(resp.json["data"]["versions"][2]["type"], six.string_types)
 
     def test_GetAPI_valid(self):
-        resp = utils.request(self.app, 'GET', schemas.SwaggerJSON.path, headers=self.json_headers)
+        resp = utils.request(self.app, "GET", schemas.SwaggerJSON.path, headers=self.json_headers)
         assert resp.status_code == 200
         assert resp.content_type == schemas.ContentTypeJSON
-        utils.check_val_is_in('info', resp.json)
-        utils.check_val_equal(resp.json['info']['version'], __meta__.__version__)
-        utils.check_val_is_in('paths', resp.json)
+        utils.check_val_is_in("info", resp.json)
+        utils.check_val_equal(resp.json["info"]["version"], __meta__.__version__)
+        utils.check_val_is_in("paths", resp.json)
 
 
 class TestModelApi(unittest.TestCase):
@@ -87,12 +98,12 @@ class TestModelApi(unittest.TestCase):
     def setUpClass(cls):
         cls.conf = utils.setup_config_with_mongodb()
         cls.app = utils.setup_test_app(config=cls.conf)
-        cls.json_headers = [('Content-Type', schemas.ContentTypeJSON), ('Accept', schemas.ContentTypeJSON)]
+        cls.json_headers = [("Content-Type", schemas.ContentTypeJSON), ("Accept", schemas.ContentTypeJSON)]
         cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
-        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get('geoimagenet_ml.ml.models_path')
+        cls.MODEL_BASE_PATH = cls.conf.registry.settings.get("geoimagenet_ml.ml.models_path")
 
         # url to existing remote model file definition
-        cls.TEST_MODEL_URL = os.getenv('TEST_MODEL_URL')
+        cls.TEST_MODEL_URL = os.getenv("TEST_MODEL_URL")
         if not cls.TEST_MODEL_URL:
             raise LookupError("Missing required test environment variable: `TEST_MODEL_URL`.")
 
@@ -102,78 +113,214 @@ class TestModelApi(unittest.TestCase):
         cls.db.models_store.clear_models()
         pyramid.testing.tearDown()
 
-    def make_model(self, name):
-        return Model(name=name, path=os.path.join(self.MODEL_BASE_PATH, name))
+    @staticmethod
+    def make_model(name, data):
+        tmp = tempfile.NamedTemporaryFile(mode="w+", delete=False)
+        tmp.write(json.dumps(data))
+        tmp.close()
+        return Model(name=name, path=tmp.name)
+
+    def delete_models(self):
+        for m in [self.model_1, self.model_2]:
+            try:
+                self.db.models_store.delete_model(m.uuid)
+            except ModelNotFoundError:
+                pass
 
     def setUp(self):
         if not self.db.models_store.clear_models():
             warnings.warn("Models could not be cleared, future tests might fail due to unexpected values.", Warning)
-        self.model_1 = self.make_model('model-1')
-        self.model_2 = self.make_model('model-2')
-        self.db.models_store.save_model(self.model_1, data={'model': 'test-1'})
-        self.db.models_store.save_model(self.model_2, data={'model': 'test-2'})
+
+        self.model_1 = self.make_model("model-1", data={"model": "test-1"})
+        self.model_2 = self.make_model("model-2", data={"model": "test-2"})
+        self.delete_models()
+
+        def load_checkpoint_no_check(buffer):
+            buffer.seek(0)
+            return buffer.read()
+
+        with mock.patch("thelper.utils.load_checkpoint", side_effect=load_checkpoint_no_check):
+            self.model_1 = self.db.models_store.save_model(self.model_1)
+            self.model_2 = self.db.models_store.save_model(self.model_2)
+
+        self.process = Process(uuid=uuid.uuid4(), type="test", identifier="test")
+        self.db.processes_store.delete_process(self.process.identifier)
+        self.db.processes_store.save_process(self.process)
+
+    def tearDown(self):
+        for f in [self.model_1.file, self.model_1.path, self.model_2.file, self.model_2.path]:
+            if os.path.isfile(f):
+                os.remove(f)
+        self.delete_models()
+        self.db.processes_store.delete_process(self.process.identifier)
 
     def test_GetModels_valid(self):
-        resp = utils.request(self.app, 'GET', schemas.ModelsAPI.path, headers=self.json_headers)
+        resp = utils.request(self.app, "GET", schemas.ModelsAPI.path, headers=self.json_headers)
         utils.check_response_basic_info(resp, 200)
-        utils.check_val_is_in('models', resp.json['data'])
-        utils.check_val_type(resp.json['data']['models'], list)
-        for model in resp.json['data']['models']:
+        utils.check_val_is_in("models", resp.json["data"])
+        utils.check_val_type(resp.json["data"]["models"], list)
+        for model in resp.json["data"]["models"]:
             utils.check_val_type(model, dict)
-            utils.check_val_is_in('uuid', model)
-            utils.check_val_is_in('name', model)
-        models_uuid = [m['uuid'] for m in resp.json['data']['models']]
+            utils.check_val_is_in("uuid", model)
+            utils.check_val_is_in("name", model)
+        models_uuid = [m["uuid"] for m in resp.json["data"]["models"]]
         utils.check_val_is_in(self.model_1.uuid, models_uuid)
         utils.check_val_is_in(self.model_2.uuid, models_uuid)
 
     @pytest.mark.online
     def test_PostModels_RemoteModel_valid(self):
         model_json = {
-            'model_name': 'new-test-model',
-            'model_path': self.TEST_MODEL_URL
+            "model_name": "new-test-model",
+            "model_path": self.TEST_MODEL_URL
         }
-        resp = utils.request(self.app, 'POST', schemas.ModelsAPI.path, headers=self.json_headers, json=model_json)
+        resp = utils.request(self.app, "POST", schemas.ModelsAPI.path, headers=self.json_headers, json=model_json)
         utils.check_response_basic_info(resp, 201)
-        utils.check_val_is_in('uuid', resp.json['data']['model'])
-        utils.check_val_type(resp.json['data']['model']['uuid'], six.string_types)
-        utils.check_val_is_in('name', resp.json['data']['model'])
-        utils.check_val_type(resp.json['data']['model']['name'], six.string_types)
-        utils.check_val_is_in('path', resp.json['data']['model'])
-        utils.check_val_type(resp.json['data']['model']['path'], six.string_types)
-        utils.check_val_is_in('created', resp.json['data']['model'])
-        utils.check_val_type(resp.json['data']['model']['created'], six.string_types)
+        utils.check_val_is_in("uuid", resp.json["data"]["model"])
+        utils.check_val_type(resp.json["data"]["model"]["uuid"], six.string_types)
+        utils.check_val_is_in("name", resp.json["data"]["model"])
+        utils.check_val_type(resp.json["data"]["model"]["name"], six.string_types)
+        utils.check_val_is_in("path", resp.json["data"]["model"])
+        utils.check_val_type(resp.json["data"]["model"]["path"], six.string_types)
+        utils.check_val_is_in("created", resp.json["data"]["model"])
+        utils.check_val_type(resp.json["data"]["model"]["created"], six.string_types)
 
         # validate that model can be retrieved from database after creation
-        path = schemas.ModelAPI.path.replace('{model_uuid}', resp.json['data']['model']['uuid'])
-        resp = utils.request(self.app, 'GET', path, headers=self.json_headers)
+        path = schemas.ModelAPI.path.replace(schemas.VariableModelUUID, resp.json["data"]["model"]["uuid"])
+        resp = utils.request(self.app, "GET", path, headers=self.json_headers)
         utils.check_response_basic_info(resp, 200)
-        utils.check_val_equal(resp.json['data']['model']['name'], model_json['model_name'])
+        utils.check_val_equal(resp.json["data"]["model"]["name"], model_json["model_name"])
 
         # validate that model file was registered to expected storage location
         # noinspection PyProtectedMember, PyUnresolvedReferences
-        model_name = resp.json['data']['model']['uuid'] + self.db.models_store._model_ext
+        model_name = resp.json["data"]["model"]["uuid"] + self.db.models_store._model_ext
         saved_path = os.path.join(self.MODEL_BASE_PATH, model_name)
         assert os.path.isfile(saved_path)
 
         # validate that displayed path corresponds to uploaded model source path/URL
-        assert resp.json['data']['model']['path'] == self.TEST_MODEL_URL
+        assert resp.json["data"]["model"]["path"] == self.TEST_MODEL_URL
 
     @pytest.mark.online
     def test_DownloadModel_valid(self):
         # setup testing model
         model_json = {
-            'model_name': 'new-test-model',
-            'model_path': self.TEST_MODEL_URL
+            "model_name": "new-test-model",
+            "model_path": self.TEST_MODEL_URL
         }
-        resp = utils.request(self.app, 'POST', schemas.ModelsAPI.path, headers=self.json_headers, json=model_json)
+        resp = utils.request(self.app, "POST", schemas.ModelsAPI.path, headers=self.json_headers, json=model_json)
         utils.check_response_basic_info(resp, 201)
 
         # validate download
-        path = schemas.ModelDownloadAPI.path.replace('{model_uuid}', resp.json['data']['model']['uuid'])
-        resp = utils.request(self.app, 'GET', path)
+        path = schemas.ModelDownloadAPI.path.replace(schemas.VariableModelUUID, resp.json["data"]["model"]["uuid"])
+        resp = utils.request(self.app, "GET", path)
         utils.check_val_equal(resp.status_code, 200)
 
+    def test_UpdateModel(self):
+        path = schemas.ModelAPI.path.replace(schemas.VariableModelUUID, self.model_1.uuid)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PRIVATE.value
 
-if __name__ == '__main__':
+        resp = utils.request(self.app, "PUT", path, body={"visibility": VISIBILITY.PUBLIC.value})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
+        utils.check_val_is_in(resp.status_code, [400, 403])
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        model_new_name = "new-name"
+        resp = utils.request(self.app, "PUT", path, body={"name": model_new_name})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["model"]["name"] == model_new_name
+
+        # missing update fields
+        resp = utils.request(self.app, "PUT", path, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 400)
+
+    def test_UpdateJob(self):
+        job = Job(uuid=uuid.uuid4(), process=self.process.uuid, status=STATUS.ACCEPTED)
+        path = schemas.ProcessJobAPI.path \
+            .replace(schemas.VariableProcessUUID, self.process.uuid) \
+            .replace(schemas.VariableJobUUID, job.uuid)
+        self.db.jobs_store.save_job(job)
+
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PRIVATE.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": VISIBILITY.PUBLIC.value})
+        utils.check_val_equal(resp.status_code, 200)
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
+
+        resp = utils.request(self.app, "PUT", path, body={"visibility": "RANDOM_VALUE!!"}, expect_errors=True)
+        utils.check_val_is_in(resp.status_code, [400, 403])
+        resp = utils.request(self.app, "GET", path)
+        utils.check_val_equal(resp.status_code, 200)
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
+
+    def test_PostJob_BatchCreation(self):
+        """
+        Validate basic job submission is working and that corresponding routes return expected bodies.
+        No job execution is executed here (assumed there is no Celery worker).
+        """
+        path_proc = schemas.ProcessAPI.path.replace(schemas.VariableProcessUUID, "batch-creation")
+        path_jobs = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, "batch-creation")
+        body = {
+            "inputs": [
+                {"id": "name", "value": "test-batch"},
+                {"id": "geojson_urls", "value": ["https://geoimagenet.crim.ca/api/v1/batches/annotations"]},
+                {"id": "overwrite", "value": True},
+            ]
+        }
+
+        class DummyResult(object):
+            id = "test-task"
+            status = STATUS.ACCEPTED
+
+        # avoid errors from uninitialized Celery backend
+        with mock.patch("geoimagenet_ml.api.routes.processes.utils.process_job_runner.delay",
+                        return_value=DummyResult()):
+            dt_before = now()
+            resp = utils.request(self.app, "POST", path_jobs, body=body)
+            dt_after = now()
+        utils.check_val_equal(resp.status_code, 202)
+        location = resp.json["data"]["location"]
+        job_uuid = resp.json["data"]["job_uuid"]
+        assert resp.headers["Location"] == location
+
+        resp = utils.request(self.app, "GET", path_proc)
+        utils.check_val_equal(resp.status_code, 200)
+        process_uuid = resp.json["data"]["process"]["uuid"]
+
+        resp = utils.request(self.app, "GET", location)
+        utils.check_val_equal(resp.status_code, 200)
+        dt_submit = dt_parse(resp.json["data"]["job"]["created"])
+        assert dt_after > dt_submit > dt_before  # entry must indicate job creation timestamp although not executed yet
+        assert resp.json["data"]["job"]["uuid"] == job_uuid
+        assert resp.json["data"]["job"]["inputs"] == body["inputs"]
+        assert resp.json["data"]["job"]["status"] == STATUS.ACCEPTED.value
+        assert resp.json["data"]["job"]["process"] == process_uuid
+        assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PRIVATE.value
+        assert resp.json["data"]["job"]["user"] is None  # no cookies to fetch id
+        assert resp.json["data"]["job"]["task"] is None
+        assert resp.json["data"]["job"]["started"] is None
+        assert resp.json["data"]["job"]["finished"] is None
+        assert resp.json["data"]["job"]["duration"] is None
+        assert resp.json["data"]["job"]["progress"] == 0
+        assert resp.json["data"]["job"]["service"] is None
+        assert resp.json["data"]["job"]["tags"] == []
+        assert resp.json["data"]["job"]["execute_async"] is True
+        assert resp.json["data"]["job"]["is_workflow"] is False
+
+
+if __name__ == "__main__":
     import sys
     sys.exit(unittest.main())
