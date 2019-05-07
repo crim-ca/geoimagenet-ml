@@ -17,5 +17,7 @@ def includeme(config):
                     request_method="POST", renderer="json")
     config.add_view(v.get_model_view, route_name=s.ModelAPI.name,
                     request_method="GET", renderer="json")
+    config.add_view(v.put_model_view, route_name=s.ModelAPI.name,
+                    request_method="PUT", renderer="json")
     config.add_view(v.download_model_view, route_name=s.ModelDownloadAPI.name,
                     request_method="GET", renderer="")

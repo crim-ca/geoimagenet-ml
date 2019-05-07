@@ -14,7 +14,7 @@ import multiprocessing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (   # noqa: F401
-        Any, AnyStr, ErrorType, LevelType, Number, Dict, List, JSON, Optional, UUID, Union
+        Any, AnyStr, AnyUUID, ErrorType, LevelType, Number, Dict, List, JSON, Optional, Union
     )
     from geoimagenet_ml.store.datatypes import Job  # noqa: F401
     # noinspection PyProtectedMember
@@ -52,7 +52,7 @@ class ProcessRunner(ProcessBase):
         raise NotImplementedError
 
     def __init__(self, task, registry, request, job_uuid):
-        # type: (Task, Registry, Request, UUID) -> None
+        # type: (Task, Registry, Request, AnyUUID) -> None
 
         # imports to avoid circular references
         from geoimagenet_ml.store.factories import database_factory
@@ -97,14 +97,14 @@ class ProcessRunner(ProcessBase):
             if not isnull(default):
                 flattened_inputs = [default]
             else:
-                input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]  # type: JSON
+                input_spec = [p_input for p_input in self.inputs if p_input["id"] == input_id]
                 if len(input_spec) < 1:
                     raise ValueError("Missing input '{}' not resolvable from process definition.".format(input_id))
                 input_spec = input_spec[0]
-                if 'default' in input_spec:
-                    flattened_inputs = [input_spec['default']]
+                if "default" in input_spec:
+                    flattened_inputs = [input_spec["default"]]
                 else:
-                    formats_defaults = [f['default'] for f in input_spec['formats'] if 'default' in f]
+                    formats_defaults = [f["default"] for f in input_spec["formats"] if "default" in f]
                     if formats_defaults:
                         flattened_inputs = [formats_defaults[0]]
 
@@ -135,7 +135,7 @@ class ProcessRunner(ProcessBase):
         self.db.jobs_store.update_job(self.job, request=self.request)
 
     def setup_job(self, registry, request, job_uuid):
-        # type: (Registry, Request, UUID) -> Job
+        # type: (Registry, Request, AnyUUID) -> Job
         job = self.db.jobs_store.fetch_by_uuid(job_uuid, request=request)
         job.task = request.id
         job.tags.append(self.type)
@@ -291,13 +291,11 @@ class ProcessRunnerModelTester(ProcessRunner):
         finally:
             self.update_job_status(self.job.status, "done")
 
-        return self.job.status
-
 
 class ProcessRunnerBatchCreator(ProcessRunner):
     """
     Executes patches creation from a batch of annotated images with GeoJSON metadata.
-    Uses with GeoImageNet API requests format for annotation data extraction.
+    Uses GeoImageNet API requests format for annotation data extraction.
     """
 
     @classproperty
@@ -458,5 +456,3 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             self.update_job_status(STATUS.FAILED, message, errors=task_exc)
         finally:
             self.update_job_status(self.job.status, "done")
-
-        return self.job.status

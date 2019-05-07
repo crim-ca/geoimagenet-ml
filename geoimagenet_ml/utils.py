@@ -224,6 +224,26 @@ def fully_qualified_name(obj):
     return '.'.join([obj.__module__, type(obj).__name__])
 
 
+def clean_json_text_body(body):
+    # type: (AnyStr) -> AnyStr
+    """
+    Cleans a textual body field of superfluous characters to provide a better human-readable text in a JSON response.
+    """
+    # cleanup various escape characters and u'' stings
+    replaces = [(',\n', ', '), ('\\n', ' '), (' \n', ' '), ('\"', '\''), ('\\', ''),
+                ('u\'', '\''), ('u\"', '\''), ('\'\'', '\''), ('  ', ' ')]
+    replaces_from = [r[0] for r in replaces]
+    while any(rf in body for rf in replaces_from):
+        for _from, _to in replaces:
+            body = body.replace(_from, _to)
+
+    body_parts = [p.strip() for p in body.split('\n') if p != '']               # remove new line and extra spaces
+    body_parts = [p + '.' if not p.endswith('.') else p for p in body_parts]    # add terminating dot per sentence
+    body_parts = [p[0].upper() + p[1:] for p in body_parts if len(p)]           # capitalize first word
+    body_parts = ' '.join(p for p in body_parts if p)
+    return body_parts
+
+
 def now():
     # type: () -> datetime
     return localize_datetime(datetime.utcnow())

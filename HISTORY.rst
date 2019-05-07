@@ -3,6 +3,19 @@
 History
 =======
 
+1.0.0
+---------------------
+
+* add visibility update ``PUT`` requests for ``Job`` and ``Model`` (GEOIM-137)
+* add strong and enforced input validation of datatype parameters
+* upgrade db to version ``"4"``, loading previous objects could cause errors (input validation failures)
+* add more unittests for input validation
+* add test for new visibility routes (GEOIM-137)
+* add test for job submission
+* add sentry-sdk integration (GEOIM-118)
+* fix returned body response from job submission to match rest of API format
+* fix multiple API schema definitions
+
 0.8.0
 ---------------------
 

@@ -9,7 +9,7 @@ from geoimagenet_ml.processes.types import process_mapping, process_categories, 
 from geoimagenet_ml.status import map_status, STATUS
 from geoimagenet_ml.utils import get_base_url, get_user_id, is_uuid
 from pyramid.httpexceptions import (
-    HTTPCreated,
+    HTTPAccepted,
     HTTPBadRequest,
     HTTPForbidden,
     HTTPNotFound,
@@ -17,6 +17,7 @@ from pyramid.httpexceptions import (
     HTTPUnprocessableEntity,
     HTTPInternalServerError,
     HTTPNotImplemented,
+    HTTPException,
 )
 from pyramid_celery import celery_app as app
 from typing import TYPE_CHECKING
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from celery import Task                                     # noqa: F401
     from pyramid.request import Request                         # noqa: F401
     from typing import Optional                                 # noqa: F401
-    from geoimagenet_ml.typedefs import AnyStr, UUID            # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, AnyUUID    # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
@@ -64,8 +65,8 @@ def create_process(request):
 def get_process(request):
     # type: (Request) -> Optional[Process]
     """Retrieves the process based on the request after body inputs validation."""
-    process_uuid = request.matchdict.get('process_uuid')
-    ex.verify_param(process_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='process_uuid',
+    process_uuid = request.matchdict.get(s.ParamProcessUUID)
+    ex.verify_param(process_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName=s.ParamProcessUUID,
                     msgOnFail=s.Process_GET_BadRequestResponseSchema.description, request=request)
     process = None
     try:
@@ -90,8 +91,8 @@ def get_process(request):
 def get_job(request):
     # type: (Request) -> Job
     """Retrieves the job based on the request after body inputs validation."""
-    job_uuid = request.matchdict.get('job_uuid')
-    ex.verify_param(job_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName='job_uuid',
+    job_uuid = request.matchdict.get(s.ParamJobUUID)
+    ex.verify_param(job_uuid, notNone=True, notEmpty=True, httpError=HTTPBadRequest, paramName=s.ParamJobUUID,
                     msgOnFail=s.ProcessJob_GET_BadRequestResponseSchema.description, request=request)
     job = None
     try:
@@ -126,19 +127,47 @@ def get_job_special(request, job_type):
     return None
 
 
+def update_job_params(request):
+    # type: (Request) -> Optional[Job]
+    """
+    Updates a job's parameter from specified request input fields.
+    Job is updated in storage if all input validation passed.
+
+    :raises HTTPException: corresponding error if applicable.
+    """
+    job = get_job(request)
+
+    def _apply(p, v):
+        job[p] = v
+
+    for param in ["visibility"]:
+        value = r.get_multiformat_any(request, "visibility")
+        ex.evaluate_call(lambda: _apply(param, value),
+                         httpError=HTTPBadRequest,
+                         msgOnFail=s.ProcessJob_PUT_BadRequestResponseSchema.description,
+                         content={"param": {"name": param, "value": str(value)}})
+    db = database_factory(request)
+    job = ex.evaluate_call(lambda: db.jobs_store.update_job(job, request=request),
+                           httpError=HTTPForbidden,
+                           msgOnFail=s.ProcessJob_PUT_ForbiddenResponseSchema.description,
+                           content={"param": {"name": "job", "value": job.uuid}})
+    return job
+
+
+# noinspection PyProtectedMember
 def get_job_status_location(request, process, job):
     # type: (Request, Process, Job) -> AnyStr
     """Obtains the full URL of the job status location using the process ID variant specified by the request."""
-    if request.path.startswith(s.ProcessJobsAPI.path.replace(s.ProcessVariableUUID, process.identifier)):
+    if request.path.startswith(s.ProcessJobsAPI.path.replace(s.VariableProcessUUID, process.identifier)):
         proc_id = process.identifier
     else:
         proc_id = process.uuid
-    proc_job_path = s.ProcessJobAPI.path.replace(s.ProcessVariableUUID, proc_id).replace(s.JobVariableUUID, job.uuid)
+    proc_job_path = s.ProcessJobAPI.path.replace(s.VariableProcessUUID, proc_id).replace(s.VariableJobUUID, job.uuid)
     return "{base}{path}".format(base=get_base_url(request.registry.settings), path=proc_job_path)
 
 
 def create_process_job(request, process):
-    # type: (Request, Process) -> HTTPCreated
+    # type: (Request, Process) -> HTTPException
     """Creates a job for the requested process and dispatches it to the celery runner."""
 
     # validate body with expected JSON content and schema
@@ -180,7 +209,7 @@ def create_process_job(request, process):
 
     db = database_factory(request)
     jobs_store = db.jobs_store
-    job = Job(process=process.uuid, inputs=job_inputs, user=get_user_id(request))
+    job = Job(process=process.uuid, inputs=job_inputs, user=get_user_id(request), status=STATUS.ACCEPTED)
     job = jobs_store.save_job(job)
     LOGGER.debug("Queuing new celery task for `{!s}`.".format(job))
     result = process_job_runner.delay(job_uuid=job.uuid, runner_key=runner_key)
@@ -189,18 +218,19 @@ def create_process_job(request, process):
     job.status = map_status(result.status)  # pending or failure according to accepted celery task
     job.status_location = get_job_status_location(request, process, job)
     job = jobs_store.update_job(job)
+    job_json = job.json()
     body_data = {
-        "jobID": job.uuid,
-        "status": job.status,
-        "location": job.status_location
+        "job_uuid": job_json.get("uuid"),
+        "status": job_json.get("status"),
+        "location": job_json.get("status_location")
     }
     db.actions_store.save_action(job, OPERATION.SUBMIT, request=request)
-    return HTTPCreated(location=job.status_location, json=body_data)
+    return HTTPAccepted(location=job.status_location, json=body_data)
 
 
 @app.task(bind=True)
 def process_job_runner(task, job_uuid, runner_key):
-    # type: (Task, UUID, AnyStr) -> AnyStr
+    # type: (Task, AnyUUID, AnyStr) -> Any
     LOGGER.debug("Celery task for job '{}' [{}] received.".format(job_uuid, runner_key))
     registry = app.conf["PYRAMID_REGISTRY"]
     runner = process_mapping[runner_key]
