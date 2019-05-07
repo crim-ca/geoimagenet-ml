@@ -7,9 +7,18 @@ GeoImageNet ML API
 from geoimagenet_ml.store.factories import migrate_database_when_ready
 from pyramid.config import Configurator
 from pyramid.security import NO_PERMISSION_REQUIRED
-import os
+from pyramid.settings import asbool
 import logging
+import os
 LOGGER = logging.getLogger(__name__)
+
+sentry_dsn = os.getenv("GEOIMAGENET_ML_SENTRY_DSN")
+sentry_debug = asbool(os.getenv("GEOIMAGENET_ML_SENTRY_DEBUG", False))
+if sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.pyramid import PyramidIntegration
+    sentry_sdk.init(sentry_dsn, debug=sentry_debug, integrations=[CeleryIntegration(), PyramidIntegration()])
 
 
 # noinspection PyUnusedLocal
