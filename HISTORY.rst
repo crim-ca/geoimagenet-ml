@@ -12,6 +12,7 @@ History
 * add more unittests for input validation
 * add test for new visibility routes (GEOIM-137)
 * add test for job submission
+* add sentry-sdk integration (GEOIM-118)
 * fix returned body response from job submission to match rest of API format
 * fix multiple API schema definitions
 
