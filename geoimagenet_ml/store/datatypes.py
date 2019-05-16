@@ -887,7 +887,7 @@ class Process(Base, WithType, WithUser):
         self._is_of_type("reference", reference, str, allow_none=True)
         if reference and not reference.startswith("http"):
             raise ValueError("Field 'reference' must be an HTTP(S) location.")
-        dict.__setitem__(self, "reference", None)
+        dict.__setitem__(self, "reference", reference)
 
     @property
     def limit_single_job(self):
@@ -899,7 +899,7 @@ class Process(Base, WithType, WithUser):
     @limit_single_job.setter
     def limit_single_job(self, value):
         self._is_of_type("limit_single_job", value, bool)
-        dict.__setitem__(self, "limit_single_job", False)
+        dict.__setitem__(self, "limit_single_job", value)
 
     @property
     def params(self):
