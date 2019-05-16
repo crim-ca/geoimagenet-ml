@@ -11,6 +11,8 @@ Changes
 * fetching ``latest`` job for processes where ``limit_single_job=False`` will not raise ``500`` if job count ``>1``
 * fetching ``current`` job for processes where ``limit_single_job=False`` will raise ``403`` because of multiple matches
 * fetching ``current`` job for processes where ``limit_single_job=True`` raises ``404`` with more appropriate message
+* change job ``mark_started`` and ``mark_finished`` methods to ``update_started_datetime`` and
+  ``update_finished_datetime`` respectively to be more specific since they do not actually set the ``status`` field
 * use enum for ``current`` and ``latest`` keywords
 * add additional input format validation during job submission
 * add filtering of job search with multiple ``STATUS`` and/or ``CATEGORY`` simultaneously

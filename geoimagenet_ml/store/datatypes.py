@@ -1095,9 +1095,9 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             raise ValueError("Unknown status not allowed.")
         dict.__setitem__(self, "status", status)
         if status in job_status_categories[CATEGORY.EXECUTING]:
-            self.mark_started()
+            self.update_started_datetime()
         if status in job_status_categories[CATEGORY.FINISHED]:
-            self.mark_finished()
+            self.update_finished_datetime()
 
     @property
     def status_message(self):
@@ -1165,12 +1165,12 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
         # type: () -> bool
         return self.started is not None
 
-    def mark_started(self):
+    def update_started_datetime(self):
         # type: () -> None
         if not self.is_started():
             setattr(self, "started", now())
 
-    def mark_finished(self):
+    def update_finished_datetime(self):
         # type: () -> None
         if not self.is_finished():
             setattr(self, "finished", now())

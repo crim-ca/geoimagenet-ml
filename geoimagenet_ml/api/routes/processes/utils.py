@@ -116,13 +116,19 @@ def get_job_special(request, job_type):
     """
     Retrieves a job based on the request using keyword specifiers input validation.
 
+    :raises TypeError: if ``job_type` is invalid.
     :raises HTTPException: corresponding error if applicable.
     :raises JobNotFoundError: in case of not found job that was not handled with HTTPException for special cases.
     """
     if not isinstance(job_type, JOB_TYPE):
-        raise TypeError("Enum JOB_TYPE value required.")
+        raise TypeError("Enum 'JOB_TYPE' value required.")
     jobs_store = database_factory(request).jobs_store
     proc = get_process(request)  # process required, raise if not specified
+    if not proc.limit_single_job and job_type == JOB_TYPE.CURRENT:
+        ex.raise_http(httpError=HTTPForbidden, request=request,
+                      detail="Keyword '{}' is not allowed for multi-job process '{}'."
+                      .format(JOB_TYPE.CURRENT.value, proc.identifier))
+
     status = [CATEGORY.RECEIVED, CATEGORY.EXECUTING] if job_type == JOB_TYPE.CURRENT else map_status(STATUS.SUCCESS)
     sort = SORT.FINISHED if job_type == JOB_TYPE.LATEST else SORT.CREATED
     try:
@@ -133,14 +139,10 @@ def get_job_special(request, job_type):
                           detail="No current job pending execution or running for process.")
         raise  # other cases use default message
     if count > 1 and job_type == JOB_TYPE.CURRENT:
-        if not proc.limit_single_job:
-            ex.raise_http(httpError=HTTPForbidden, request=request,
-                          detail="Keyword '{}' is not allowed for multi-job process '{}'."
-                                 .format(JOB_TYPE.CURRENT.value, proc.identifier))
         ex.raise_http(httpError=HTTPInternalServerError, request=request,
                       detail="Found too many jobs ({}). Should only find one for single job process '{}'."
                              .format(count, proc.identifier))
-    if count > 1:
+    if count > 0:
         return jobs[0]
     return None
 

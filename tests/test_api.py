@@ -11,6 +11,7 @@ Tests for `GeoImageNet ML API` module.
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
 from geoimagenet_ml.constants import JOB_TYPE, VISIBILITY
+from geoimagenet_ml.processes.types import process_mapping
 from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model, Process, Job
@@ -257,25 +258,27 @@ class TestProcessJobApi(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.delete_processes()
-        cls.delete_jobs()
+        cls.delete_test_processes()
+        cls.delete_test_jobs()
         pyramid.testing.tearDown()
 
     @classmethod
-    def delete_processes(cls):
-        for p in cls.db.processes_store.list_processes():
+    def delete_test_processes(cls):
+        test_processes = list(filter(lambda _p: _p.identifier not in process_mapping,
+                                     cls.db.processes_store.list_processes()))
+        for p in test_processes:
             cls.db.processes_store.delete_process(p.identifier)
 
     @classmethod
-    def delete_jobs(cls):
+    def delete_test_jobs(cls):
         for j in cls.db.jobs_store.list_jobs():
             cls.db.jobs_store.delete_job(j.uuid)
 
     def setUp(self):
         self.process_single = Process(uuid=uuid.uuid4(), type="test", identifier="test-single", limit_single_job=True)
         self.process_multi = Process(uuid=uuid.uuid4(), type="test", identifier="test-multi", limit_single_job=False)
-        self.delete_processes()
-        self.delete_jobs()
+        self.delete_test_processes()
+        self.delete_test_jobs()
         self.db.processes_store.save_process(self.process_single)
         self.db.processes_store.save_process(self.process_multi)
 
@@ -377,9 +380,10 @@ class TestProcessJobApi(unittest.TestCase):
         utils.check_val_equal(resp.status_code, 403, msg="Second job should be forbidden for single job process.")
 
         jobs, count = self.db.jobs_store.find_jobs(process=self.process_single.uuid)
-        utils.check_val_equal(count, 2, msg="Should have only 1 job pending execution.")
+        utils.check_val_equal(count, 1, msg="Should have only 1 job pending execution.")
 
-        jobs[0].mark_finished()
+        jobs[0].update_finished_datetime()
+        jobs[0].status = STATUS.SUCCEEDED
         self.db.jobs_store.update_job(jobs[0])
         resp = utils.request(self.app, "POST", path, body={"inputs": []})
         utils.check_val_equal(resp.status_code, 202, msg="New job should be allowed when previous one was completed.")
@@ -426,7 +430,8 @@ class TestProcessJobApi(unittest.TestCase):
 
         # update to 'FINISHED' and check that 'CURRENT' doesn't exist
         job = self.db.jobs_store.fetch_by_uuid(job_uuid)
-        job.mark_finished()
+        job.update_finished_datetime()
+        job.status = STATUS.SUCCEEDED
         self.db.jobs_store.update_job(job)
         resp = utils.request(self.app, "GET", path_curr, expect_errors=True)
         utils.check_val_equal(resp.status_code, 404)
@@ -469,7 +474,8 @@ class TestProcessJobApi(unittest.TestCase):
 
         # update to 'FINISHED' and check that 'LATEST' is found
         job = self.db.jobs_store.fetch_by_uuid(job1_uuid)
-        job.mark_finished()
+        job.update_finished_datetime()
+        job.status = STATUS.SUCCEEDED
         self.db.jobs_store.update_job(job)
         resp = utils.request(self.app, "GET", path_last)
         utils.check_val_equal(resp.status_code, 200)
@@ -482,7 +488,8 @@ class TestProcessJobApi(unittest.TestCase):
         utils.check_val_equal(resp.status_code, 202)
         job2_uuid = resp.json["data"]["job_uuid"]
         job = self.db.jobs_store.fetch_by_uuid(job2_uuid)
-        job.mark_finished()
+        job.update_finished_datetime()
+        job.status = STATUS.SUCCEEDED
         self.db.jobs_store.update_job(job)
         resp = utils.request(self.app, "GET", path_last)
         utils.check_val_equal(resp.status_code, 200)
