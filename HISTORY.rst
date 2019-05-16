@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.1.0 (2019-05-16)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * fetching ``latest`` job for processes where ``limit_single_job=False`` will not raise ``500`` if job count ``>1``
