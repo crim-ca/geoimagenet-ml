@@ -88,8 +88,8 @@ endif
 bump:
 	@-echo "Updating package version ..."
 	@[ "${VERSION}" ] || ( echo ">> 'VERSION' is not set"; exit 1 )
-	@-bash -c '$(CONDA_CMD) test -f "$(CONDA_ENV_PATH)/bin/bump2version || pip install bump2version'
-	@-bash -c '$(CONDA_CMD) bump2version $(BUMP_XARGS) --new-version "${VERSION}" patch;'
+	test -f "$(CONDA_ENV_PATH)/bin/bump2version" || "$(ANACONDA_HOME)/bin/pip" install bump2version
+	"$(ANACONDA_HOME)/bin/bump2version" $(BUMP_XARGS) --new-version "${VERSION}" patch
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test clean-ml
