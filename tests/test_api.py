@@ -10,7 +10,7 @@ Tests for `GeoImageNet ML API` module.
 
 from geoimagenet_ml import __meta__
 from geoimagenet_ml.api import schemas
-from geoimagenet_ml.constants import VISIBILITY
+from geoimagenet_ml.constants import JOB_TYPE, VISIBILITY
 from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE, MONGODB_TYPE
 from geoimagenet_ml.store.datatypes import Model, Process, Job
@@ -93,6 +93,7 @@ class TestGenericApi(unittest.TestCase):
 
 class TestModelApi(unittest.TestCase):
     """Test Model API operations."""
+    db = None
 
     @classmethod
     def setUpClass(cls):
@@ -107,7 +108,6 @@ class TestModelApi(unittest.TestCase):
         if not cls.TEST_MODEL_URL:
             raise LookupError("Missing required test environment variable: `TEST_MODEL_URL`.")
 
-    # noinspection PyUnresolvedReferences
     @classmethod
     def tearDownClass(cls):
         cls.db.models_store.clear_models()
@@ -243,10 +243,46 @@ class TestModelApi(unittest.TestCase):
         resp = utils.request(self.app, "PUT", path, expect_errors=True)
         utils.check_val_equal(resp.status_code, 400)
 
+
+class TestProcessJobApi(unittest.TestCase):
+    """Test Process/Job API operations."""
+    db = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conf = utils.setup_config_with_mongodb()
+        cls.app = utils.setup_test_app(config=cls.conf)
+        cls.json_headers = [("Content-Type", schemas.ContentTypeJSON), ("Accept", schemas.ContentTypeJSON)]
+        cls.db = database_factory(cls.conf.registry)  # type: MongoDatabase
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.delete_processes()
+        cls.delete_jobs()
+        pyramid.testing.tearDown()
+
+    @classmethod
+    def delete_processes(cls):
+        for p in cls.db.processes_store.list_processes():
+            cls.db.processes_store.delete_process(p.identifier)
+
+    @classmethod
+    def delete_jobs(cls):
+        for j in cls.db.jobs_store.list_jobs():
+            cls.db.jobs_store.delete_job(j.uuid)
+
+    def setUp(self):
+        self.process_single = Process(uuid=uuid.uuid4(), type="test", identifier="test-single", limit_single_job=True)
+        self.process_multi = Process(uuid=uuid.uuid4(), type="test", identifier="test-multi", limit_single_job=False)
+        self.delete_processes()
+        self.delete_jobs()
+        self.db.processes_store.save_process(self.process_single)
+        self.db.processes_store.save_process(self.process_multi)
+
     def test_UpdateJob(self):
-        job = Job(uuid=uuid.uuid4(), process=self.process.uuid, status=STATUS.ACCEPTED)
+        job = Job(uuid=uuid.uuid4(), process=self.process_multi.uuid, status=STATUS.ACCEPTED)
         path = schemas.ProcessJobAPI.path \
-            .replace(schemas.VariableProcessUUID, self.process.uuid) \
+            .replace(schemas.VariableProcessUUID, self.process_multi.uuid) \
             .replace(schemas.VariableJobUUID, job.uuid)
         self.db.jobs_store.save_job(job)
 
@@ -266,6 +302,7 @@ class TestModelApi(unittest.TestCase):
         utils.check_val_equal(resp.status_code, 200)
         assert resp.json["data"]["job"]["visibility"] == VISIBILITY.PUBLIC.value
 
+    @utils.mock_execute_process()
     def test_PostJob_BatchCreation(self):
         """
         Validate basic job submission is working and that corresponding routes return expected bodies.
@@ -281,16 +318,9 @@ class TestModelApi(unittest.TestCase):
             ]
         }
 
-        class DummyResult(object):
-            id = "test-task"
-            status = STATUS.ACCEPTED
-
-        # avoid errors from uninitialized Celery backend
-        with mock.patch("geoimagenet_ml.api.routes.processes.utils.process_job_runner.delay",
-                        return_value=DummyResult()):
-            dt_before = now()
-            resp = utils.request(self.app, "POST", path_jobs, body=body)
-            dt_after = now()
+        dt_before = now()
+        resp = utils.request(self.app, "POST", path_jobs, body=body)
+        dt_after = now()
         utils.check_val_equal(resp.status_code, 202)
         location = resp.json["data"]["location"]
         job_uuid = resp.json["data"]["job_uuid"]
@@ -319,6 +349,165 @@ class TestModelApi(unittest.TestCase):
         assert resp.json["data"]["job"]["tags"] == []
         assert resp.json["data"]["job"]["execute_async"] is True
         assert resp.json["data"]["job"]["is_workflow"] is False
+
+    def test_submit_process_missing_inputs(self):
+        path = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_single.uuid)
+        resp = utils.request(self.app, "POST", path, body={}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 400, msg="Expected bad request because of missing inputs.")
+
+    def test_submit_process_invalid_inputs(self):
+        path = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_single.uuid)
+        resp = utils.request(self.app, "POST", path, body={"inputs": {"in": "put"}}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 422, msg="Expected unprocessable inputs because not list of dicts.")
+
+        resp = utils.request(self.app, "POST", path, body={"inputs": [1, 2, 3]}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 422, msg="Expected unprocessable inputs because missing id.")
+
+        resp = utils.request(self.app, "POST", path, body={"inputs": [{"in": "put"}]}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 422, msg="Expected unprocessable inputs because missing id.")
+
+    @utils.mock_execute_process(process_id="test-single")
+    @utils.mock_execute_process(process_id="test-multi")
+    def test_submit_process_job_single_or_multi_limit(self):
+        path = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_single.uuid)
+        resp = utils.request(self.app, "POST", path, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+
+        resp = utils.request(self.app, "POST", path, body={"inputs": []}, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 403, msg="Second job should be forbidden for single job process.")
+
+        jobs, count = self.db.jobs_store.find_jobs(process=self.process_single.uuid)
+        utils.check_val_equal(count, 2, msg="Should have only 1 job pending execution.")
+
+        jobs[0].mark_finished()
+        self.db.jobs_store.update_job(jobs[0])
+        resp = utils.request(self.app, "POST", path, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202, msg="New job should be allowed when previous one was completed.")
+
+        path = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_multi.uuid)
+        resp = utils.request(self.app, "POST", path, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+
+        resp = utils.request(self.app, "POST", path, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202, msg="Second job should be allowed for non single job process.")
+
+        jobs, count = self.db.jobs_store.find_jobs(process=self.process_multi.uuid)
+        utils.check_val_equal(count, 2, msg="Should have 2 jobs pending execution.")
+
+    @utils.mock_execute_process(process_id="test-single")
+    def test_get_current_job_when_limit_single_job(self):
+        path_proc = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_single.uuid)
+        path_curr = schemas.ProcessJobAPI.path \
+            .replace(schemas.VariableProcessUUID, self.process_single.uuid) \
+            .replace(schemas.VariableJobUUID, JOB_TYPE.CURRENT.value)
+
+        resp = utils.request(self.app, "POST", path_proc, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+        job_uuid = resp.json["data"]["job_uuid"]
+
+        # 'ACCEPTED' job is the 'CURRENT'
+        resp = utils.request(self.app, "GET", path_curr)
+        utils.check_val_equal(resp.status_code, 200)
+        utils.check_val_equal(resp.json["data"]["job"]["status"], STATUS.ACCEPTED.value,
+                              msg="Job fetched by current should be the one accepted.")
+        utils.check_val_equal(resp.json["data"]["job"]["uuid"], job_uuid,
+                              msg="Job fetched by current should be the one accepted.")
+
+        # update to 'RUNNING' and check 'CURRENT' also returns the same job
+        job = self.db.jobs_store.fetch_by_uuid(job_uuid)
+        job.status = STATUS.RUNNING
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_curr)
+        utils.check_val_equal(resp.status_code, 200)
+        utils.check_val_equal(resp.json["data"]["job"]["status"], STATUS.RUNNING.value,
+                              msg="Job fetched by current should be the one running.")
+        utils.check_val_equal(resp.json["data"]["job"]["uuid"], job_uuid,
+                              msg="Job fetched by current should be the one running.")
+
+        # update to 'FINISHED' and check that 'CURRENT' doesn't exist
+        job = self.db.jobs_store.fetch_by_uuid(job_uuid)
+        job.mark_finished()
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_curr, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 404)
+
+    @utils.mock_execute_process(process_id="test-multi")
+    def test_get_current_job_when_allowed_multi_jobs(self):
+        # verify that 'CURRENT' is not allowed for multi-job processes
+        path = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_multi.uuid)
+        resp = utils.request(self.app, "POST", path, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+        job_uuid = resp.json["data"]["job_uuid"]
+        path = schemas.ProcessJobAPI.path \
+            .replace(schemas.VariableProcessUUID, self.process_multi.uuid) \
+            .replace(schemas.VariableJobUUID, JOB_TYPE.CURRENT.value)
+        resp = utils.request(self.app, "GET", path, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 403)
+
+    # behaves the same for regardless of job limit
+    @utils.mock_execute_process(process_id="test-single")
+    def test_get_latest_job(self):
+        path_proc = schemas.ProcessJobsAPI.path.replace(schemas.VariableProcessUUID, self.process_single.uuid)
+        path_last = schemas.ProcessJobAPI.path \
+            .replace(schemas.VariableProcessUUID, self.process_single.uuid) \
+            .replace(schemas.VariableJobUUID, JOB_TYPE.LATEST.value)
+
+        resp = utils.request(self.app, "POST", path_proc, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+        job1_uuid = resp.json["data"]["job_uuid"]
+
+        # 'ACCEPTED' job doesn't exist for 'LATEST'
+        resp = utils.request(self.app, "GET", path_last, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 404, msg="No job should be found when there is only a pending process.")
+
+        # update to 'RUNNING' and check that it still doesn't exist
+        job = self.db.jobs_store.fetch_by_uuid(job1_uuid)
+        job.status = STATUS.RUNNING
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_last, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 404, msg="No job should be found when there is only a running process.")
+
+        # update to 'FINISHED' and check that 'LATEST' is found
+        job = self.db.jobs_store.fetch_by_uuid(job1_uuid)
+        job.mark_finished()
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_last)
+        utils.check_val_equal(resp.status_code, 200)
+        utils.check_val_equal(resp.json["data"]["job"]["uuid"], job1_uuid)
+        utils.check_val_equal(resp.json["data"]["job"]["status"], STATUS.SUCCEEDED.value,
+                              msg="Job fetched by latest should be succeeded.")
+
+        # create a new job and validate that it become the new 'LATEST' one
+        resp = utils.request(self.app, "POST", path_proc, body={"inputs": []})
+        utils.check_val_equal(resp.status_code, 202)
+        job2_uuid = resp.json["data"]["job_uuid"]
+        job = self.db.jobs_store.fetch_by_uuid(job2_uuid)
+        job.mark_finished()
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_last)
+        utils.check_val_equal(resp.status_code, 200)
+        utils.check_val_equal(resp.json["data"]["job"]["uuid"], job2_uuid,
+                              msg="More recent job should be returned.")
+        utils.check_val_equal(resp.json["data"]["job"]["status"], STATUS.SUCCEEDED.value,
+                              msg="Job fetched by latest should be succeeded.")
+
+        # mark 2nd job as 'FAILED' and check that 1st is now returned
+        job = self.db.jobs_store.fetch_by_uuid(job2_uuid)
+        job.status = STATUS.FAILED
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_last)
+        utils.check_val_equal(resp.status_code, 200)
+        utils.check_val_equal(resp.json["data"]["job"]["uuid"], job1_uuid,
+                              msg="Job failed should be omitted and most recent succeeded one should be returned.")
+        utils.check_val_equal(resp.json["data"]["job"]["status"], STATUS.SUCCEEDED.value,
+                              msg="Job fetched by latest should be succeeded.")
+
+        # mark 1st job as 'FAILED' and check that none is returned
+        job = self.db.jobs_store.fetch_by_uuid(job1_uuid)
+        job.status = STATUS.FAILED
+        self.db.jobs_store.update_job(job)
+        resp = utils.request(self.app, "GET", path_last, expect_errors=True)
+        utils.check_val_equal(resp.status_code, 404, msg="Failed jobs should all be omitted from search.")
 
 
 if __name__ == "__main__":

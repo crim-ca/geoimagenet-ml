@@ -229,7 +229,7 @@ class JobStore(object):
         """
         raise NotImplementedError
 
-    def delete_job(self, process_uuid, request=None):
+    def delete_job(self, job_uuid, request=None):
         # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes job from database.
@@ -250,7 +250,7 @@ class JobStore(object):
                   service=None,     # type: Optional[AnyUUID]
                   tags=None,        # type: Optional[List[AnyStr]]
                   user=None,        # type: Optional[int]
-                  status=None,      # type: Optional[Union[STATUS, CATEGORY]]
+                  status=None,      # type: Optional[Union[STATUS, CATEGORY], List[Union[STATUS, CATEGORY]]]
                   sort=None,        # type: Optional[SORT]
                   order=None,       # type: Optional[ORDER]
                   request=None,     # type: Optional[Request]

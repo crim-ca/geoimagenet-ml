@@ -1,5 +1,5 @@
 from geoimagenet_ml.constants import ExtendedEnumMeta
-from enum import Enum
+from enum import Enum, unique
 # noinspection PyProtectedMember
 from pywps.response.status import _WPS_STATUS, WPS_STATUS
 from typing import TYPE_CHECKING
@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import AnyStatus  # noqa: F401
 
 
-class COMPLIANT(six.with_metaclass(ExtendedEnumMeta, Enum)):
+@unique
+class COMPLIANT(six.with_metaclass(ExtendedEnumMeta, str, Enum)):
     LITERAL = "STATUS_COMPLIANT_LITERAL"
     OGC = "STATUS_COMPLIANT_OGC"
     PYWPS = "STATUS_COMPLIANT_PYWPS"
@@ -16,14 +17,16 @@ class COMPLIANT(six.with_metaclass(ExtendedEnumMeta, Enum)):
     CELERY = "STATUS_COMPLIANT_CELERY"
 
 
-class CATEGORY(six.with_metaclass(ExtendedEnumMeta, Enum)):
+@unique
+class CATEGORY(six.with_metaclass(ExtendedEnumMeta, str, Enum)):
     RECEIVED = "STATUS_CATEGORY_RECEIVED"
     FINISHED = "STATUS_CATEGORY_FINISHED"
     EXECUTING = "STATUS_CATEGORY_EXECUTING"
     FAILED = "STATUS_CATEGORY_FAILED"
 
 
-class STATUS(six.with_metaclass(ExtendedEnumMeta, Enum)):
+@unique
+class STATUS(six.with_metaclass(ExtendedEnumMeta, str, Enum)):
     ACCEPTED = "accepted"
     STARTED = "started"
     PAUSED = "paused"

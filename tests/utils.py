@@ -1,5 +1,7 @@
 from geoimagenet_ml import __meta__, GEOIMAGENET_ML_CONFIG_INI
-from geoimagenet_ml.utils import get_settings_from_ini, null, isnull
+from geoimagenet_ml.processes.runners import ProcessRunner
+from geoimagenet_ml.status import STATUS
+from geoimagenet_ml.utils import get_settings_from_ini, null, isnull, classproperty
 from geoimagenet_ml.store.databases.types import MONGODB_TYPE
 from pyramid.config import Configurator
 from pyramid.response import Response
@@ -10,15 +12,18 @@ from webtest import TestApp
 from webtest.response import TestResponse
 import os
 import six
+import uuid
 import warnings
 import requests
 import pyramid
 # noinspection PyPackageRequirements
 import pyramid.testing
+# noinspection PyPackageRequirements, PyUnresolvedReferences
+import mock
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import Any, AnyStr, Union, Optional, SettingsType   # noqa: F401
+    from geoimagenet_ml.typedefs import Any, AnyStr, Callable, Union, Optional, SettingsType   # noqa: F401
 
 json_headers = [("Content-Type", "application/json")]
 
@@ -213,3 +218,57 @@ def check_error_param_structure(json_body, paramValue=null, paramName=null, para
         if paramCompareExists:
             check_val_is_in("paramCompare", json_body)
             check_val_equal(json_body["paramCompare"], paramCompare)
+
+
+def mock_execute_process(process_id=None, process_type="test"):
+    # type: (Optional[AnyStr], AnyStr) -> Callable
+    """
+    Decorator that mocks calls to :func:`geoimagenet_ml.api.routes.processes.utils.process_job_runner` and
+    :func:`geoimagenet_ml.api.routes.processes.utils.create_process_job` within a test employing
+    a :class:`webTest.TestApp` without the need of a running ``Celery`` app nor actually executing dispatched tasks.
+
+    Produced mock:
+        - avoids connection error from ``Celery`` during a job execution request.
+        - avoids key error from ``process_mapping`` by returning a dummy :class:`ProcessRunner` generated from the
+          provided ``process_type`` (note: any input check returns ``True`` regardless of actual values)
+        - bypasses ``process_job_runner.delay`` call by returning a pseudo task-result.
+        - task is set as 'ACCEPTED'
+
+    :param process_id:
+        id to map the database process with the process runner.
+        Can be omitted if mapping is not required or when referencing to an already mapped ``ProcessRunner``
+    :param process_type:
+        type to assign to the process runner
+    """
+    def decorator(test_case):
+        # type: (Callable[[Any, Any, Any], None]) -> Callable[[Any], None]
+        class MockTaskResult(object):
+            """Mocks a task result from a `Celery` task with required properties returned by process runner."""
+            id = str(uuid.uuid4())
+            status = STATUS.ACCEPTED
+
+        # noinspection PyMethodMayBeStatic
+        class TestProcessRunner(ProcessRunner):
+            @classproperty
+            def type(self): return process_type
+            @classproperty
+            def inputs(self): return []
+            @classproperty
+            def outputs(self): return []
+            def __call__(self, *args, **kwargs): return
+
+        task = MockTaskResult()
+        process_map = {process_id: TestProcessRunner}
+
+        def run_task(*args, **kwargs):
+            return task
+
+        def do_test(self, *args, **kwargs):
+            with mock.patch("geoimagenet_ml.api.routes.processes.utils.process_job_runner", side_effect=run_task), \
+                 mock.patch("geoimagenet_ml.api.routes.processes.utils.process_job_runner.delay", return_value=task), \
+                 mock.patch.dict("geoimagenet_ml.api.routes.processes.utils.process_mapping", process_map), \
+                 mock.patch("celery.app.task.Context", return_value=task):
+                test_case(self, *args, **kwargs)
+
+        return do_test
+    return decorator

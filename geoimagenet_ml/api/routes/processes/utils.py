@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 from geoimagenet_ml.api import exceptions as ex, requests as r, schemas as s
-from geoimagenet_ml.constants import SORT, OPERATION
+from geoimagenet_ml.constants import SORT, OPERATION, JOB_TYPE
 from geoimagenet_ml.store import exceptions as exc
 from geoimagenet_ml.store.datatypes import Process, Job
 from geoimagenet_ml.store.factories import database_factory
 from geoimagenet_ml.processes.types import process_mapping, process_categories, PROCESS_WPS
-from geoimagenet_ml.status import map_status, STATUS
+from geoimagenet_ml.status import map_status, STATUS, CATEGORY
 from geoimagenet_ml.utils import get_base_url, get_user_id, is_uuid
 from pyramid.httpexceptions import (
     HTTPAccepted,
@@ -17,7 +17,6 @@ from pyramid.httpexceptions import (
     HTTPUnprocessableEntity,
     HTTPInternalServerError,
     HTTPNotImplemented,
-    HTTPException,
 )
 from pyramid_celery import celery_app as app
 from typing import TYPE_CHECKING
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from celery import Task                                     # noqa: F401
     from pyramid.request import Request                         # noqa: F401
+    from pyramid.httpexceptions import HTTPException            # noqa: F401
     from typing import Optional                                 # noqa: F401
     from geoimagenet_ml.typedefs import Any, AnyStr, AnyUUID    # noqa: F401
 LOGGER = logging.getLogger(__name__)
@@ -96,8 +96,8 @@ def get_job(request):
                     msgOnFail=s.ProcessJob_GET_BadRequestResponseSchema.description, request=request)
     job = None
     try:
-        if job_uuid in ["current", "latest"]:
-            job = get_job_special(request, job_uuid)
+        if job_uuid in JOB_TYPE.values() + JOB_TYPE.names():
+            job = get_job_special(request, JOB_TYPE.get(job_uuid))
         else:
             job = database_factory(request).jobs_store.fetch_by_uuid(job_uuid)
         if not job:
@@ -112,17 +112,35 @@ def get_job(request):
 
 
 def get_job_special(request, job_type):
-    # type: (Request, AnyStr) -> Optional[Job]
-    """Retrieves a job based on the request using keyword specifiers input validation."""
+    # type: (Request, JOB_TYPE) -> Optional[Job]
+    """
+    Retrieves a job based on the request using keyword specifiers input validation.
+
+    :raises HTTPException: corresponding error if applicable.
+    :raises JobNotFoundError: in case of not found job that was not handled with HTTPException for special cases.
+    """
+    if not isinstance(job_type, JOB_TYPE):
+        raise TypeError("Enum JOB_TYPE value required.")
     jobs_store = database_factory(request).jobs_store
     proc = get_process(request)  # process required, raise if not specified
-    status = map_status(STATUS.RUNNING if job_type == "current" else STATUS.SUCCESS)
-    sort = SORT.FINISHED if job_type == "latest" else SORT.CREATED
-    jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort)
-    if count > 1:
+    status = [CATEGORY.RECEIVED, CATEGORY.EXECUTING] if job_type == JOB_TYPE.CURRENT else map_status(STATUS.SUCCESS)
+    sort = SORT.FINISHED if job_type == JOB_TYPE.LATEST else SORT.CREATED
+    try:
+        jobs, count = jobs_store.find_jobs(process=proc.uuid, status=status, sort=sort)
+    except exc.JobNotFoundError:
+        if job_type == JOB_TYPE.CURRENT:
+            ex.raise_http(httpError=HTTPNotFound, request=request,
+                          detail="No current job pending execution or running for process.")
+        raise  # other cases use default message
+    if count > 1 and job_type == JOB_TYPE.CURRENT:
+        if not proc.limit_single_job:
+            ex.raise_http(httpError=HTTPForbidden, request=request,
+                          detail="Keyword '{}' is not allowed for multi-job process '{}'."
+                                 .format(JOB_TYPE.CURRENT.value, proc.identifier))
         ex.raise_http(httpError=HTTPInternalServerError, request=request,
-                      detail="Found too many jobs ({}). Should only find one.".format(count))
-    if count == 1:
+                      detail="Found too many jobs ({}). Should only find one for single job process '{}'."
+                             .format(count, proc.identifier))
+    if count > 1:
         return jobs[0]
     return None
 
@@ -184,7 +202,9 @@ def create_process_job(request, process):
 
     for i in job_inputs:
         if not isinstance(i, dict):
-            raise HTTPUnprocessableEntity("Invalid 'inputs' cannot be processed.")
+            raise HTTPUnprocessableEntity("Invalid 'inputs' cannot be processed. Invalid list of objects format.")
+        if "id" not in i:
+            raise HTTPUnprocessableEntity("Invalid 'inputs' cannot be processed. Missing 'id' in input object.")
 
     # TODO: dispatch other process runner as necessary
     if process.identifier not in process_mapping or process.type == PROCESS_WPS:
@@ -194,11 +214,12 @@ def create_process_job(request, process):
     if process.limit_single_job:
         job = None
         try:
-            job = get_job_special(request, "current")
-        except exc.JobNotFoundError:
+            job = get_job_special(request, JOB_TYPE.CURRENT)
+        except (exc.JobNotFoundError, HTTPNotFound):
             pass
         if job is not None:
-            raise HTTPForbidden("Multiple jobs not allowed for [{!s}]. Job submission aborted.".format(process))
+            ex.raise_http(httpError=HTTPForbidden, request=request,
+                          detail="Multiple jobs not allowed for [{!s}]. Job submission aborted.".format(process))
 
     # validation for specific processes, create job and dispatch it to corresponding runner
     runner_key = process.identifier

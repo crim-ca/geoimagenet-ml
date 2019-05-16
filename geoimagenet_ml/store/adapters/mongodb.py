@@ -469,10 +469,23 @@ class MongodbJobStore(JobStore, MongodbStore):
         if tags:
             search_filters["tags"] = {"$all": tags}
 
-        if isinstance(status, STATUS):
-            search_filters["status"] = {"$in": [map_status(status).value]}
-        elif isinstance(status, CATEGORY):
-            search_filters["status"] = {"$in": [s.value for s in job_status_categories[status]]}
+        if status:
+            if not isinstance(status, list):
+                status = [status]
+            search_filters["status"] = {"$in": []}
+            for s in status:
+                if isinstance(s, STATUS):
+                    cat_statuses = [s]
+                elif isinstance(s, CATEGORY):
+                    cat_statuses = job_status_categories[s]
+                else:
+                    raise ex.JobNotFoundError("Invalid status or category: '{}'".format(repr(s)))
+                for cs in cat_statuses:
+                    search_status = map_status(cs)
+                    # search by name and value for back compatibility
+                    search_filters["status"]["$in"].append(search_status.value)
+                    search_filters["status"]["$in"].append(search_status.name)
+            search_filters["status"]["$in"] = list(set(search_filters["status"]["$in"]))
 
         if process is not None:
             if not is_uuid(process):
