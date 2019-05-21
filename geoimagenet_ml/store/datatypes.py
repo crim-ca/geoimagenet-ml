@@ -887,7 +887,7 @@ class Process(Base, WithType, WithUser):
         self._is_of_type("reference", reference, str, allow_none=True)
         if reference and not reference.startswith("http"):
             raise ValueError("Field 'reference' must be an HTTP(S) location.")
-        dict.__setitem__(self, "reference", None)
+        dict.__setitem__(self, "reference", reference)
 
     @property
     def limit_single_job(self):
@@ -899,7 +899,7 @@ class Process(Base, WithType, WithUser):
     @limit_single_job.setter
     def limit_single_job(self, value):
         self._is_of_type("limit_single_job", value, bool)
-        dict.__setitem__(self, "limit_single_job", False)
+        dict.__setitem__(self, "limit_single_job", value)
 
     @property
     def params(self):
@@ -1095,9 +1095,9 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
             raise ValueError("Unknown status not allowed.")
         dict.__setitem__(self, "status", status)
         if status in job_status_categories[CATEGORY.EXECUTING]:
-            self.mark_started()
+            self.update_started_datetime()
         if status in job_status_categories[CATEGORY.FINISHED]:
-            self.mark_finished()
+            self.update_finished_datetime()
 
     @property
     def status_message(self):
@@ -1165,12 +1165,12 @@ class Job(Base, WithUser, WithFinished, WithVisibility):
         # type: () -> bool
         return self.started is not None
 
-    def mark_started(self):
+    def update_started_datetime(self):
         # type: () -> None
         if not self.is_started():
             setattr(self, "started", now())
 
-    def mark_finished(self):
+    def update_finished_datetime(self):
         # type: () -> None
         if not self.is_finished():
             setattr(self, "finished", now())

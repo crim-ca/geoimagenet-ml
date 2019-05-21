@@ -45,8 +45,7 @@ all: help
 .PHONY: help
 help:
 	@echo "bump             bump version using version specified as user input"
-	@echo "bump-dry         bump version using version specified as user input (dry-run)"
-	@echo "bump-tag         bump version using version specified as user input, tags it and commits change in git"
+	@echo "dry              bump version output results without applying changes (dry-run)"
 	@echo "clean            remove all build, test, coverage and Python artifacts"
 	@echo "clean-build      remove build artifacts"
 	@echo "clean-env        remove package environment"
@@ -73,29 +72,24 @@ help:
 	@echo "update           same as 'install' but without conda packages installation"
 	@echo "version          retrive the application version"
 
+# Bumpversion 'dry' config
+# if 'dry' is specified as target, any bumpversion call using 'BUMP_XARGS' will not apply changes
+BUMP_XARGS ?= --verbose --allow-dirty
+ifeq ($(filter dry, $(MAKECMDGOALS)), dry)
+	BUMP_XARGS := $(BUMP_XARGS) --dry-run
+endif
+.PHONY: dry
+dry: setup.cfg
+ifeq ($(findstring bump, $(MAKECMDGOALS)),)
+	$(error Target 'dry' must be combined with a 'bump' target)
+endif
+
 .PHONY: bump
 bump:
-	$(shell bash -c 'read -p "Version: " VERSION_PART; \
-		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
-		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
-			--verbose --allow-dirty --no-tag --new-version $$VERSION_PART patch;')
-
-.PHONY: bump-dry
-bump-dry:
-	$(shell bash -c 'read -p "Version: " VERSION_PART; \
-		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		test -f "$(CONDA_ENV_PATH)/bin/bumpversion" || pip install bumpversion; \
-		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
-			--verbose --allow-dirty --dry-run --tag --new-version $$VERSION_PART patch;')
-
-.PHONY: bump-tag
-bump-tag:
-	$(shell bash -c 'read -p "Version: " VERSION_PART; \
-		source "$(CONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-		test -f $(CONDA_ENV_PATH)/bin/bumpversion || pip install bumpversion; \
-		"$(CONDA_ENV_PATH)/bin/bumpversion" --config-file "$(CURDIR)/.bumpversion.cfg" \
-			--verbose --allow-dirty --tag --new-version $$VERSION_PART patch;')
+	@-echo "Updating package version ..."
+	@[ "${VERSION}" ] || ( echo ">> 'VERSION' is not set"; exit 1 )
+	test -f "$(CONDA_ENV_PATH)/bin/bump2version" || "$(ANACONDA_HOME)/bin/pip" install bump2version
+	"$(ANACONDA_HOME)/bin/bump2version" $(BUMP_XARGS) --new-version "${VERSION}" patch
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test clean-ml
