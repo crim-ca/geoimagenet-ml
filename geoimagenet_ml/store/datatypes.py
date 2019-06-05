@@ -82,7 +82,11 @@ class Validator(object):
         # parameter validation
         if allow_none and param_value is None:
             return
-        valid_type = valid_function(param_value) if callable(valid_function) else isinstance(param_value, param_types)
+        if not callable(valid_function):
+            valid_param_type = tuple(param_types) if isinstance(param_types, (list, set)) else param_types
+            valid_type = isinstance(param_value, valid_param_type)
+        else:
+            valid_type = valid_function(param_value)
         if not valid_type:
             if param_types == six.string_types:
                 param_types = str  # convert back for display

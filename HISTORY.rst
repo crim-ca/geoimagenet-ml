@@ -7,9 +7,12 @@ Unreleased
 ---------------------
 
 * add variable ``GEOIMAGENET_ML_SENTRY_SERVER_NAME`` to allow overriding ``server_name`` value reported by sentry.
+* fix bug caused by invalid sub-item type checker of job exception field (GEOIM-146).
 
 1.1.1 (2019-06-05)
 ---------------------
+
+* fix bug caused by invalid list/tuple concatenation in job exception field (GEOIM-145).
 
 1.1.0 (2019-05-16)
 ---------------------

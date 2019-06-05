@@ -455,7 +455,8 @@ class MongodbJobStore(JobStore, MongodbStore):
         try:
             for job in self.collection.find().sort(SORT.UUID.value, pymongo.ASCENDING):
                 jobs.append(Job(job))
-        except Exception:
+        except Exception as exc:
+            LOGGER.error(str(exc))
             raise ex.JobInstanceError("Job could not be generated.")
         return jobs
 
