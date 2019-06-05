@@ -77,7 +77,7 @@ class Validator(object):
         if param_types is str:
             param_types = six.string_types
         elif param_types != six.string_types and isinstance(param_types, (list, set, tuple)) and str in param_types:
-            param_types = list(filter(lambda t: t is not str, param_types)) + six.string_types
+            param_types = list(filter(lambda t: t is not str, param_types)) + list(six.string_types)
 
         # parameter validation
         if allow_none and param_value is None:
