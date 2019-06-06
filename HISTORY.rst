@@ -6,6 +6,8 @@ History
 Unreleased
 ---------------------
 
+* add variable ``GEOIMAGENET_ML_SENTRY_SERVER_NAME`` to allow overriding ``server_name`` value reported by sentry.
+
 1.1.1 (2019-06-05)
 ---------------------
 
