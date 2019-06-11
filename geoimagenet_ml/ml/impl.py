@@ -29,6 +29,8 @@ osgeo.gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
+IMAGE_DATA_KEY = "data"
+
 
 def load_model(model_file):
     # type: (Union[Any, AnyStr]) -> Tuple[bool, ParamsType, Optional[BytesIO], Optional[Exception]]
@@ -67,7 +69,14 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
     save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
-    task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
+    # FIXME:
+    #   If using different classes (from model.task) than ones defined by patches (dataset.task), need to filter/update
+    #   mapping accordingly and generate task.
+    #   [to be defined] how to handle mismatches: drop them, place in 'unknown' class and still evaluate them, etc.?
+    #   (see: https://www.crim.ca/jira/browse/GEOIM-153)
+    #   For now, use the dataset task directly, model must use exactly the same definition for functional operation.
+    task = test_loader.dataset.task
+    #task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
@@ -89,13 +98,14 @@ class BatchTestPatchesDatasetLoader(thelper.data.ImageFolderDataset):
             raise ValueError("Expected dataset parameters as configuration input.")
         self.root = config["path"]
         # keys matching dataset config for easy loading and referencing to same fields
-        self.image_key = "feature"  # annotation id from API
-        self.label_key = "class"    # class id from API
-        self.path_key = "path"      # actual file path
-        self.idx_key = "index"      # increment for __getitem__
+        self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
+        self.label_key = "class"            # class id from API
+        self.path_key = "path"              # actual file path
+        self.idx_key = "index"              # increment for __getitem__
         # 'crops' for extra data such as coordinates
         # 'image' for original image path that was used to generate the patch from
-        meta_keys = [self.path_key, self.idx_key, "crops", "image"]
+        # 'feature' for annotation reference id
+        meta_keys = [self.path_key, self.idx_key, "crops", "image", "feature"]
         class_ids = set()
         samples = []
         for patch_path, patch_info in zip(config["files"], config["data"]["patches"]):
@@ -145,8 +155,12 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     trainer = test_config["config"]["trainer"]  # type: JSON
 
     # remove additional unnecessary sub-parts or error-prone configurations
-    for key in ["sampler", "train_augments", "train_split", "valid_split"]:
+    for key in ["sampler", "train_augments", "train_split", "valid_split", "eval_augments"]:
         loaders.pop(key, None)
+
+    # override image key to match loaded test data
+    for transform in loaders.get("base_transforms", []):
+        transform["target_key"] = IMAGE_DATA_KEY
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {

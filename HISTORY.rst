@@ -12,6 +12,7 @@ Changes
   `batch-creation` execution to evaluate them against a registered model using process `model-tester`.
 * add ``geoimagenet_ml.ml.jobs_path`` configuration setting to indicate where process job logging should be stored.
   (mostly during process `model-tester` execution)
+* adjust model and dataset definitions to employ the same `task` until resolved (GEOIM-153)
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
