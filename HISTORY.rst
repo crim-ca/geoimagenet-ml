@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.2.0 (2019-06-11)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add ``BatchTestPatchesDatasetLoader`` implementation that loads a generated dataset of test patches from process
