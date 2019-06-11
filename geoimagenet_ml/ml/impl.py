@@ -65,7 +65,7 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get('geoimagenet_ml.ml.models_path'), model.uuid)
+    save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
     model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
@@ -75,6 +75,41 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
     trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
     return trainer
+
+
+class BatchTestPatchesDatasetLoader(thelper.data.ImageFolderDataset):
+    """
+    Batch dataset parser that loads only patches from 'test' split.
+
+    Uses :class:`thelper.data.ImageFolderDataset` ``__getitem__`` implementation to load image from a folder, but
+    overrides the ``__init__`` to adapt the configuration to batch format.
+    """
+    def __init__(self, config=None, transforms=None):
+        if not (isinstance(config, dict) and len(config)):
+            raise ValueError("Expected dataset parameters as configuration input.")
+        self.root = config["path"]
+        # keys matching dataset config for easy loading and referencing to same fields
+        self.image_key = "feature"  # annotation id from API
+        self.label_key = "class"    # class id from API
+        self.path_key = "path"      # actual file path
+        self.idx_key = "index"      # increment for __getitem__
+        # 'crops' for extra data such as coordinates
+        # 'image' for original image path that was used to generate the patch from
+        meta_keys = [self.path_key, self.idx_key, "crops", "image"]
+        class_ids = set()
+        samples = []
+        for patch_path, patch_info in zip(config["files"], config["data"]["patches"]):
+            if patch_info["split"] == "test":
+                class_name = patch_info["class"]
+                class_ids.add(class_name)
+                samples.append(deepcopy(patch_info))
+                samples[-1][self.path_key] = patch_path
+        if not len(class_ids):
+            raise ValueError("No patch/class could be retrieved from batch for loading.")
+        thelper.data.ClassificationDataset.__init__(
+            self, class_names=list(class_ids), input_key=self.image_key,
+            label_key=self.label_key, meta_keys=meta_keys, config=config, transforms=transforms)
+        self.samples = samples
 
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
@@ -91,10 +126,14 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
 
-    # overrides of deployed model and dataset
+    # overrides of deployed model and dataset, json required because thelper dumps config
+    test_dataset = dataset_config_override["name"]
     test_config["config"]["name"] = model_config_override["name"]
     test_config["config"]["datasets"] = {
-        dataset_config_override["name"]: dataset_config_override.params
+        test_dataset: {
+            "type": "{}.{}".format(BatchTestPatchesDatasetLoader.__module__, BatchTestPatchesDatasetLoader.__name__),
+            "params": dataset_config_override.json()
+        }
     }
 
     # back-compatibility replacement
@@ -102,16 +141,8 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     if "loaders" not in test_config["config"]:
         raise ValueError("Missing 'loaders' configuration from model checkpoint.")
 
-    dataset = test_config["config"]["datasets"][dataset_config_override["name"]]    # type: JSON
     loaders = test_config["config"]["loaders"]  # type: JSON
     trainer = test_config["config"]["trainer"]  # type: JSON
-
-    # adjust root dir of dataset location to match version deployed on server
-    dataset["params"]["root"] = dataset_config_override.path
-
-    # remove categories to match model outputs defined during training task
-    for key in ["category"]:
-        dataset["params"].pop(key, None)
 
     # remove additional unnecessary sub-parts or error-prone configurations
     for key in ["sampler", "train_augments", "train_split", "valid_split"]:
@@ -119,9 +150,11 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
-        dataset_config_override["name"]: 1.0
+        test_dataset: 1.0    # use every single test dataset patch
     }
     trainer["use_tbx"] = False
+    trainer["type"] = "{}.{}".format(thelper.train.classif.ImageClassifTrainer.__module__,
+                                     thelper.train.classif.ImageClassifTrainer.__name__)
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
 
