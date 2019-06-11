@@ -6,6 +6,18 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add ``BatchTestPatchesDatasetLoader`` implementation that loads a generated dataset of test patches from process
+  `batch-creation` execution to evaluate them against a registered model using process `model-tester`.
+* add ``geoimagenet_ml.ml.jobs_path`` configuration setting to indicate where process job logging should be stored.
+  (mostly during process `model-tester` execution)
+* adjust model and dataset definitions to employ the same `task` until resolved (GEOIM-153)
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix bug generated during `model-tester` process execution attempting to update ``Dataset`` parameters (GEOIM-149)
+
 1.1.2 (2019-06-06)
 ---------------------
 
