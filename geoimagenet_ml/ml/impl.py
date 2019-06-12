@@ -227,6 +227,21 @@ def retrieve_annotations(geojson_urls):
     return annotations
 
 
+def retrieve_taxonomy(taxonomy_url):
+    # type: (AnyStr) -> JSON
+    """Fetches JSON structured taxonomy classes hierarchy from the provided URL."""
+    resp = requests.get(taxonomy_url, headers={"Accept": "application/json"})
+    code = resp.status_code
+    if code != 200:
+        raise RuntimeError("Could not retrieve taxonomy JSON from [{}], server response was [{}]"
+                           .format(taxonomy_url, code))
+    taxo = resp.json()
+    if not taxo:
+        raise RuntimeError("Could not find any taxonomy detail from URL: {}".format(taxonomy_url))
+    # TODO: validate format
+    return taxo
+
+
 def find_best_match_raster(rasters, feature):
     # type: (List[RasterDataType], FeatureType) -> RasterDataType
     """
@@ -261,12 +276,13 @@ def find_best_match_raster(rasters, feature):
 
 
 def create_batch_patches(annotations_meta,      # type: List[JSON]
+                         taxonomy_meta,         # type: JSON
                          raster_search_paths,   # type: List[AnyStr]
                          dataset_store,         # type: DatasetStore
                          dataset_container,     # type: Dataset
                          dataset_latest,        # type: Optional[Dataset]
                          dataset_update_count,  # type: int
-                         crop_fixed_size,       # type: Optional[int]
+                         crop_fixed_size,       # type: Optional[Number]
                          update_func,           # type: Callable[[AnyStr, Optional[Number]], None]
                          start_percent,         # type: Number
                          final_percent,         # type: Number
@@ -285,10 +301,27 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     Created patches for the batch are then split into train/test sets per corresponding ``taxonomy_class_id``.
 
-    .. seealso::
-        - `GeoImageNet API` format: https://geoimagenetdev.crim.ca/api/v1/ui/#/paths/~1batches/post
-        - `GeoImageNet API` example: https://geoimagenetdev.crim.ca/api/v1/batches?taxonomy_id=1
+    .. note::
 
+        - ``annotations_meta`` and ``taxonomy_meta`` formats are expected to resolve with provided example links.
+
+    .. seealso::
+
+        - `GeoImageNet API` example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
+        - #TODO: add example taxonomy link (GEOIM-161)
+
+    :param annotations_meta: metadata retrieved from URL(s) (see example link).
+    :param taxonomy_meta: parent/child reference class IDs hierarchy matching annotation metadata (see example link).
+    :param raster_search_paths: paths where to look for raster images matching annotation metadata.
+    :param dataset_store: store connection where the updated dataset has to be written.
+    :param dataset_container: dataset to be iteratively updated from extracted patches from rasters using annotations.
+    :param dataset_latest: base dataset with existing patches from which to expand the new one (as desired).
+    :param dataset_update_count: number of patches to generate until the dataset gets updated (save checkpoint).
+    :param crop_fixed_size: dimension (in metres) to use the generate additional patches of constant dimension.
+    :param update_func: ``function(message, percentage)`` called on each update operation for process execution logging.
+    :param start_percent: execution percentage to use as starting value for the execution of this function.
+    :param final_percent: execution percentage to reach a the end of the normal execution of this function.
+    :param train_test_ratio: ratio to use for splitting patches into train/test groups for respective classes.
     :returns: updated ``dataset_container`` with metadata of created patches.
     """
 
@@ -318,7 +351,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     # FIXME: although we support multiple GeoJSON URL as process input, functions below only expect 1
     #   - need to combine features by ID to avoid duplicates
-    #   - need to handle different CRS for GeoTransform
+    #   - need to handle different CRS for GeoTransform (update process runner docstring accordingly)
     if len(annotations_meta) != 1:
         raise NotImplementedError("Multiple GeoJSON parsing not implemented.")
     annotations_meta = annotations_meta[0]
@@ -326,6 +359,10 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     if not isinstance(dataset_update_count, int) or dataset_update_count < 1:
         raise AssertionError("invalid dataset update count value: {!s}".format(dataset_update_count))
 
+    update_func("updating taxonomy definition in dataset", start_percent)
+    dataset_container.data["taxonomy"] = taxonomy_meta
+
+    start_percent += 1
     update_func("parsing raster files", start_percent)
     srs = parse_coordinate_system(annotations_meta)
     rasters_data, raster_global_coverage = parse_rasters(raster_search_paths, default_srs=srs)
@@ -349,7 +386,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     train_counter, test_counter = category_counter.split(train_test_ratio)
     train_test_splits = [("train", train_counter), ("test", test_counter)]
     patches_crop = [(None, "raw")]
-    if isinstance(crop_fixed_size, int):
+    if isinstance(crop_fixed_size, (int, float)):
         update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
         patches_crop.append((crop_fixed_size, "fixed"))
 

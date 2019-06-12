@@ -477,6 +477,7 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
         """
         Creates a ZIP file (if missing) of the dataset details and files.
         The content of the ZIP includes everything found inside its save directory.
+
         :returns: saved ZIP path
         """
         if not os.path.isdir(self.path):

@@ -1,6 +1,6 @@
 from geoimagenet_ml.constants import SORT, ORDER
 from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
-from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
+from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations, retrieve_taxonomy
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.status import map_status, STATUS
 from abc import abstractmethod
@@ -196,7 +196,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             {
                 "id": "metrics",
                 "type": "float",
-                "minOccurs": 1,
+                "minOccurs": 0,
                 "maxOccurs": "unbounded",
             },
             {
@@ -307,6 +307,12 @@ class ProcessRunnerBatchCreator(ProcessRunner):
     """
     Executes patches creation from a batch of annotated images with GeoJSON metadata.
     Uses GeoImageNet API requests format for annotation data extraction.
+
+    .. seealso::
+
+        - `GeoImageNet API` source: https://www.crim.ca/stash/projects/GEO/repos/geoimagenet_api
+        - `GeoImageNet API` swagger: https://geoimagenet.crim.ca/api/v1/docs
+        - `GeoImageNet API` annotation example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
     """
 
     @classproperty
@@ -343,13 +349,23 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "formats": [{"mimeType": "application/json"}],
                 "type": "string",
                 "minOccurs": 1,
-                "maxOccurs": None,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "taxonomy_url",
+                "abstract": "Request URL where to retrieve taxonomy classes metadata. "
+                            "Class IDs should match result values found from specified 'geojson_url' input. "
+                            "Parent/child class ID hierarchy should be available to support category grouping.",
+                "formats": [{"mimeType": "application/json"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": 1,
             },
             {
                 "id": "crop_fixed_size",
                 "abstract": "Overwrite an existing batch if it already exists.",
-                "formats": [{"mimeType": "text/plain", "default": None}],
-                "type": "integer",
+                "type": ["integer", "float"],
+                "default": None,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
@@ -372,7 +388,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "maxOccurs": 1,
             },
             {
-                "id": 'overwrite',
+                "id": "overwrite",
                 "abstract": "Overwrite an existing batch if it already exists.",
                 "type": "boolean",
                 "default": False,
@@ -439,6 +455,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
             geojson_urls = self.get_input("geojson_urls", required=True)
+            taxonomy_url = self.get_input("taxonomy_url", required=True)
             raster_paths = str2paths(self.registry.settings["geoimagenet_ml.ml.source_images_paths"], list_files=True)
             crop_fixed_size = self.get_input("crop_fixed_size", one=True)
             split_ratio = self.get_input("split_ratio", one=True)
@@ -447,14 +464,17 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             self.update_job_status(STATUS.RUNNING, "fetching annotations using process job inputs", 4)
             annotations = retrieve_annotations(geojson_urls)
 
-            self.update_job_status(STATUS.RUNNING, "looking for latest batch", 5)
+            self.update_job_status(STATUS.RUNNING, "fetching taxonomy using process job inputs", 5)
+            taxonomy = retrieve_taxonomy(taxonomy_url)
+
+            self.update_job_status(STATUS.RUNNING, "looking for latest batch", 6)
             latest_batch = self.find_batch(latest_batch)
 
-            self.update_job_status(STATUS.RUNNING, "starting batch patches creation", 6)
-            dataset = create_batch_patches(annotations, raster_paths, self.db.datasets_store, dataset, latest_batch,
-                                           dataset_update_count, crop_fixed_size,
+            self.update_job_status(STATUS.RUNNING, "starting batch patches creation", 7)
+            dataset = create_batch_patches(annotations, taxonomy, raster_paths, self.db.datasets_store,
+                                           dataset, latest_batch, dataset_update_count, crop_fixed_size,
                                            lambda s, p=None: self.update_job_status(STATUS.RUNNING, s, p),
-                                           start_percent=7, final_percent=98, train_test_ratio=split_ratio)
+                                           start_percent=8, final_percent=98, train_test_ratio=split_ratio)
 
             self.save_results([{"id": "dataset", "value": dataset.uuid}], status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)

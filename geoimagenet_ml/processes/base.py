@@ -20,4 +20,8 @@ class ProcessBase(object):
     @classproperty
     def limit_single_job(self):
         # type: () -> bool
+        """
+        Specifies whether multiple parallel process executions are
+        allowed in for corresponding process identifiers.
+        """
         return False
