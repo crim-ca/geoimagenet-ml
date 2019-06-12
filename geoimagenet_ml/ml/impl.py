@@ -238,8 +238,47 @@ def retrieve_taxonomy(taxonomy_url):
     taxo = resp.json()
     if not taxo:
         raise RuntimeError("Could not find any taxonomy detail from URL: {}".format(taxonomy_url))
-    # TODO: validate format
-    return taxo
+    taxo_multi = [taxo] if isinstance(taxo, dict) else taxo  # support both specific or 'all taxonomies' responses
+    validate_taxonomy_format(taxo_multi)
+    return taxo_multi
+
+
+def validate_taxonomy_format(taxonomy):
+    # type: (List[JSON]) -> None
+    """
+    Recursively validates that required fields of taxonomy class definitions are available for later process execution.
+
+    :param taxonomy: taxonomy schema to be validated (multi-taxonomy list is expected)
+    :raises: if the taxonomy or any underlying class definition format is invalid.
+    """
+    taxonomy_class_ids = []  # ids must be unique across taxonomies
+
+    def check_taxonomy_class_format(taxonomy_class, taxonomy_id):
+        if not isinstance(taxonomy_class, dict):
+            raise TypeError("Invalid taxonomy class format definition.")
+        if taxonomy_class.get("taxonomy_id") != taxonomy_id:
+            raise ValueError("Invalid taxonomy ID doesn't match parent reference.")
+        class_id = taxonomy_class.get("id")
+        if not isinstance(class_id, int):
+            raise ValueError("Missing or invalid class ID in taxonomy.")
+        if class_id in taxonomy_class_ids:
+            raise ValueError("Duplicate class ID found in taxonomies [class={}]".format(class_id))
+        taxonomy_class_ids.append(class_id)
+        children = taxonomy_class.get("children")
+        if not isinstance(children, list):
+            raise TypeError("Invalid taxonomy class children definition.")
+        for c in children:
+            check_taxonomy_class_format(c, taxonomy_id)
+
+    if not isinstance(taxonomy, list):
+        raise TypeError("Invalid taxonomy format definition.")
+    if not len(taxonomy):
+        raise ValueError("Missing taxonomy definitions.")
+    for taxo in taxonomy:
+        taxo_id = taxo.get("taxonomy_id")
+        if not isinstance(taxo_id, int):
+            raise ValueError("Invalid taxonomy ID value.")
+        check_taxonomy_class_format(taxo, taxo_id)
 
 
 def find_best_match_raster(rasters, feature):
@@ -307,8 +346,8 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     .. seealso::
 
-        - `GeoImageNet API` example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
-        - #TODO: add example taxonomy link (GEOIM-161)
+        - `GeoImageNet API` annotation example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
+        - `GeoImageNet API` taxonomy example: https://geoimagenetdev.crim.ca/api/v1/taxonomy_classes
 
     :param annotations_meta: metadata retrieved from URL(s) (see example link).
     :param taxonomy_meta: parent/child reference class IDs hierarchy matching annotation metadata (see example link).

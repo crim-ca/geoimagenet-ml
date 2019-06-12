@@ -455,7 +455,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
             geojson_urls = self.get_input("geojson_urls", required=True)
-            taxonomy_url = self.get_input("taxonomy_url", required=True)
+            taxonomy_url = self.get_input("taxonomy_url", required=True, one=True)
             raster_paths = str2paths(self.registry.settings["geoimagenet_ml.ml.source_images_paths"], list_files=True)
             crop_fixed_size = self.get_input("crop_fixed_size", one=True)
             split_ratio = self.get_input("split_ratio", one=True)

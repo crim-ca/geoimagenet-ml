@@ -12,6 +12,10 @@ Changes
 * add fetching of taxonomy definition during `batch-creation` process execution from input URL (GEOIM-161)
 * save retrieved taxonomy definition to generated dataset batch (GEOIM-162)
 
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix incorrectly returned message from ``POST /processes/{id}/jobs`` requests in case of error
+
 1.2.0 (2019-06-11)
 ---------------------
 
