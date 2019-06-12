@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from celery import Task                 # noqa: F401
     from pyramid.registry import Registry   # noqa: F401
     from pyramid.request import Request     # noqa: F401
+    import thelper                          # noqa: F401
 
 
 class ProcessRunner(ProcessBase):
@@ -193,9 +194,15 @@ class ProcessRunnerModelTester(ProcessRunner):
                 "maxOccurs": "unbounded",
             },
             {
+                "id": "metrics",
+                "type": "float",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
                 "id": "classes",
-                "type": "string",
-                "minOccurs": 0,
+                "type": ["string", "integer"],
+                "minOccurs": 1,
                 "maxOccurs": "unbounded",
             }
         ]
@@ -219,7 +226,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             Updates the job progress based on evaluation progress (after each batch).
             Called using callback of prediction metric.
             """
-            metric = test_runner.test_metrics["predictions"]
+            metric = test_runner.test_metrics["predictions"]    # type: thelper.optim.metrics.RawPredictions
             total_sample_count = test_runner.test_loader.sample_count
             evaluated_sample_count = len(metric.predictions)  # gradually expanded on each evaluation callback
             batch_count = len(test_runner.test_loader)
@@ -280,7 +287,11 @@ class ProcessRunnerModelTester(ProcessRunner):
             # TODO:
             #   check if these results correspond to the ones updated gradually with the callback method
             #   (see: _update_job_eval_progress)
-            self.save_results([{"id": "predictions", "value": results}], status_progress=99)
+            outputs = [
+                {"id": "predictions", "value": results.pop("predictions", None)},
+                {"id": "metrics", "value": results},
+            ]
+            self.save_results(outputs, status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
 
         except Exception as task_exc:
@@ -320,7 +331,6 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             {
                 "id": "name",
                 "abstract": "Name to be applied to the batch (dataset) to be created.",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
@@ -330,7 +340,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "abstract": "List of request URL to GeoJSON annotations with patches geo-locations and metadata. "
                             "Multiple URL are combined into a single batch creation call, it should be used only for "
                             "paging GeoJSON responses. Coordinate reference systems must match between each URL.",
-                "formats": [{"mimeType": "text/plain"}],
+                "formats": [{"mimeType": "application/json"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": None,
@@ -346,8 +356,8 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             {
                 "id": "split_ratio",
                 "abstract": "Ratio to employ for train/test patch splits of the created batch.",
-                "formats": [{"mimeType": "text/plain", "default": 0.90}],
                 "type": "float",
+                "default": 0.90,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
@@ -356,16 +366,16 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "abstract": "Base dataset UUID (string) to use for incremental addition of new patches to the batch. "
                             "If False (boolean), create the new batch from nothing, without using any incremental "
                             "patches from previous datasets. By default, searches and uses the 'latest' batch.",
-                "formats": [{"mimeType": "text/plain", "default": None}],
-                "types": ["string", "boolean"],
+                "type": ["string", "boolean"],
+                "default": None,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
             {
                 "id": 'overwrite',
                 "abstract": "Overwrite an existing batch if it already exists.",
-                "formats": [{"mimeType": "text/plain", "default": False}],
                 "type": "boolean",
+                "default": False,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },

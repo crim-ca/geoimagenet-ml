@@ -182,7 +182,31 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     # override metrics to retrieve only raw predictions
     trainer["metrics"] = {
         "predictions": {
-            "type": "thelper.optim.RawPredictions",
+            "type": "thelper.optim.metrics.RawPredictions",
+        },
+        "top_1_accuracy": {
+            "type": "thelper.optim.metrics.CategoryAccuracy",
+            "params": {
+                "top_k": 1,
+            }
+        },
+        "top_5_accuracy": {
+            "type": "thelper.optim.metrics.CategoryAccuracy",
+            "params": {
+                "top_k": 5,
+            }
+        },
+        "mean_absolute_error": {
+            "type": "thelper.optim.metrics.MeanAbsoluteError",
+            "params": {
+                "reduction": "mean"
+            }
+        },
+        "mean_squared_error": {
+            "type": "thelper.optim.metrics.MeanSquaredError",
+            "params": {
+                "reduction": "mean"
+            }
         }
     }
     return test_config
