@@ -12,7 +12,6 @@ import shutil
 import six
 import ssl
 import os
-# noinspection PyPackageRequirements
 import thelper
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -23,6 +22,7 @@ if TYPE_CHECKING:
         FeatureType, RasterDataType
     )
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
+    AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
 osgeo.gdal.UseExceptions()
@@ -30,6 +30,7 @@ osgeo.gdal.UseExceptions()
 LOGGER = logging.getLogger(__name__)
 
 IMAGE_DATA_KEY = "data"
+CLASS_KNOWN_KEY = "known"
 
 
 def load_model(model_file):
@@ -69,29 +70,25 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
     save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
-    # FIXME:
-    #   If using different classes (from model.task) than ones defined by patches (dataset.task), need to filter/update
-    #   mapping accordingly and generate task.
-    #   [to be defined] how to handle mismatches: drop them, place in 'unknown' class and still evaluate them, etc.?
-    #   (see: https://www.crim.ca/jira/browse/GEOIM-153)
-    #   For now, use the dataset task directly, model must use exactly the same definition for functional operation.
-    task = test_loader.dataset.task
-    #task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
-    model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
+    model = thelper.nn.create_model(test_config["config"], None, save_dir=save_dir, ckptdata=model_checkpoint_config)
+    task = model.task  # use task as defined by
     config = test_config["config"]
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
-    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
+    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
     return trainer
 
 
 class BatchTestPatchesDatasetLoader(thelper.data.ImageFolderDataset):
     """
-    Batch dataset parser that loads only patches from 'test' split.
+    Batch dataset parser that loads only patches from 'test' split and matching
+    class IDs known by the model as defined in its ``task``.
 
-    Uses :class:`thelper.data.ImageFolderDataset` ``__getitem__`` implementation to load image from a folder, but
-    overrides the ``__init__`` to adapt the configuration to batch format.
+    .. note::
+
+        Uses :class:`thelper.data.ImageFolderDataset` ``__getitem__`` implementation to load image
+        from a folder, but overrides the ``__init__`` to adapt the configuration to batch format.
     """
     def __init__(self, config=None, transforms=None):
         if not (isinstance(config, dict) and len(config)):
@@ -106,20 +103,51 @@ class BatchTestPatchesDatasetLoader(thelper.data.ImageFolderDataset):
         # 'image' for original image path that was used to generate the patch from
         # 'feature' for annotation reference id
         meta_keys = [self.path_key, self.idx_key, "crops", "image", "feature"]
-        class_ids = set()
+        sample_class_ids = set()
         samples = []
+        taxonomy = config["data"]["taxonomy"]
         for patch_path, patch_info in zip(config["files"], config["data"]["patches"]):
             if patch_info["split"] == "test":
-                class_name = patch_info["class"]
-                class_ids.add(class_name)
-                samples.append(deepcopy(patch_info))
-                samples[-1][self.path_key] = patch_path
-        if not len(class_ids):
-            raise ValueError("No patch/class could be retrieved from batch for loading.")
+                if patch_info.get(CLASS_KNOWN_KEY, False):
+                    class_name = patch_info["class"]
+                    sample_class_ids.add(class_name)
+                    samples.append(deepcopy(patch_info))
+                    samples[-1][self.path_key] = patch_path
+        if not len(sample_class_ids):
+            raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
+        unknown_class_ids = list(sample_class_ids - known_class_ids)
+        if len(unknown_class_ids):
+            raise RuntimeError("Failed to filter unknown classes for model testing: {}".format(unknown_class_ids))
         thelper.data.ClassificationDataset.__init__(
-            self, class_names=list(class_ids), input_key=self.image_key,
-            label_key=self.label_key, meta_keys=meta_keys, config=config, transforms=transforms)
+            self, class_names=list(sample_class_ids), input_key=self.image_key,
+            label_key=self.label_key, meta_keys=meta_keys, transforms=transforms)
         self.samples = samples
+
+
+def adapt_dataset_for_model_task(model_task, dataset):
+    # type: (AnyTask, Dataset) -> JSON
+    """
+    Generates dataset
+    Retrieves available classes from the loaded dataset parameters and preserves only matching classes with the task
+    defined by the original model checkpoint definition (``task`` section).
+
+    .. seealso::
+        - :class:`BatchTestPatchesDatasetLoader` for dataset parameters used for loading filtered patches.
+
+    :param model_task: original task defined by the model training which specifies known classes.
+    :param dataset: batch of patches from which to extract matching classes known to the model.
+    :return: configuration that allows ``thelper`` to generate a data loader for testing the model on desired patches.
+    """
+
+    dataset_params = dataset.json()     # json required because thelper dumps config during logs
+    # TODO:
+    #   filter classes from `dataset_params` to keep only supported ones by model
+    #   use classes from `model_task.class_names`
+    c = model_task.class_names
+    return {
+        "type": "{}.{}".format(BatchTestPatchesDatasetLoader.__module__, BatchTestPatchesDatasetLoader.__name__),
+        "params": dataset_params
+    }
 
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
@@ -136,14 +164,14 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
 
-    # overrides of deployed model and dataset, json required because thelper dumps config
-    test_dataset = dataset_config_override["name"]
+    # override deployed model and dataset references
+    # override with model task classes instead of full dataset so we don't specialize the model
+    # (test only on classes known by the model)
+    test_dataset_name = dataset_config_override["name"]
+    test_model_task = thelper.tasks.create_task(test_config)        # FIXME: this will raise in str tasks definitions until thelper>=0.3
     test_config["config"]["name"] = model_config_override["name"]
     test_config["config"]["datasets"] = {
-        test_dataset: {
-            "type": "{}.{}".format(BatchTestPatchesDatasetLoader.__module__, BatchTestPatchesDatasetLoader.__name__),
-            "params": dataset_config_override.json()
-        }
+        test_dataset_name: adapt_dataset_for_model_task(test_model_task, dataset_config_override)
     }
 
     # back-compatibility replacement
@@ -164,7 +192,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
-        test_dataset: 1.0    # use every single test dataset patch
+        test_dataset_name: 1.0    # use every single test dataset patch
     }
     trainer["use_tbx"] = False
     trainer["type"] = "{}.{}".format(thelper.train.classif.ImageClassifTrainer.__module__,
@@ -179,7 +207,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     #   ``geoimagenet_ml.api.routes.processes.utils.process_ml_job_runner`` for worker setup
     loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
 
-    # override metrics to retrieve only raw predictions
+    # override metrics to retrieve the ones required for result output
     trainer["metrics"] = {
         "predictions": {
             "type": "thelper.optim.metrics.RawPredictions",

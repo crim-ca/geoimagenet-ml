@@ -11,6 +11,7 @@ Changes
 * add additional metrics (Top-1, Top-5, MAE, MSE) in process `model-tester` execution results (GEOIM-163)
 * add fetching of taxonomy definition during `batch-creation` process execution from input URL (GEOIM-161)
 * save retrieved taxonomy definition to generated dataset batch (GEOIM-162)
+* enforce ``thelper>=0.3`` to use new operation modes and back compatibility import methods
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
