@@ -80,10 +80,16 @@ def valid_model(model_data):
     # FIXME: thelper security risk, refuse literal string definition of task loaded by eval()
     model_task = model_data.get("task")
     if not isinstance(model_task, dict):
-        return False, ValueError("Forbidden checkpoint task definition as string. Only JSON configuration allowed.")
-    model_type = model_task.get("params", {}).get("type")
+        return False, TypeError("Forbidden checkpoint task definition as string. Only JSON configuration allowed.")
+    model_type = model_task.get("type")
     if not isinstance(model_type, six.string_types) or model_type not in MODEL_TASK_MAPPING:
         return False, ValueError("Forbidden checkpoint task defines unknown operation: [{!s}]".format(model_type))
+    model_params = model_task.get("params")
+    if not isinstance(model_params, dict):
+        return False, TypeError("Forbidden checkpoint task missing JSON definition of parameter section.")
+    model_classes = model_params.get("class_names")
+    if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
+        return False, TypeError("Forbidden checkpoint task contains invalid JSON class names parameter section.")
     return True, None
 
 
@@ -120,6 +126,7 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
     def __init__(self, dataset=None, transforms=None):
         if not (isinstance(dataset, dict) and len(dataset)):
             raise ValueError("Expected dataset parameters as configuration input.")
+        thelper.data.Dataset.__init__(self, transforms=transforms, deepcopy=False)
         self.root = dataset["path"]
         # keys matching dataset config for easy loading and referencing to same fields
         self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
@@ -150,10 +157,13 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
 
 class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoader):
     def __init__(self, dataset=None, transforms=None):
-        super().__init__(dataset, transforms)
-        thelper.data.ClassificationDataset.__init__(
-            self, class_names=list(self.sample_class_ids), input_key=self.image_key,
-            label_key=self.label_key, meta_keys=self.meta_keys, transforms=transforms)
+        super(BatchTestPatchesClassificationDatasetLoader, self).__init__(dataset, transforms)
+        self.task = thelper.tasks.Classification(
+            class_names=list(self.sample_class_ids),
+            input_key=self.image_key,
+            label_key=self.label_key,
+            meta_keys=self.meta_keys,
+        )
 
 
 def adapt_dataset_for_model_task(model_task, dataset):
@@ -236,7 +246,7 @@ def adapt_dataset_for_model_task(model_task, dataset):
 
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
-    # type: (JSON, Model, Dataset, SettingsType) -> JSON
+    # type: (CkptData, Model, Dataset, SettingsType) -> JSON
     """
     Obtains a simplified version of the configuration for 'test' task corresponding to the model and dataset.
     Removes parameters from the original file that would require additional unnecessary operations other than testing.
@@ -244,17 +254,17 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     """
 
     # transfer required parts, omit training specific values or error-prone configurations
-    test_config = deepcopy(model_checkpoint_config)     # type: JSON
+    test_config = deepcopy(model_checkpoint_config)
     test_config["name"] = model_config_override["name"]
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
 
     # override deployed model and dataset references
-    #   - override model task label key that could be modified by user to find the one defined by the dataset loader
+    #   - override model task input/label keys that could be modified by user to match definitions of dataset loader
     #   - override model task classes instead of full dataset so we don't specialize the model
     #     (test only on classes known by the model, or on any class nested under a more generic category)
     test_dataset_name = dataset_config_override["name"]
-    test_config["task"]["label_key"] = IMAGE_LABEL_KEY
+    test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
     test_model_task = thelper.tasks.create_task(test_config["task"])
     test_model_task_name = fully_qualified_name(test_model_task)
     test_config["config"]["name"] = model_config_override["name"]
