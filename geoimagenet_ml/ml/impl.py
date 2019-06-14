@@ -1,4 +1,4 @@
-from geoimagenet_ml.utils import get_sane_name
+from geoimagenet_ml.utils import get_sane_name, fully_qualified_name
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
@@ -18,23 +18,26 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Callable, List, Tuple, Union, ParamsType, JSON, SettingsType, Number, Optional,
-        FeatureType, RasterDataType
+        Any, AnyStr, Callable, List, Tuple, Union, JSON, SettingsType, Number, Optional, FeatureType, RasterDataType
     )
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
+    # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
     AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
+    CkptData = thelper.typedefs.CheckpointContentType   # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
 osgeo.gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
-IMAGE_DATA_KEY = "data"
-CLASS_KNOWN_KEY = "known"
+# keys used across methods to find matching configs, must be unique and non-conflicting with other sample keys
+IMAGE_DATA_KEY = "data"     # key used to store temporarily the loaded image data
+IMAGE_LABEL_KEY = "label"   # key used to store the class label used by the model
+TAXONOMY_MODEL_MAPPING_KEY = "taxonomy_model_map"   # taxonomy ID -> model labels
 
 
 def load_model(model_file):
-    # type: (Union[Any, AnyStr]) -> Tuple[bool, ParamsType, Optional[BytesIO], Optional[Exception]]
+    # type: (Union[Any, AnyStr]) -> Tuple[bool, CkptData, Optional[BytesIO], Optional[Exception]]
     """
     Tries to load a model checkpoint file from the file-like object, file path or URL.
 
@@ -62,17 +65,39 @@ def load_model(model_file):
     return False, {}, None, None
 
 
+def valid_model(model_data):
+    # type: (CkptData) -> Tuple[bool, Optional[Exception]]
+    """
+    Accomplishes required model checkpoint validation to restrict expected behaviour during other function calls.
+
+    All security checks or alternative behaviours allowed by native ``thelper`` library but that should be forbidden
+    within this API for process execution should be done here.
+
+    :param model_data: model checkpoint data with configuration parameters (typically loaded by `load_model`)
+    :return: tuple of (success, exception) accordingly
+    :raises: None (nothrow)
+    """
+    # FIXME: thelper security risk, refuse literal string definition of task loaded by eval()
+    model_task = model_data.get("task")
+    if not isinstance(model_task, dict):
+        return False, ValueError("Forbidden checkpoint task definition as string. Only JSON configuration allowed.")
+    model_type = model_task.get("params", {}).get("type")
+    if not isinstance(model_type, six.string_types) or model_type not in MODEL_TASK_MAPPING:
+        return False, ValueError("Forbidden checkpoint task defines unknown operation: [{!s}]".format(model_type))
+    return True, None
+
+
 def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
-    # type: (Job, JSON, Model, Dataset, SettingsType) -> thelper.train.Trainer
+    # type: (Job, CkptData, Model, Dataset, SettingsType) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
     save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
-    model = thelper.nn.create_model(test_config["config"], None, save_dir=save_dir, ckptdata=model_checkpoint_config)
-    task = model.task  # use task as defined by
     config = test_config["config"]
+    model = thelper.nn.create_model(config, None, save_dir=save_dir, ckptdata=test_config)
+    task = model.task
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
@@ -80,74 +105,134 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     return trainer
 
 
-class BatchTestPatchesDatasetLoader(thelper.data.ImageFolderDataset):
+class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
     """
     Batch dataset parser that loads only patches from 'test' split and matching
-    class IDs known by the model as defined in its ``task``.
+    class IDs (or their parents) known by the model as defined in its ``task``.
 
     .. note::
 
         Uses :class:`thelper.data.ImageFolderDataset` ``__getitem__`` implementation to load image
         from a folder, but overrides the ``__init__`` to adapt the configuration to batch format.
     """
-    def __init__(self, config=None, transforms=None):
-        if not (isinstance(config, dict) and len(config)):
+
+    # noinspection PyMissingConstructor
+    def __init__(self, dataset=None, transforms=None):
+        if not (isinstance(dataset, dict) and len(dataset)):
             raise ValueError("Expected dataset parameters as configuration input.")
-        self.root = config["path"]
+        self.root = dataset["path"]
         # keys matching dataset config for easy loading and referencing to same fields
         self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
-        self.label_key = "class"            # class id from API
-        self.path_key = "path"              # actual file path
+        self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
+        self.path_key = "path"              # actual file path of the patch
         self.idx_key = "index"              # increment for __getitem__
         # 'crops' for extra data such as coordinates
         # 'image' for original image path that was used to generate the patch from
         # 'feature' for annotation reference id
-        meta_keys = [self.path_key, self.idx_key, "crops", "image", "feature"]
+        self.meta_keys = [self.path_key, self.idx_key, "crops", "image", "feature"]
+        model_class_map = dataset["data"][TAXONOMY_MODEL_MAPPING_KEY]
         sample_class_ids = set()
         samples = []
-        taxonomy = config["data"]["taxonomy"]
-        for patch_path, patch_info in zip(config["files"], config["data"]["patches"]):
+        for patch_path, patch_info in zip(dataset["files"], dataset["data"]["patches"]):
             if patch_info["split"] == "test":
-                if patch_info.get(CLASS_KNOWN_KEY, False):
-                    class_name = patch_info["class"]
+                # convert the dataset class ID into the model class ID using mapping, drop sample if not found
+                class_name = model_class_map.get(patch_info["class"])
+                if class_name is not None:
                     sample_class_ids.add(class_name)
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = patch_path
+                    samples[-1][self.label_key] = class_name
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
-        unknown_class_ids = list(sample_class_ids - known_class_ids)
-        if len(unknown_class_ids):
-            raise RuntimeError("Failed to filter unknown classes for model testing: {}".format(unknown_class_ids))
-        thelper.data.ClassificationDataset.__init__(
-            self, class_names=list(sample_class_ids), input_key=self.image_key,
-            label_key=self.label_key, meta_keys=meta_keys, transforms=transforms)
         self.samples = samples
+        self.sample_class_ids = sample_class_ids
+
+
+class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoader):
+    def __init__(self, dataset=None, transforms=None):
+        super().__init__(dataset, transforms)
+        thelper.data.ClassificationDataset.__init__(
+            self, class_names=list(self.sample_class_ids), input_key=self.image_key,
+            label_key=self.label_key, meta_keys=self.meta_keys, transforms=transforms)
 
 
 def adapt_dataset_for_model_task(model_task, dataset):
     # type: (AnyTask, Dataset) -> JSON
     """
-    Generates dataset
+    Generates dataset parameter definition for loading from checkpoint configuration with ``thelper``.
+
     Retrieves available classes from the loaded dataset parameters and preserves only matching classes with the task
-    defined by the original model checkpoint definition (``task`` section).
+    defined by the original model task. Furthermore, parent/child class IDs are resolved recursively in a bottom-top
+    manner to adapt specific classes into corresponding `categories` in the case the model uses them as more generic
+    classes.
 
     .. seealso::
-        - :class:`BatchTestPatchesDatasetLoader` for dataset parameters used for loading filtered patches.
+        - :class:`BatchTestPatchesBaseDatasetLoader` for dataset parameters used for loading filtered patches.
 
     :param model_task: original task defined by the model training which specifies known classes.
     :param dataset: batch of patches from which to extract matching classes known to the model.
     :return: configuration that allows ``thelper`` to generate a data loader for testing the model on desired patches.
     """
+    try:
+        dataset_params = dataset.json()     # json required because thelper dumps config during logs
+        all_classes_mapping = dict()        # child->parent taxonomy class ID mapping
+        all_model_mapping = dict()          # taxonomy->model class ID mapping
+        all_child_classes = set()           # only taxonomy child classes IDs
 
-    dataset_params = dataset.json()     # json required because thelper dumps config during logs
-    # TODO:
-    #   filter classes from `dataset_params` to keep only supported ones by model
-    #   use classes from `model_task.class_names`
-    c = model_task.class_names
-    return {
-        "type": "{}.{}".format(BatchTestPatchesDatasetLoader.__module__, BatchTestPatchesDatasetLoader.__name__),
-        "params": dataset_params
-    }
+        # find existing mappings defined by taxonomy
+        def find_class_mapping(taxonomy_class, parent=None):
+            children = taxonomy_class.get("children")
+            class_id = taxonomy_class.get("id")
+            if children:
+                for child in children:
+                    find_class_mapping(child, taxonomy_class)
+            else:
+                all_child_classes.add(class_id)
+            all_classes_mapping[class_id] = None if not parent else parent.get("id")
+
+        for taxo in dataset_params["data"]["taxonomy"]:
+            find_class_mapping(taxo)
+        LOGGER.debug("Taxonomy class mapping:  {}".format(all_classes_mapping))
+        LOGGER.debug("Taxonomy class children: {}".format(all_child_classes))
+
+        # find model mapping using taxonomy hierarchy
+        def get_children_class_ids(parent_id):
+            children_ids = set()
+            filtered_ids = set([c for c, p in all_classes_mapping.items() if p == parent_id])
+            for c in filtered_ids:
+                if c not in all_child_classes:
+                    children_ids = children_ids | get_children_class_ids(c)
+            return children_ids | filtered_ids
+
+        for model_class_id in sorted(model_task.class_names):
+            # attempt str->int conversion of model string, they should match taxonomy class IDs
+            try:
+                model_class_id = int(model_class_id)
+            except ValueError:
+                raise ValueError("Unknown class ID '{}' cannot be matched with taxonomy classes".format(model_class_id))
+            if model_class_id not in all_classes_mapping:
+                raise ValueError("Unknown class ID '{}' cannot be found in taxonomy".format(model_class_id))
+            # while looking for parent/child mapping, also convert IDs as thelper requires string labels
+            if model_class_id in all_child_classes:
+                LOGGER.debug("Class {0}: found direct child ID ({0}->{0})".format(model_class_id))
+                all_model_mapping[model_class_id] = str(model_class_id)
+            else:
+                categorized_classes = get_children_class_ids(model_class_id)
+                for cat_id in categorized_classes:
+                    all_model_mapping[cat_id] = str(model_class_id)
+                LOGGER.debug("Class {0}: found category class IDs ({0}->AnyOf{1})"
+                             .format(model_class_id, list(categorized_classes)))
+        LOGGER.debug("Model class mapping: {}".format(all_model_mapping))
+
+        # update obtained mapping with dataset parameters for loader
+        dataset_params["data"][TAXONOMY_MODEL_MAPPING_KEY] = all_model_mapping
+        model_task_name = fully_qualified_name(model_task)
+        return {
+            "type": MODEL_TASK_MAPPING[model_task_name]["loader"],
+            "params": {"dataset": dataset_params},
+        }
+    except Exception as exc:
+        raise RuntimeError("Failed dataset adaptation to model task classes for evaluation. [{!r}]".format(exc))
 
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
@@ -165,10 +250,13 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         test_config.pop(key, None)
 
     # override deployed model and dataset references
-    # override with model task classes instead of full dataset so we don't specialize the model
-    # (test only on classes known by the model)
+    #   - override model task label key that could be modified by user to find the one defined by the dataset loader
+    #   - override model task classes instead of full dataset so we don't specialize the model
+    #     (test only on classes known by the model, or on any class nested under a more generic category)
     test_dataset_name = dataset_config_override["name"]
-    test_model_task = thelper.tasks.create_task(test_config)        # FIXME: this will raise in str tasks definitions until thelper>=0.3
+    test_config["task"]["label_key"] = IMAGE_LABEL_KEY
+    test_model_task = thelper.tasks.create_task(test_config["task"])
+    test_model_task_name = fully_qualified_name(test_model_task)
     test_config["config"]["name"] = model_config_override["name"]
     test_config["config"]["datasets"] = {
         test_dataset_name: adapt_dataset_for_model_task(test_model_task, dataset_config_override)
@@ -192,11 +280,10 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
-        test_dataset_name: 1.0    # use every single test dataset patch
+        test_dataset_name: 1.0    # use every single dataset patch found by the test loader
     }
     trainer["use_tbx"] = False
-    trainer["type"] = "{}.{}".format(thelper.train.classif.ImageClassifTrainer.__module__,
-                                     thelper.train.classif.ImageClassifTrainer.__name__)
+    trainer["type"] = MODEL_TASK_MAPPING[test_model_task_name]["tester"]
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
 
@@ -538,3 +625,13 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     update_func("updating completed dataset definition", final_percent)
     dataset_container.mark_finished()
     return dataset_store.save_dataset(dataset_container, overwrite=True)
+
+
+# FIXME: add definitions/implementations to support other task types (ex: object-detection)
+MODEL_TASK_MAPPING = {
+    fully_qualified_name(thelper.tasks.classif.Classification): {
+        "task": fully_qualified_name(thelper.tasks.classif.Classification),
+        "loader": fully_qualified_name(BatchTestPatchesClassificationDatasetLoader),
+        "tester": fully_qualified_name(thelper.train.classif.ImageClassifTrainer),
+    }
+}

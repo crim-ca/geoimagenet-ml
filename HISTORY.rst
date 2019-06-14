@@ -12,6 +12,9 @@ Changes
 * add fetching of taxonomy definition during `batch-creation` process execution from input URL (GEOIM-161)
 * save retrieved taxonomy definition to generated dataset batch (GEOIM-162)
 * enforce ``thelper>=0.3`` to use new operation modes and back compatibility import methods
+* add model checkpoint validation checks and raise ``ModelValidationError`` (``HTTP Forbidden [403]``) if invalid
+    - disallowed loading a model task defined as literal string, must be a JSON definition of parameters
+    - disallowed loading a model task not matched within existing job mapping (processing steps must be fully defined)
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~

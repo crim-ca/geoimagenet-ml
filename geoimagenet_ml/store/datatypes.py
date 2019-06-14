@@ -21,7 +21,7 @@ from geoimagenet_ml.utils import (
 from geoimagenet_ml.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
 from geoimagenet_ml.store import exceptions as ex
-from geoimagenet_ml.ml.impl import load_model
+from geoimagenet_ml.ml.impl import load_model, valid_model
 from pyramid_celery import celery_app as app
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
@@ -666,7 +666,9 @@ class Model(Base, WithName, WithUser, WithVisibility):
         :raises ModelInstanceError:
             if none of the fields can help retrieve the model's data.
         :raises ModelLoadingError:
-            if saving cannot be accomplished using provided fields because of invalid format or failing validation.
+            if saving cannot be accomplished using provided fields because of invalid format.
+        :raises ModelValidationError:
+            if configuration data to be saved did not pass model validation checks.
         :raises ModelRegistrationError:
             if the save location is invalid.
         :raises ModelConflictError:
@@ -713,9 +715,12 @@ class Model(Base, WithName, WithUser, WithVisibility):
     def _load_check_data(path):
         success, data, buffer, exception = load_model(path)  # nothrow operation
         if not success:
-            if not exception:
-                exception = "unknown reason"
-            raise ex.ModelLoadingError("Failed loading model data: [{!r}].".format(exception))
+            msg = "Failed loading model data: [{!r}].".format(exception or "unknown reason")
+            raise ex.ModelLoadingError(msg)
+        success, exception = valid_model(data)  # nothrow operation
+        if not success:
+            msg = "Failed validation of model configuration: [{!r}].".format(exception or "unknown reason")
+            raise ex.ModelValidationError(msg)
         return data, buffer
 
     @property
