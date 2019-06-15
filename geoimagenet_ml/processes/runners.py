@@ -1,6 +1,12 @@
 from geoimagenet_ml.constants import SORT, ORDER
 from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
-from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations, retrieve_taxonomy
+from geoimagenet_ml.ml.impl import (
+    get_test_data_runner,
+    get_test_results,
+    create_batch_patches,
+    retrieve_annotations,
+    retrieve_taxonomy,
+)
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.status import map_status, STATUS
 from abc import abstractmethod
@@ -169,14 +175,12 @@ class ProcessRunnerModelTester(ProcessRunner):
         return [
             {
                 "id": "dataset",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
             },
             {
                 "id": "model",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
@@ -187,24 +191,47 @@ class ProcessRunnerModelTester(ProcessRunner):
     def outputs(self):
         return [
             {
-                # FIXME: valid types?
                 "id": "predictions",
                 "type": "float",
+                "abstract": "List of raw predictions produced by the model, for each test sample from the input "
+                            "dataset (see 'samples'). Prediction scores per sample correspond to classes supported "
+                            "by the model (see 'classes') that where matched against the corresponding input dataset "
+                            "class IDs.",
                 "minOccurs": 1,
                 "maxOccurs": "unbounded",
             },
             {
                 "id": "metrics",
                 "type": "float",
+                "abstract": "List of metrics evaluated across all retained dataset samples and class prediction "
+                            "scores by the model.",
                 "minOccurs": 0,
                 "maxOccurs": "unbounded",
             },
             {
                 "id": "classes",
-                "type": ["string", "integer"],
+                "type": ["string", "integer", None],
+                "abstract": "Class ID mapping employed between the input dataset classes and the supported classes "
+                            "by the model.",
                 "minOccurs": 1,
                 "maxOccurs": "unbounded",
-            }
+            },
+            {
+                "id": "samples",
+                "type": ["string", "integer"],
+                "abstract": "List of samples retained from the input dataset for the model evaluation "
+                            "(samples for which their class ID was matched with one of the supported model "
+                            "class ID or their parent category).",
+                "minOccurs": 0,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "info",
+                "type": ["string", "integer", "float", None],
+                "abstract": "Additional prediction results information.",
+                "minOccurs": 0,
+                "maxOccurs": "unbounded",
+            },
         ]
 
     def __call__(self, *args, **kwargs):
@@ -281,16 +308,16 @@ class ProcessRunnerModelTester(ProcessRunner):
             # link the predictions with a callback for progress update during evaluation
             pred_metric = test_runner.test_metrics["predictions"]
             pred_metric.callback = lambda: \
-                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=98)
+                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=95)
             self.update_job_status(STATUS.RUNNING, "starting test data prediction evaluation", 5)
             results = test_runner.eval()
-            # TODO:
-            #   check if these results correspond to the ones updated gradually with the callback method
-            #   (see: _update_job_eval_progress)
-            outputs = [
-                {"id": "predictions", "value": results.pop("predictions", None)},
-                {"id": "metrics", "value": results},
-            ]
+
+            self.update_job_status(STATUS.RUNNING, "retrieving complete test data prediction results", 97)
+            test_results = get_test_results(test_runner, results)
+
+            self.update_job_status(STATUS.RUNNING, "preparing jobs outputs with prediction results", 98)
+            outputs = [{"id": k, "value": v} for k, v in test_results.items()]
+
             self.save_results(outputs, status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
 

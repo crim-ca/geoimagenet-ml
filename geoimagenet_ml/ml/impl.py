@@ -320,21 +320,62 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
             "params": {
                 "top_k": 5,
             }
-        },
-        "mean_absolute_error": {
-            "type": "thelper.optim.metrics.MeanAbsoluteError",
-            "params": {
-                "reduction": "mean"
-            }
-        },
-        "mean_squared_error": {
-            "type": "thelper.optim.metrics.MeanSquaredError",
-            "params": {
-                "reduction": "mean"
-            }
         }
     }
     return test_config
+
+
+def classification_test_results_finder(test_config, test_results):
+    # type: (JSON, JSON) -> JSON
+    """Specialized result finder for classification task.
+
+    .. seealso::
+        :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+    """
+    # only one test dataset submitted for evaluation (ie: unique 'test_split' in 'test_loader_from_configs')
+    test_results = test_results[0].get("test/metrics")
+    test_dataset = list(test_config["datasets"].values())[0]
+    test_model_class_map = test_dataset["params"]["dataset"]["data"][TAXONOMY_MODEL_MAPPING_KEY]
+
+    # TODO:
+    #   - add 'extra info' about sample counts
+    #   - extra each section 'samples', 'classes', 'metrics', 'predictions'
+    return
+
+
+def get_test_results(test_runner, test_results):
+    # type: (thelper.train.Trainer, JSON) -> JSON
+    """
+    Obtains a JSON result representation matching the ``test_runner`` specialized task
+    and ``test_results`` retrieved from the model evaluation with ``metrics`` defined in the task.
+
+    Typically, results would be obtained from calling::
+
+        test_runner.eval()
+
+    The function ensures the backward mapping of predictions to class IDs.
+    It also cleans up the results as they would otherwise be too verbose for output.
+
+    The resulting JSON is in the form::
+
+        {
+            "classes": [{}],
+            "samples": [{}],
+            "predictions": [{}]
+            "metrics": [{"<name>": <value>}],
+        }
+
+    .. seealso::
+        :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
+    """
+    test_task_name = fully_qualified_name(test_runner.task)
+    test_result_finder = MODEL_TASK_MAPPING[test_task_name]["result"]
+
+    # only one test dataset submitted for evaluation (ie: unique 'test_split' in 'test_loader_from_configs')
+    test_results = test_results[0].get("test/metrics")
+    test_dataset = list(test_runner.config["datasets"].values())[0]
+
+    return test_result_finder(test_runner.config, test_results)
 
 
 def retrieve_annotations(geojson_urls):
@@ -643,5 +684,6 @@ MODEL_TASK_MAPPING = {
         "task": fully_qualified_name(thelper.tasks.classif.Classification),
         "loader": fully_qualified_name(BatchTestPatchesClassificationDatasetLoader),
         "tester": fully_qualified_name(thelper.train.classif.ImageClassifTrainer),
+        "result": classification_test_results_finder,
     }
 }
