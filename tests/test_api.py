@@ -21,9 +21,7 @@ from geoimagenet_ml.utils import now
 from dateutil.parser import parse as dt_parse
 from tests import utils
 import pyramid.testing
-# noinspection PyPackageRequirements
 import pytest
-# noinspection PyPackageRequirements
 import mock
 import unittest
 import tempfile
@@ -34,8 +32,8 @@ import uuid
 import six
 import os
 
-
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from geoimagenet_ml.store.databases.mongodb import MongoDatabase
 
@@ -46,6 +44,7 @@ class TestImportApi(unittest.TestCase):
     .. seealso::
         - :module:`geoimagenet_ml.ml.impl` for details.
     """
+
     def test_import_api(self):
         """No ``ImportError`` should occur on any import from :module:`geoimagenet_ml.ml.impl`."""
         try:
@@ -101,7 +100,7 @@ class TestModelApi(unittest.TestCase):
         cls.conf = utils.setup_config_with_mongodb()
         cls.app = utils.setup_test_app(config=cls.conf)
         cls.json_headers = [("Content-Type", schemas.ContentTypeJSON), ("Accept", schemas.ContentTypeJSON)]
-        cls.db = database_factory(cls.conf.registry)    # type: MongoDatabase
+        cls.db = database_factory(cls.conf.registry)  # type: MongoDatabase
         cls.MODEL_BASE_PATH = cls.conf.registry.settings.get("geoimagenet_ml.ml.models_path")
 
         # url to existing remote model file definition
@@ -143,10 +142,11 @@ class TestModelApi(unittest.TestCase):
         def valid_model_no_check(data):
             return True, None
 
-        with mock.patch("thelper.utils.load_checkpoint", side_effect=load_checkpoint_no_check):
-            with mock.patch("geoimagenet_ml.ml.impl.valid_model", side_effect=valid_model_no_check):
-                self.model_1 = self.db.models_store.save_model(self.model_1)
-                self.model_2 = self.db.models_store.save_model(self.model_2)
+        with mock.patch("thelper.utils.load_checkpoint", side_effect=load_checkpoint_no_check), \
+                mock.patch("geoimagenet_ml.ml.impl.valid_model", side_effect=valid_model_no_check), \
+                mock.patch("geoimagenet_ml.store.datatypes.valid_model", side_effect=valid_model_no_check):
+            self.model_1 = self.db.models_store.save_model(self.model_1)
+            self.model_2 = self.db.models_store.save_model(self.model_2)
 
         self.process = Process(uuid=uuid.uuid4(), type="test", identifier="test")
         self.db.processes_store.delete_process(self.process.identifier)
@@ -523,4 +523,5 @@ class TestProcessJobApi(unittest.TestCase):
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(unittest.main())
