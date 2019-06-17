@@ -8,7 +8,7 @@ Unreleased
 
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
-* add additional metrics (Top-1, Top-5, MAE, MSE) in process `model-tester` execution results (GEOIM-163)
+* add additional metrics (Top-1, Top-5) in process `model-tester` execution results (GEOIM-163)
 * add fetching of taxonomy definition during `batch-creation` process execution from input URL (GEOIM-161)
 * save retrieved taxonomy definition to generated dataset batch (GEOIM-162)
 * enforce ``thelper>=0.3`` to use new operation modes and back compatibility import methods
@@ -16,6 +16,8 @@ Changes
     - disallow loading a model task defined as literal string, must be a JSON definition of parameters
     - disallow loading a model task not matched within existing job mapping (processing steps must be fully defined)
     - disallow loading a model task without minimal configuration parameters required during `model-tester` execution
+* add named key variables to help understand corresponding items across dictionary definitions and generated results
+* add more detail to produced results of `model-tester` process (GEOIM-163)
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~

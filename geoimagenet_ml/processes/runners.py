@@ -191,12 +191,19 @@ class ProcessRunnerModelTester(ProcessRunner):
     def outputs(self):
         return [
             {
+                "id": "summary",
+                "type": ["string", "integer", "float", None],
+                "abstract": "Additional prediction results information.",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
                 "id": "predictions",
                 "type": "float",
                 "abstract": "List of raw predictions produced by the model, for each test sample from the input "
-                            "dataset (see 'samples'). Prediction scores per sample correspond to classes supported "
+                            "dataset (see 'samples'). Predictions per sample correspond to classes supported "
                             "by the model (see 'classes') that where matched against the corresponding input dataset "
-                            "class IDs.",
+                            "class IDs (see 'mapping'). Format of predictions depend on the model task type.",
                 "minOccurs": 1,
                 "maxOccurs": "unbounded",
             },
@@ -205,11 +212,18 @@ class ProcessRunnerModelTester(ProcessRunner):
                 "type": "float",
                 "abstract": "List of metrics evaluated across all retained dataset samples and class prediction "
                             "scores by the model.",
-                "minOccurs": 0,
+                "minOccurs": 1,
                 "maxOccurs": "unbounded",
             },
             {
                 "id": "classes",
+                "type": ["string", "integer", None],
+                "abstract": "Class ID ordering of the model (classes represented by corresponding output indices).",
+                "minOccurs": 0,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "mapping",
                 "type": ["string", "integer", None],
                 "abstract": "Class ID mapping employed between the input dataset classes and the supported classes "
                             "by the model.",
@@ -222,14 +236,7 @@ class ProcessRunnerModelTester(ProcessRunner):
                 "abstract": "List of samples retained from the input dataset for the model evaluation "
                             "(samples for which their class ID was matched with one of the supported model "
                             "class ID or their parent category).",
-                "minOccurs": 0,
-                "maxOccurs": "unbounded",
-            },
-            {
-                "id": "info",
-                "type": ["string", "integer", "float", None],
-                "abstract": "Additional prediction results information.",
-                "minOccurs": 0,
+                "minOccurs": 1,
                 "maxOccurs": "unbounded",
             },
         ]
