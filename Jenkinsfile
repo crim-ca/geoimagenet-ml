@@ -35,7 +35,7 @@ pipeline {
                     docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*"') { c ->
                         sh """
                         docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb -e MONGODB_PORT=27017 $LOCAL_IMAGE_NAME /bin/sh -c \" \
-                        TEST_MODEL_URL="https://ogc-ems.crim.ca/twitcher/wpsoutputs/test_model_ckpt.pth" make test-req test-all"
+                        TEST_MODEL_URL="https://ogc-ems.crim.ca/twitcher/wpsoutputs/ckpt-gin-task-classes-str-10.pth" make test-req test-all"
                         """
                         // todo: replace above temporary URL, using EMS server to get tests running
                     }
