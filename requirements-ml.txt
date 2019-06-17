@@ -1,4 +1,4 @@
-thelper>=0.3
+thelper>=0.3.1
 scipy
 shapely
 affine
