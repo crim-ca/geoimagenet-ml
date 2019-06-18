@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.3.0 (2019-06-18)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add additional metrics (Top-1, Top-5) in process `model-tester` execution results (GEOIM-163)
