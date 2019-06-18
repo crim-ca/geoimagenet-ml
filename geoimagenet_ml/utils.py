@@ -20,7 +20,7 @@ import os
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Dict, List, Optional, Union, SettingsType, AnySettingsContainer, AnyRegistryContainer
+        Any, AnyStr, Dict, List, Optional, Union, Type, SettingsType, AnySettingsContainer, AnyRegistryContainer
     )
 
 
@@ -220,8 +220,10 @@ def assert_sane_name(name, min_len=3, max_len=None):
 
 
 def fully_qualified_name(obj):
-    # type: (Any) -> AnyStr
-    return '.'.join([obj.__module__, type(obj).__name__])
+    # type: (Union[Any, Type[Any]]) -> AnyStr
+    """Obtains the ``'<module>.<name>'`` full path definition of the object to allow finding and importing it."""
+    cls = obj if isclass(obj) else type(obj)
+    return '.'.join([obj.__module__, cls.__name__])
 
 
 def clean_json_text_body(body):

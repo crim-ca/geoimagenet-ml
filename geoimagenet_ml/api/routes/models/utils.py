@@ -28,7 +28,7 @@ def create_model(request):
         tmp_model = Model(name=model_name, path=model_path, user=get_user_id(request))
         new_model = database_factory(request).models_store.save_model(tmp_model, request=request)
         return new_model
-    except exc.ModelRegistrationError as exception:
+    except (exc.ModelRegistrationError, exc.ModelValidationError) as exception:
         ex.raise_http(httpError=HTTPForbidden, request=request,
                       detail=s.Models_POST_ForbiddenResponseSchema.description,
                       content={"exception": repr(exception)})

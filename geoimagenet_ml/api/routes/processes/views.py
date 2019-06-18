@@ -83,8 +83,10 @@ def post_process_jobs_view(request):
         http_meta.location = http.location
         return http_meta
     except HTTPException as http_err:
-        # re-raise with additional metadata
-        ex.raise_http(httpError=type(http_err), detail=http_err.detail, request=request)
+        raise
+    except Exception as err:
+        detail = getattr(err, "detail") or getattr(err, "message")
+        ex.raise_http(httpError=HTTPInternalServerError, detail=detail, request=request)
 
 
 def get_process_job_handler(request):

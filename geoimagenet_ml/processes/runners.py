@@ -1,6 +1,12 @@
 from geoimagenet_ml.constants import SORT, ORDER
 from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
-from geoimagenet_ml.ml.impl import get_test_data_runner, create_batch_patches, retrieve_annotations
+from geoimagenet_ml.ml.impl import (
+    get_test_data_runner,
+    get_test_results,
+    create_batch_patches,
+    retrieve_annotations,
+    retrieve_taxonomy,
+)
 from geoimagenet_ml.processes.base import ProcessBase
 from geoimagenet_ml.status import map_status, STATUS
 from abc import abstractmethod
@@ -21,6 +27,7 @@ if TYPE_CHECKING:
     from celery import Task                 # noqa: F401
     from pyramid.registry import Registry   # noqa: F401
     from pyramid.request import Request     # noqa: F401
+    import thelper                          # noqa: F401
 
 
 class ProcessRunner(ProcessBase):
@@ -168,14 +175,12 @@ class ProcessRunnerModelTester(ProcessRunner):
         return [
             {
                 "id": "dataset",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
             },
             {
                 "id": "model",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
@@ -186,18 +191,54 @@ class ProcessRunnerModelTester(ProcessRunner):
     def outputs(self):
         return [
             {
-                # FIXME: valid types?
+                "id": "summary",
+                "type": ["string", "integer", "float", None],
+                "abstract": "Additional prediction results information.",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
                 "id": "predictions",
                 "type": "float",
+                "abstract": "List of raw predictions produced by the model, for each test sample from the input "
+                            "dataset (see 'samples'). Predictions per sample correspond to classes supported "
+                            "by the model (see 'classes') that where matched against the corresponding input dataset "
+                            "class IDs (see 'mapping'). Format of predictions depend on the model task type.",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "metrics",
+                "type": "float",
+                "abstract": "List of metrics evaluated across all retained dataset samples and class prediction "
+                            "scores by the model.",
                 "minOccurs": 1,
                 "maxOccurs": "unbounded",
             },
             {
                 "id": "classes",
-                "type": "string",
+                "type": ["string", "integer", None],
+                "abstract": "Class ID ordering of the model (classes represented by corresponding output indices).",
                 "minOccurs": 0,
                 "maxOccurs": "unbounded",
-            }
+            },
+            {
+                "id": "mapping",
+                "type": ["string", "integer", None],
+                "abstract": "Class ID mapping employed between the input dataset classes and the supported classes "
+                            "by the model.",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "samples",
+                "type": ["string", "integer"],
+                "abstract": "List of samples retained from the input dataset for the model evaluation "
+                            "(samples for which their class ID was matched with one of the supported model "
+                            "class ID or their parent category).",
+                "minOccurs": 1,
+                "maxOccurs": "unbounded",
+            },
         ]
 
     def __call__(self, *args, **kwargs):
@@ -219,7 +260,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             Updates the job progress based on evaluation progress (after each batch).
             Called using callback of prediction metric.
             """
-            metric = test_runner.test_metrics["predictions"]
+            metric = test_runner.test_metrics["predictions"]    # type: thelper.optim.metrics.RawPredictions
             total_sample_count = test_runner.test_loader.sample_count
             evaluated_sample_count = len(metric.predictions)  # gradually expanded on each evaluation callback
             batch_count = len(test_runner.test_loader)
@@ -274,13 +315,17 @@ class ProcessRunnerModelTester(ProcessRunner):
             # link the predictions with a callback for progress update during evaluation
             pred_metric = test_runner.test_metrics["predictions"]
             pred_metric.callback = lambda: \
-                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=98)
+                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=95)
             self.update_job_status(STATUS.RUNNING, "starting test data prediction evaluation", 5)
             results = test_runner.eval()
-            # TODO:
-            #   check if these results correspond to the ones updated gradually with the callback method
-            #   (see: _update_job_eval_progress)
-            self.save_results([{"id": "predictions", "value": results}], status_progress=99)
+
+            self.update_job_status(STATUS.RUNNING, "retrieving complete test data prediction results", 97)
+            test_results = get_test_results(test_runner, results)
+
+            self.update_job_status(STATUS.RUNNING, "preparing jobs outputs with prediction results", 98)
+            outputs = [{"id": k, "value": v} for k, v in test_results.items()]
+
+            self.save_results(outputs, status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
 
         except Exception as task_exc:
@@ -296,6 +341,12 @@ class ProcessRunnerBatchCreator(ProcessRunner):
     """
     Executes patches creation from a batch of annotated images with GeoJSON metadata.
     Uses GeoImageNet API requests format for annotation data extraction.
+
+    .. seealso::
+
+        - `GeoImageNet API` source: https://www.crim.ca/stash/projects/GEO/repos/geoimagenet_api
+        - `GeoImageNet API` swagger: https://geoimagenet.crim.ca/api/v1/docs
+        - `GeoImageNet API` annotation example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
     """
 
     @classproperty
@@ -320,7 +371,6 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             {
                 "id": "name",
                 "abstract": "Name to be applied to the batch (dataset) to be created.",
-                "formats": [{"mimeType": "text/plain"}],
                 "type": "string",
                 "minOccurs": 1,
                 "maxOccurs": 1,
@@ -330,24 +380,34 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "abstract": "List of request URL to GeoJSON annotations with patches geo-locations and metadata. "
                             "Multiple URL are combined into a single batch creation call, it should be used only for "
                             "paging GeoJSON responses. Coordinate reference systems must match between each URL.",
-                "formats": [{"mimeType": "text/plain"}],
+                "formats": [{"mimeType": "application/json"}],
                 "type": "string",
                 "minOccurs": 1,
-                "maxOccurs": None,
+                "maxOccurs": "unbounded",
+            },
+            {
+                "id": "taxonomy_url",
+                "abstract": "Request URL where to retrieve taxonomy classes metadata. "
+                            "Class IDs should match result values found from specified 'geojson_url' input. "
+                            "Parent/child class ID hierarchy should be available to support category grouping.",
+                "formats": [{"mimeType": "application/json"}],
+                "type": "string",
+                "minOccurs": 1,
+                "maxOccurs": 1,
             },
             {
                 "id": "crop_fixed_size",
                 "abstract": "Overwrite an existing batch if it already exists.",
-                "formats": [{"mimeType": "text/plain", "default": None}],
-                "type": "integer",
+                "type": ["integer", "float"],
+                "default": None,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
             {
                 "id": "split_ratio",
                 "abstract": "Ratio to employ for train/test patch splits of the created batch.",
-                "formats": [{"mimeType": "text/plain", "default": 0.90}],
                 "type": "float",
+                "default": 0.90,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
@@ -356,16 +416,16 @@ class ProcessRunnerBatchCreator(ProcessRunner):
                 "abstract": "Base dataset UUID (string) to use for incremental addition of new patches to the batch. "
                             "If False (boolean), create the new batch from nothing, without using any incremental "
                             "patches from previous datasets. By default, searches and uses the 'latest' batch.",
-                "formats": [{"mimeType": "text/plain", "default": None}],
-                "types": ["string", "boolean"],
+                "type": ["string", "boolean"],
+                "default": None,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
             {
-                "id": 'overwrite',
+                "id": "overwrite",
                 "abstract": "Overwrite an existing batch if it already exists.",
-                "formats": [{"mimeType": "text/plain", "default": False}],
                 "type": "boolean",
+                "default": False,
                 "minOccurs": 0,
                 "maxOccurs": 1,
             },
@@ -429,6 +489,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
             self.update_job_status(STATUS.RUNNING, "obtaining references from process job inputs", 3)
             geojson_urls = self.get_input("geojson_urls", required=True)
+            taxonomy_url = self.get_input("taxonomy_url", required=True, one=True)
             raster_paths = str2paths(self.registry.settings["geoimagenet_ml.ml.source_images_paths"], list_files=True)
             crop_fixed_size = self.get_input("crop_fixed_size", one=True)
             split_ratio = self.get_input("split_ratio", one=True)
@@ -437,14 +498,17 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             self.update_job_status(STATUS.RUNNING, "fetching annotations using process job inputs", 4)
             annotations = retrieve_annotations(geojson_urls)
 
-            self.update_job_status(STATUS.RUNNING, "looking for latest batch", 5)
+            self.update_job_status(STATUS.RUNNING, "fetching taxonomy using process job inputs", 5)
+            taxonomy = retrieve_taxonomy(taxonomy_url)
+
+            self.update_job_status(STATUS.RUNNING, "looking for latest batch", 6)
             latest_batch = self.find_batch(latest_batch)
 
-            self.update_job_status(STATUS.RUNNING, "starting batch patches creation", 6)
-            dataset = create_batch_patches(annotations, raster_paths, self.db.datasets_store, dataset, latest_batch,
-                                           dataset_update_count, crop_fixed_size,
+            self.update_job_status(STATUS.RUNNING, "starting batch patches creation", 7)
+            dataset = create_batch_patches(annotations, taxonomy, raster_paths, self.db.datasets_store,
+                                           dataset, latest_batch, dataset_update_count, crop_fixed_size,
                                            lambda s, p=None: self.update_job_status(STATUS.RUNNING, s, p),
-                                           start_percent=7, final_percent=98, train_test_ratio=split_ratio)
+                                           start_percent=8, final_percent=98, train_test_ratio=split_ratio)
 
             self.save_results([{"id": "dataset", "value": dataset.uuid}], status_progress=99)
             self.update_job_status(STATUS.SUCCEEDED, "processing complete", 100)
