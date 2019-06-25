@@ -21,7 +21,7 @@ from geoimagenet_ml.utils import (
 from geoimagenet_ml.status import COMPLIANT, CATEGORY, STATUS, job_status_categories, map_status
 from geoimagenet_ml.processes.types import process_mapping, PROCESS_WPS
 from geoimagenet_ml.store import exceptions as ex
-from geoimagenet_ml.ml.impl import load_model
+from geoimagenet_ml.ml.impl import load_model, valid_model
 from pyramid_celery import celery_app as app
 # noinspection PyPackageRequirements
 from dateutil.parser import parse
@@ -77,12 +77,16 @@ class Validator(object):
         if param_types is str:
             param_types = six.string_types
         elif param_types != six.string_types and isinstance(param_types, (list, set, tuple)) and str in param_types:
-            param_types = list(filter(lambda t: t is not str, param_types)) + six.string_types
+            param_types = list(filter(lambda t: t is not str, param_types)) + list(six.string_types)
 
         # parameter validation
         if allow_none and param_value is None:
             return
-        valid_type = valid_function(param_value) if callable(valid_function) else isinstance(param_value, param_types)
+        if not callable(valid_function):
+            valid_param_type = tuple(param_types) if isinstance(param_types, (list, set)) else param_types
+            valid_type = isinstance(param_value, valid_param_type)
+        else:
+            valid_type = valid_function(param_value)
         if not valid_type:
             if param_types == six.string_types:
                 param_types = str  # convert back for display
@@ -473,6 +477,7 @@ class Dataset(Base, WithName, WithType, WithUser, WithFinished):
         """
         Creates a ZIP file (if missing) of the dataset details and files.
         The content of the ZIP includes everything found inside its save directory.
+
         :returns: saved ZIP path
         """
         if not os.path.isdir(self.path):
@@ -661,7 +666,9 @@ class Model(Base, WithName, WithUser, WithVisibility):
         :raises ModelInstanceError:
             if none of the fields can help retrieve the model's data.
         :raises ModelLoadingError:
-            if saving cannot be accomplished using provided fields because of invalid format or failing validation.
+            if saving cannot be accomplished using provided fields because of invalid format.
+        :raises ModelValidationError:
+            if configuration data to be saved did not pass model validation checks.
         :raises ModelRegistrationError:
             if the save location is invalid.
         :raises ModelConflictError:
@@ -708,9 +715,12 @@ class Model(Base, WithName, WithUser, WithVisibility):
     def _load_check_data(path):
         success, data, buffer, exception = load_model(path)  # nothrow operation
         if not success:
-            if not exception:
-                exception = "unknown reason"
-            raise ex.ModelLoadingError("Failed loading model data: [{!r}].".format(exception))
+            msg = "Failed loading model data: [{!r}].".format(exception or "unknown reason")
+            raise ex.ModelLoadingError(msg)
+        success, exception = valid_model(data)  # nothrow operation
+        if not success:
+            msg = "Failed validation of model configuration: [{!r}].".format(exception or "unknown reason")
+            raise ex.ModelValidationError(msg)
         return data, buffer
 
     @property

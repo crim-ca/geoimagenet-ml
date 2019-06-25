@@ -1,5 +1,5 @@
 # noinspection PyProtectedMember
-from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job, Action
+from geoimagenet_ml.store.datatypes import Dataset, Model, Process, Job, Action, Validator
 from geoimagenet_ml.constants import OPERATION
 # noinspection PyPackageRequirements
 import pytest
@@ -149,3 +149,51 @@ def test_enforced_field_checks():
     with pytest.raises(TypeError):
         setattr(model, "user", "1")
         pytest.fail(msg="Invalid datatype field check by setattr call should raise")
+
+
+def test_exception_job_field_types():
+    exc = [
+        {
+            "func_name": "some-function",
+            "line_number": 20,
+            "line_detail": "some-test raised",
+            "module_name": "module.that.made.error",
+            "module_path": "/some/path/funcs",
+        },
+        {
+            "func_name": "some-base-func",
+            "line_number": 100,
+            "line_detail": "some-test called",
+            "module_name": "module.base.call",
+            "module_path": "/some/path/caller",
+        },
+    ]
+    try:
+        job = Job(uuid=uuid.uuid4(), process=uuid.uuid4(), user=1, exceptions=exc)
+    except TypeError:
+        pytest.fail(msg="Job that contains valid exception entries should not raise type error.")
+
+
+def test_validator_sub_item_any_iterator():
+    """
+    Checks that validator properly handles sub items input with any iterator type.
+
+    Evaluate (list, set, tuple) types for sub-item 'container' to ensure instance type checking works with any variant.
+    Evaluate with (dict, str) as sub item types to validate special handling for these cases.
+    """
+    valid = Validator()
+    tests_value_expect = [
+        ([{"a": "b"}], [dict, str]),
+        ([{"a": "b"}], {dict, str}),
+        ([{"a": "b"}], tuple([dict])),
+        ([{"a": "b"}], [dict]),
+        ([{"a": "b"}], {dict}),
+        (["a", "b"], tuple([str])),
+        (["a", "b"], [str]),
+        (["a", "b"], {str}),
+    ]
+    for v, t in tests_value_expect:
+        try:
+            valid._is_of_type("test", v, list, sub_item=t)
+        except TypeError:
+            pytest.fail(msg="Validator should not raise for valid sub-item type definition, raised for: {!r}".format(t))

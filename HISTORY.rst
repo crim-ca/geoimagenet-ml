@@ -6,6 +6,52 @@ History
 Unreleased
 ---------------------
 
+1.3.0 (2019-06-18)
+---------------------
+
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add additional metrics (Top-1, Top-5) in process `model-tester` execution results (GEOIM-163)
+* add fetching of taxonomy definition during `batch-creation` process execution from input URL (GEOIM-161)
+* save retrieved taxonomy definition to generated dataset batch (GEOIM-162)
+* enforce ``thelper>=0.3.1`` to use new operation modes and back compatibility import methods
+* add model checkpoint validation checks and raise ``ModelValidationError`` (``HTTP Forbidden [403]``) if invalid
+    - disallow loading a model task defined as literal string, must be a JSON definition of parameters
+    - disallow loading a model task not matched within existing job mapping (processing steps must be fully defined)
+    - disallow loading a model task without minimal configuration parameters required during `model-tester` execution
+* add named key variables to help understand corresponding items across dictionary definitions and generated results
+* add more detail to produced results of `model-tester` process (GEOIM-163)
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix incorrectly returned message from ``POST /processes/{id}/jobs`` requests in case of error
+
+1.2.0 (2019-06-11)
+---------------------
+
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add ``BatchTestPatchesDatasetLoader`` implementation that loads a generated dataset of test patches from process
+  `batch-creation` execution to evaluate them against a registered model using process `model-tester`.
+* add ``geoimagenet_ml.ml.jobs_path`` configuration setting to indicate where process job logging should be stored.
+  (mostly during process `model-tester` execution)
+* adjust model and dataset definitions to employ the same `task` until resolved (GEOIM-153)
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix bug generated during `model-tester` process execution attempting to update ``Dataset`` parameters (GEOIM-149)
+
+1.1.2 (2019-06-06)
+---------------------
+
+* add variable ``GEOIMAGENET_ML_SENTRY_SERVER_NAME`` to allow overriding ``server_name`` value reported by sentry.
+* fix bug caused by invalid sub-item type checker of job exception field (GEOIM-146).
+
+1.1.1 (2019-06-05)
+---------------------
+
+* fix bug caused by invalid list/tuple concatenation in job exception field (GEOIM-145).
+
 1.1.0 (2019-05-16)
 ---------------------
 

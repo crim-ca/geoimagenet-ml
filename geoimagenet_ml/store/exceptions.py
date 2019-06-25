@@ -87,6 +87,16 @@ class ModelLoadingError(ModelError):
     pass
 
 
+class ModelValidationError(ModelError):
+    """
+    Error indicating that validation of model data failed although no error occurred during loading from file.
+
+    This typically means that invalid configuration was encountered or potential security issues were identified
+    and further processing was deemed prone to future errors or unsafe behaviour.
+    """
+    pass
+
+
 class ModelConflictError(ModelError):
     """
     Error indicating that the instance of :class:`geoimagenet_ml.store.interfaces.ModelStore`

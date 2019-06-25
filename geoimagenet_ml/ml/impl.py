@@ -1,4 +1,4 @@
-from geoimagenet_ml.utils import get_sane_name
+from geoimagenet_ml.utils import get_sane_name, fully_qualified_name
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
@@ -12,26 +12,52 @@ import shutil
 import six
 import ssl
 import os
-# noinspection PyPackageRequirements
 import thelper
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
-        Any, AnyStr, Callable, List, Tuple, Union, ParamsType, JSON, SettingsType, Number, Optional,
-        FeatureType, RasterDataType
+        Any, AnyStr, Callable, Dict, List, Tuple, Union, JSON, SettingsType, Number,
+        Optional, FeatureType, RasterDataType
     )
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
+    # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
+    AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
+    CkptData = thelper.typedefs.CheckpointContentType  # noqa: F401
+    ClassMap = Dict[int, Optional[Union[int, AnyStr]]]  # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
 osgeo.gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
+# keys used across methods to find matching configs, must be unique and non-conflicting with other sample keys
+IMAGE_DATA_KEY = "data"     # key used to store temporarily the loaded image data
+IMAGE_LABEL_KEY = "label"   # key used to store the class label used by the model
+TEST_DATASET_KEY = "dataset"
+
+DATASET_FILES_KEY = "files"             # list of all files in the dataset batch
+DATASET_DATA_KEY = "data"               # dict of data below
+DATASET_DATA_TAXO_KEY = "taxonomy"
+DATASET_DATA_MAPPING_KEY = "taxonomy_model_map"     # taxonomy ID -> model labels
+DATASET_DATA_ORDERING_KEY = "model_class_order"     # model output classes (same indices)
+DATASET_DATA_PATCH_KEY = "patches"
+DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
+DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
+DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
+DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
+DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
+
+# see bottom for mapping definition
+MAPPING_TASK = "task"
+MAPPING_LOADER = "loader"
+MAPPING_RESULT = "result"
+MAPPING_TESTER = "tester"
+
 
 def load_model(model_file):
-    # type: (Union[Any, AnyStr]) -> Tuple[bool, ParamsType, Optional[BytesIO], Optional[Exception]]
+    # type: (Union[Any, AnyStr]) -> Tuple[bool, CkptData, Optional[BytesIO], Optional[Exception]]
     """
     Tries to load a model checkpoint file from the file-like object, file path or URL.
 
@@ -59,26 +85,196 @@ def load_model(model_file):
     return False, {}, None, None
 
 
+def valid_model(model_data):
+    # type: (CkptData) -> Tuple[bool, Optional[Exception]]
+    """
+    Accomplishes required model checkpoint validation to restrict expected behaviour during other function calls.
+
+    All security checks or alternative behaviours allowed by native ``thelper`` library but that should be forbidden
+    within this API for process execution should be done here.
+
+    :param model_data: model checkpoint data with configuration parameters (typically loaded by `load_model`)
+    :return: tuple of (success, exception) accordingly
+    :raises: None (nothrow)
+    """
+    # FIXME: thelper security risk, refuse literal string definition of task loaded by eval()
+    model_task = model_data.get("task")
+    if not isinstance(model_task, dict):
+        return False, TypeError("Forbidden checkpoint task definition as string. Only JSON configuration allowed.")
+    model_type = model_task.get("type")
+    if not isinstance(model_type, six.string_types) or model_type not in MODEL_TASK_MAPPING:
+        return False, ValueError("Forbidden checkpoint task defines unknown operation: [{!s}]".format(model_type))
+    model_params = model_task.get("params")
+    if not isinstance(model_params, dict):
+        return False, TypeError("Forbidden checkpoint task missing JSON definition of parameter section.")
+    model_classes = model_params.get("class_names")
+    if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
+        return False, TypeError("Forbidden checkpoint task contains invalid JSON class names parameter section.")
+    return True, None
+
+
 def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
-    # type: (Job, JSON, Model, Dataset, SettingsType) -> thelper.train.Trainer
+    # type: (Job, CkptData, Model, Dataset, SettingsType) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get('geoimagenet_ml.ml.models_path'), model.uuid)
+    save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
-    task = thelper.tasks.utils.create_task(model_checkpoint_config["task"])  # enforce model task instead of dataset
-    model = thelper.nn.create_model(test_config["config"], task, save_dir=save_dir, ckptdata=model_checkpoint_config)
     config = test_config["config"]
+    model = thelper.nn.create_model(config, None, save_dir=save_dir, ckptdata=test_config)
+    task = model.task
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
-    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, loaders, model_checkpoint_config)
+    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
     return trainer
 
 
+class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
+    """
+    Batch dataset parser that loads only patches from 'test' split and matching
+    class IDs (or their parents) known by the model as defined in its ``task``.
+
+    .. note::
+
+        Uses :class:`thelper.data.ImageFolderDataset` ``__getitem__`` implementation to load image
+        from a folder, but overrides the ``__init__`` to adapt the configuration to batch format.
+    """
+
+    # noinspection PyMissingConstructor
+    def __init__(self, dataset=None, transforms=None):
+        if not (isinstance(dataset, dict) and len(dataset)):
+            raise ValueError("Expected dataset parameters as configuration input.")
+        thelper.data.Dataset.__init__(self, transforms=transforms, deepcopy=False)
+        self.root = dataset["path"]
+        # keys matching dataset config for easy loading and referencing to same fields
+        self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
+        self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
+        self.path_key = "path"              # actual file path of the patch
+        self.idx_key = "index"              # increment for __getitem__
+        self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
+                          DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
+        model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
+        sample_class_ids = set()
+        samples = []
+        for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
+                                          dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
+            if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
+                # convert the dataset class ID into the model class ID using mapping, drop sample if not found
+                class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                if class_name is not None:
+                    sample_class_ids.add(class_name)
+                    samples.append(deepcopy(patch_info))
+                    samples[-1][self.path_key] = patch_path
+                    samples[-1][self.label_key] = class_name
+        if not len(sample_class_ids):
+            raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
+        self.samples = samples
+        self.sample_class_ids = sample_class_ids
+
+
+class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoader):
+    def __init__(self, dataset=None, transforms=None):
+        super(BatchTestPatchesClassificationDatasetLoader, self).__init__(dataset, transforms)
+        self.task = thelper.tasks.Classification(
+            class_names=list(self.sample_class_ids),
+            input_key=self.image_key,
+            label_key=self.label_key,
+            meta_keys=self.meta_keys,
+        )
+
+
+def adapt_dataset_for_model_task(model_task, dataset):
+    # type: (AnyTask, Dataset) -> JSON
+    """
+    Generates dataset parameter definition for loading from checkpoint configuration with ``thelper``.
+
+    Retrieves available classes from the loaded dataset parameters and preserves only matching classes with the task
+    defined by the original model task. Furthermore, parent/child class IDs are resolved recursively in a bottom-top
+    manner to adapt specific classes into corresponding `categories` in the case the model uses them as more generic
+    classes.
+
+    .. seealso::
+        - :class:`BatchTestPatchesBaseDatasetLoader` for dataset parameters used for loading filtered patches.
+
+    :param model_task: original task defined by the model training which specifies known classes.
+    :param dataset: batch of patches from which to extract matching classes known to the model.
+    :return: configuration that allows ``thelper`` to generate a data loader for testing the model on desired patches.
+    """
+    try:
+        dataset_params = dataset.json()     # json required because thelper dumps config during logs
+        all_classes_mapping = dict()        # child->parent taxonomy class ID mapping
+        all_model_ordering = list()         # class ID order as defined by the model
+        all_model_mapping = dict()          # taxonomy->model class ID mapping
+        all_child_classes = set()           # only taxonomy child classes IDs
+
+        # find existing mappings defined by taxonomy
+        def find_class_mapping(taxonomy_class, parent=None):
+            children = taxonomy_class.get("children")
+            class_id = taxonomy_class.get("id")
+            if children:
+                for child in children:
+                    find_class_mapping(child, taxonomy_class)
+            else:
+                all_child_classes.add(class_id)
+            all_classes_mapping[class_id] = None if not parent else parent.get("id")
+
+        for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
+            find_class_mapping(taxo)
+        LOGGER.debug("Taxonomy class mapping:  {}".format(all_classes_mapping))
+        LOGGER.debug("Taxonomy class children: {}".format(all_child_classes))
+
+        # find model mapping using taxonomy hierarchy
+        def get_children_class_ids(parent_id):
+            children_ids = set()
+            filtered_ids = set([c for c, p in all_classes_mapping.items() if p == parent_id])
+            for c in filtered_ids:
+                if c not in all_child_classes:
+                    children_ids = children_ids | get_children_class_ids(c)
+            return children_ids | filtered_ids
+
+        for model_class_id in model_task.class_names:
+            # attempt str->int conversion of model string, they should match taxonomy class IDs
+            try:
+                model_class_id = int(model_class_id)
+            except ValueError:
+                raise ValueError("Unknown class ID '{}' cannot be matched with taxonomy classes".format(model_class_id))
+            if model_class_id not in all_classes_mapping:
+                raise ValueError("Unknown class ID '{}' cannot be found in taxonomy".format(model_class_id))
+            # while looking for parent/child mapping, also convert IDs as thelper requires string labels
+            if model_class_id in all_child_classes:
+                LOGGER.debug("Class {0}: found direct child ID ({0}->{0})".format(model_class_id))
+                all_model_mapping[model_class_id] = str(model_class_id)
+            else:
+                categorized_classes = get_children_class_ids(model_class_id)
+                for cat_id in categorized_classes:
+                    all_model_mapping[cat_id] = str(model_class_id)
+                LOGGER.debug("Class {0}: found category class IDs ({0}->AnyOf{1})"
+                             .format(model_class_id, list(categorized_classes)))
+            all_model_ordering.append(model_class_id)
+        all_model_mapping = {c: all_model_mapping[c] for c in sorted(all_model_mapping)}
+        LOGGER.debug("Model class mapping (only supported classes): {}".format(all_model_mapping))
+        LOGGER.debug("Model class ordering (indexed class outputs): {}".format(all_model_ordering))
+
+        # add missing classes mapping
+        all_model_mapping.update({c: None for c in sorted(set(all_classes_mapping) - set(all_model_mapping))})
+        LOGGER.debug("Model class mapping (added missing classes): {}".format(all_model_mapping))
+
+        # update obtained mapping with dataset parameters for loader
+        dataset_params[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY] = all_model_mapping
+        dataset_params[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY] = all_model_ordering
+        model_task_name = fully_qualified_name(model_task)
+        return {
+            "type": MODEL_TASK_MAPPING[model_task_name][MAPPING_LOADER],
+            "params": {TEST_DATASET_KEY: dataset_params},
+        }
+    except Exception as exc:
+        raise RuntimeError("Failed dataset adaptation to model task classes for evaluation. [{!r}]".format(exc))
+
+
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
-    # type: (JSON, Model, Dataset, SettingsType) -> JSON
+    # type: (CkptData, Model, Dataset, SettingsType) -> JSON
     """
     Obtains a simplified version of the configuration for 'test' task corresponding to the model and dataset.
     Removes parameters from the original file that would require additional unnecessary operations other than testing.
@@ -86,15 +282,22 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     """
 
     # transfer required parts, omit training specific values or error-prone configurations
-    test_config = deepcopy(model_checkpoint_config)     # type: JSON
+    test_config = deepcopy(model_checkpoint_config)
     test_config["name"] = model_config_override["name"]
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
 
-    # overrides of deployed model and dataset
+    # override deployed model and dataset references
+    #   - override model task input/label keys that could be modified by user to match definitions of dataset loader
+    #   - override model task classes instead of full dataset so we don't specialize the model
+    #     (test only on classes known by the model, or on any class nested under a more generic category)
+    test_dataset_name = dataset_config_override["name"]
+    test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
+    test_model_task = thelper.tasks.create_task(test_config["task"])
+    test_model_task_name = fully_qualified_name(test_model_task)
     test_config["config"]["name"] = model_config_override["name"]
     test_config["config"]["datasets"] = {
-        dataset_config_override["name"]: dataset_config_override.params
+        test_dataset_name: adapt_dataset_for_model_task(test_model_task, dataset_config_override)
     }
 
     # back-compatibility replacement
@@ -102,26 +305,23 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     if "loaders" not in test_config["config"]:
         raise ValueError("Missing 'loaders' configuration from model checkpoint.")
 
-    dataset = test_config["config"]["datasets"][dataset_config_override["name"]]    # type: JSON
     loaders = test_config["config"]["loaders"]  # type: JSON
     trainer = test_config["config"]["trainer"]  # type: JSON
 
-    # adjust root dir of dataset location to match version deployed on server
-    dataset["params"]["root"] = dataset_config_override.path
-
-    # remove categories to match model outputs defined during training task
-    for key in ["category"]:
-        dataset["params"].pop(key, None)
-
     # remove additional unnecessary sub-parts or error-prone configurations
-    for key in ["sampler", "train_augments", "train_split", "valid_split"]:
+    for key in ["sampler", "train_augments", "train_split", "valid_split", "eval_augments"]:
         loaders.pop(key, None)
+
+    # override image key to match loaded test data
+    for transform in loaders.get("base_transforms", []):
+        transform["target_key"] = IMAGE_DATA_KEY
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
-        dataset_config_override["name"]: 1.0
+        test_dataset_name: 1.0    # use every single dataset patch found by the test loader
     }
     trainer["use_tbx"] = False
+    trainer["type"] = MODEL_TASK_MAPPING[test_model_task_name][MAPPING_TESTER]
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
 
@@ -132,13 +332,109 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     #   ``geoimagenet_ml.api.routes.processes.utils.process_ml_job_runner`` for worker setup
     loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
 
-    # override metrics to retrieve only raw predictions
+    # override metrics to retrieve the ones required for result output
     trainer["metrics"] = {
         "predictions": {
-            "type": "thelper.optim.RawPredictions",
+            "type": "thelper.optim.metrics.RawPredictions",
+        },
+        "top_1_accuracy": {
+            "type": "thelper.optim.metrics.CategoryAccuracy",
+            "params": {
+                "top_k": 1,
+            }
+        },
+        "top_5_accuracy": {
+            "type": "thelper.optim.metrics.CategoryAccuracy",
+            "params": {
+                "top_k": 5,
+            }
         }
     }
     return test_config
+
+
+def classification_test_results_finder(test_dataset, test_results):
+    # type: (JSON, JSON) -> JSON
+    """Specialized result finder for classification task.
+
+    Format of predictions for this task type is::
+
+        { "<class_id>": <id>, "scores": [<score>] }
+
+    .. seealso::
+        :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+    """
+    class_mapping = test_dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]   # type: ClassMap
+    class_outputs = test_dataset[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY]
+    class_mapped = [c for c, m in class_mapping.items() if m is not None]
+    samples_all = test_dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]  # type: JSON
+    samples_mapped = [s for s in samples_all if s[DATASET_DATA_PATCH_CLASS_KEY] in class_mapped]
+    test_samples = [
+        {"class_id": s[DATASET_DATA_PATCH_CLASS_KEY],
+         "sample_id": s[DATASET_DATA_PATCH_FEATURE_KEY]} for s in samples_all
+    ]
+    test_summary = {
+        "classes_total": len(class_mapping),
+        "classes_mapped": len(class_mapped),
+        "classes_dropped": len(class_mapping) - len(class_mapped),
+        "samples_total": len(test_samples),
+        "samples_mapped": len(samples_mapped),
+        "samples_dropped": len(test_samples) - len(samples_mapped),
+    }
+    test_classes = [
+        {"model_index": i, "class_id": c} for i, c in enumerate(class_outputs)
+    ]
+    test_predictions = [{"class_id": s[DATASET_DATA_PATCH_CLASS_KEY], "scores": p["predictions"]}
+                        for s, p in zip(samples_mapped, test_results["predictions"])]
+    test_metrics = {m: s for m, s in test_results.items() if m != "predictions"}
+    # since storage doesn't support int keys and classes could be defined as int, convert to dict
+    test_mapping = [{"class_id": c, "model_id": m} for c, m in class_mapping.items()]
+    classification_results = {
+        "summary": test_summary,
+        "metrics": test_metrics,
+        "samples": test_samples,
+        "classes": test_classes,
+        "mapping": test_mapping,
+        "predictions": test_predictions,
+    }
+    return classification_results
+
+
+def get_test_results(test_runner, test_results):
+    # type: (thelper.train.Trainer, JSON) -> JSON
+    """
+    Obtains a JSON result representation matching the ``test_runner`` specialized task
+    and ``test_results`` retrieved from the model evaluation with ``metrics`` defined in the task.
+
+    Typically, results would be obtained from calling::
+
+        test_runner.eval()
+
+    The function ensures the backward mapping of predictions to class IDs.
+    It also cleans up the results as they would otherwise be too verbose for output.
+
+    The resulting JSON is in the form::
+
+        {
+            "summary": {"<stat>": <value>},
+            "metrics": {"<name>": <value>},
+            "samples": [{"class_id": <id>, "sample_id": <id>}],
+            "classes": [{"class_id": <id>, "model_index": <idx>}],
+            "mapping": [{"class_id": <model-id/None>}]
+            "predictions": [{<prediction-format-according-to-task-type>}]
+        }
+
+    .. seealso::
+        :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
+    """
+    test_task_name = fully_qualified_name(test_runner.task)
+    test_result_finder = MODEL_TASK_MAPPING[test_task_name][MAPPING_RESULT]
+
+    # only one test dataset submitted for evaluation (ie: unique 'test_split' in 'test_loader_from_configs')
+    test_results = test_results[0].get("test/metrics")
+    test_dataset = list(test_runner.config["datasets"].values())[0]["params"][TEST_DATASET_KEY]
+
+    return test_result_finder(test_dataset, test_results)
 
 
 def retrieve_annotations(geojson_urls):
@@ -154,6 +450,60 @@ def retrieve_annotations(geojson_urls):
     if not annotations:
         raise RuntimeError("Could not find any annotation from URL(s): {}".format(geojson_urls))
     return annotations
+
+
+def retrieve_taxonomy(taxonomy_url):
+    # type: (AnyStr) -> JSON
+    """Fetches JSON structured taxonomy classes hierarchy from the provided URL."""
+    resp = requests.get(taxonomy_url, headers={"Accept": "application/json"})
+    code = resp.status_code
+    if code != 200:
+        raise RuntimeError("Could not retrieve taxonomy JSON from [{}], server response was [{}]"
+                           .format(taxonomy_url, code))
+    taxo = resp.json()
+    if not taxo:
+        raise RuntimeError("Could not find any taxonomy detail from URL: {}".format(taxonomy_url))
+    taxo_multi = [taxo] if isinstance(taxo, dict) else taxo  # support both specific or 'all taxonomies' responses
+    validate_taxonomy_format(taxo_multi)
+    return taxo_multi
+
+
+def validate_taxonomy_format(taxonomy):
+    # type: (List[JSON]) -> None
+    """
+    Recursively validates that required fields of taxonomy class definitions are available for later process execution.
+
+    :param taxonomy: taxonomy schema to be validated (multi-taxonomy list is expected)
+    :raises: if the taxonomy or any underlying class definition format is invalid.
+    """
+    taxonomy_class_ids = []  # ids must be unique across taxonomies
+
+    def check_taxonomy_class_format(taxonomy_class, taxonomy_id):
+        if not isinstance(taxonomy_class, dict):
+            raise TypeError("Invalid taxonomy class format definition.")
+        if taxonomy_class.get("taxonomy_id") != taxonomy_id:
+            raise ValueError("Invalid taxonomy ID doesn't match parent reference.")
+        class_id = taxonomy_class.get("id")
+        if not isinstance(class_id, int):
+            raise ValueError("Missing or invalid class ID in taxonomy.")
+        if class_id in taxonomy_class_ids:
+            raise ValueError("Duplicate class ID found in taxonomies [class={}]".format(class_id))
+        taxonomy_class_ids.append(class_id)
+        children = taxonomy_class.get("children")
+        if not isinstance(children, list):
+            raise TypeError("Invalid taxonomy class children definition.")
+        for c in children:
+            check_taxonomy_class_format(c, taxonomy_id)
+
+    if not isinstance(taxonomy, list):
+        raise TypeError("Invalid taxonomy format definition.")
+    if not len(taxonomy):
+        raise ValueError("Missing taxonomy definitions.")
+    for taxo in taxonomy:
+        taxo_id = taxo.get("taxonomy_id")
+        if not isinstance(taxo_id, int):
+            raise ValueError("Invalid taxonomy ID value.")
+        check_taxonomy_class_format(taxo, taxo_id)
 
 
 def find_best_match_raster(rasters, feature):
@@ -190,12 +540,13 @@ def find_best_match_raster(rasters, feature):
 
 
 def create_batch_patches(annotations_meta,      # type: List[JSON]
+                         taxonomy_meta,         # type: JSON
                          raster_search_paths,   # type: List[AnyStr]
                          dataset_store,         # type: DatasetStore
                          dataset_container,     # type: Dataset
                          dataset_latest,        # type: Optional[Dataset]
                          dataset_update_count,  # type: int
-                         crop_fixed_size,       # type: Optional[int]
+                         crop_fixed_size,       # type: Optional[Number]
                          update_func,           # type: Callable[[AnyStr, Optional[Number]], None]
                          start_percent,         # type: Number
                          final_percent,         # type: Number
@@ -214,10 +565,27 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     Created patches for the batch are then split into train/test sets per corresponding ``taxonomy_class_id``.
 
-    .. seealso::
-        - `GeoImageNet API` format: https://geoimagenetdev.crim.ca/api/v1/ui/#/paths/~1batches/post
-        - `GeoImageNet API` example: https://geoimagenetdev.crim.ca/api/v1/batches?taxonomy_id=1
+    .. note::
 
+        - ``annotations_meta`` and ``taxonomy_meta`` formats are expected to resolve with provided example links.
+
+    .. seealso::
+
+        - `GeoImageNet API` annotation example: https://geoimagenetdev.crim.ca/api/v1/batches/annotations
+        - `GeoImageNet API` taxonomy example: https://geoimagenetdev.crim.ca/api/v1/taxonomy_classes
+
+    :param annotations_meta: metadata retrieved from URL(s) (see example link).
+    :param taxonomy_meta: parent/child reference class IDs hierarchy matching annotation metadata (see example link).
+    :param raster_search_paths: paths where to look for raster images matching annotation metadata.
+    :param dataset_store: store connection where the updated dataset has to be written.
+    :param dataset_container: dataset to be iteratively updated from extracted patches from rasters using annotations.
+    :param dataset_latest: base dataset with existing patches from which to expand the new one (as desired).
+    :param dataset_update_count: number of patches to generate until the dataset gets updated (save checkpoint).
+    :param crop_fixed_size: dimension (in metres) to use the generate additional patches of constant dimension.
+    :param update_func: ``function(message, percentage)`` called on each update operation for process execution logging.
+    :param start_percent: execution percentage to use as starting value for the execution of this function.
+    :param final_percent: execution percentage to reach a the end of the normal execution of this function.
+    :param train_test_ratio: ratio to use for splitting patches into train/test groups for respective classes.
     :returns: updated ``dataset_container`` with metadata of created patches.
     """
 
@@ -247,7 +615,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     # FIXME: although we support multiple GeoJSON URL as process input, functions below only expect 1
     #   - need to combine features by ID to avoid duplicates
-    #   - need to handle different CRS for GeoTransform
+    #   - need to handle different CRS for GeoTransform (update process runner docstring accordingly)
     if len(annotations_meta) != 1:
         raise NotImplementedError("Multiple GeoJSON parsing not implemented.")
     annotations_meta = annotations_meta[0]
@@ -255,6 +623,10 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     if not isinstance(dataset_update_count, int) or dataset_update_count < 1:
         raise AssertionError("invalid dataset update count value: {!s}".format(dataset_update_count))
 
+    update_func("updating taxonomy definition in dataset", start_percent)
+    dataset_container.data["taxonomy"] = taxonomy_meta
+
+    start_percent += 1
     update_func("parsing raster files", start_percent)
     srs = parse_coordinate_system(annotations_meta)
     rasters_data, raster_global_coverage = parse_rasters(raster_search_paths, default_srs=srs)
@@ -278,7 +650,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     train_counter, test_counter = category_counter.split(train_test_ratio)
     train_test_splits = [("train", train_counter), ("test", test_counter)]
     patches_crop = [(None, "raw")]
-    if isinstance(crop_fixed_size, int):
+    if isinstance(crop_fixed_size, (int, float)):
         update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
         patches_crop.append((crop_fixed_size, "fixed"))
 
@@ -293,33 +665,34 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
         # transfer patch data from previous batch, preserve selected split
         if feature["id"] in matched_features:
             patch_info = deepcopy(mapped_features.get(feature["id"]))
-            if not isinstance(patch_info, dict) or "crops" not in patch_info:
+            if not isinstance(patch_info, dict) or DATASET_DATA_PATCH_CROPS_KEY not in patch_info:
                 raise RuntimeError("Failed to retrieve presumably existing patch from previous batch (feature: {})"
                                    .format(feature["id"]))
             # copy information, but replace patch copies
-            for i_crop, _ in enumerate(patch_info["crops"]):
-                old_patch_path = patch_info["crops"][i_crop]["path"]
+            for i_crop, _ in enumerate(patch_info[DATASET_DATA_PATCH_CROPS_KEY]):
+                old_patch_path = patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"]
                 new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
                 if not new_patch_path.startswith(dataset_container.path):
                     raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
                                        .format(dataset_container.path, new_patch_path))
-                patch_info["crops"][i_crop]["path"] = new_patch_path
+                patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"] = new_patch_path
                 shutil.copy(old_patch_path, new_patch_path)
                 dataset_container.files.append(new_patch_path)
-            dataset_container.data["patches"].append(patch_info)
+            dataset_container.data[DATASET_DATA_PATCH_KEY].append(patch_info)
             # update counter with previously selected split set
-            select_split(train_test_splits, patch_info["class"], name=patch_info["split"])
+            select_split(train_test_splits, patch_info[DATASET_DATA_PATCH_CLASS_KEY],
+                         name=patch_info[DATASET_DATA_PATCH_SPLIT_KEY])
 
         # new patch creation from feature specification, generate metadata and randomly select split
         else:
             raster_data = find_best_match_raster(rasters_data, feature)
             crop_class_id = feature.get("properties", {}).get("taxonomy_class_id")
-            dataset_container.data["patches"].append({
-                "crops": [],  # updated gradually after
-                "image": raster_data["file_path"],
-                "class": crop_class_id,
-                "split": select_split(train_test_splits, crop_class_id),
-                "feature": feature.get("id"),
+            dataset_container.data[DATASET_DATA_PATCH_KEY].append({
+                DATASET_DATA_PATCH_CROPS_KEY: [],  # updated gradually after
+                DATASET_DATA_PATCH_IMAGE_KEY: raster_data["file_path"],
+                DATASET_DATA_PATCH_CLASS_KEY: crop_class_id,
+                DATASET_DATA_PATCH_SPLIT_KEY: select_split(train_test_splits, crop_class_id),
+                DATASET_DATA_PATCH_FEATURE_KEY: feature.get("id"),
             })
 
             for crop_size, crop_name in patches_crop:
@@ -345,7 +718,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
                     dataset_container.files.append(output_path)
-                    dataset_container.data["patches"][-1]["crops"].append({
+                    dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
                         "path": output_path,
                         "shape": list(crop.shape),
@@ -363,3 +736,14 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     update_func("updating completed dataset definition", final_percent)
     dataset_container.mark_finished()
     return dataset_store.save_dataset(dataset_container, overwrite=True)
+
+
+# FIXME: add definitions/implementations to support other task types (ex: object-detection)
+MODEL_TASK_MAPPING = {
+    fully_qualified_name(thelper.tasks.classif.Classification): {
+        MAPPING_TASK:   fully_qualified_name(thelper.tasks.classif.Classification),
+        MAPPING_LOADER: fully_qualified_name(BatchTestPatchesClassificationDatasetLoader),
+        MAPPING_TESTER: fully_qualified_name(thelper.train.classif.ImageClassifTrainer),
+        MAPPING_RESULT: classification_test_results_finder,
+    }
+}
