@@ -35,7 +35,7 @@ pipeline {
                     docker.image('mongo:3.4.0').withRun('-e "ALLOW_IP_RANGE=0.0.0.0/0" -e "IP_LIST=*"') { c ->
                         sh """
                         docker run --rm --link ${c.id}:mongodb -e MONGODB_HOST=mongodb -e MONGODB_PORT=27017 $LOCAL_IMAGE_NAME /bin/sh -c \" \
-                        TEST_MODEL_URL="https://geoimagenetdev.crim.ca/ml/models/16bbef47-3df9-4f5a-a7d4-3997e4c12fd4/download" make test-req test-all"
+                        TEST_MODEL_URL="https://geoimagenetdev.crim.ca/ml/models/2491b763-c785-42b9-83c1-78cabfe51bbc/download" make test-req test-unit"
                         """
                     }
                 }
