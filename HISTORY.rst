@@ -10,7 +10,7 @@ Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add error logging in case of request generating an exception (voluntary or by execution problem)
 * change ``gdal`` requirements and imports to avoid ``osgeo`` variant breaking too easily
-* support older ``thelper`` model checkpoint definitions using string parameters instead of JSON
+* support older ``thelper`` model checkpoint definitions using string parameters instead of JSON [GEOIM-241]
 * update to ``thelper>=0.3.7``
 * disable `Jenkins` online tests execution (download/upload model) as they now require login [GEOIM-180]
 
