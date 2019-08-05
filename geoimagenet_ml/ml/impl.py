@@ -4,7 +4,7 @@ from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
-import osgeo.gdal
+import gdal
 import requests
 import logging
 import random
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     ClassMap = Dict[int, Optional[Union[int, AnyStr]]]  # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
-osgeo.gdal.UseExceptions()
+gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -702,7 +702,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                         raise AssertionError("bad crop channel size")
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
-                    output_driver = osgeo.gdal.GetDriverByName("GTiff")
+                    output_driver = gdal.GetDriverByName("GTiff")
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                     if os.path.exists(output_path):

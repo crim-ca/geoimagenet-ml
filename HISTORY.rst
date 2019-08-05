@@ -9,6 +9,7 @@ Unreleased
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add error logging in case of request generating an exception (voluntary or by execution problem)
+* change `gdal` requirements and imports to avoid `osgeo` variant breaking too easily
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
