@@ -6,6 +6,14 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add error logging in case of request generating an exception (voluntary or by execution problem)
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* avoid key error of WPS-like process properties cleanup during initialization [GEOIM-225]
+
 1.3.0 (2019-06-18)
 ---------------------
 

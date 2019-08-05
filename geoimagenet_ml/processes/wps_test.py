@@ -30,8 +30,6 @@ class HelloWPS(ProcessBase, Process):
             version='1.4',
             inputs=inputs,
             outputs=outputs,
-            store_supported=True,
-            status_supported=True
         )
 
     # noinspection PyMethodMayBeStatic
