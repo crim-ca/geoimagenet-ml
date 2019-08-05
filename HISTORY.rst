@@ -13,6 +13,7 @@ Changes
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * avoid key error of WPS-like process properties cleanup during initialization [GEOIM-225]
+* better filter and group common job error message to Sentry [GEOIM-227]
 
 1.3.0 (2019-06-18)
 ---------------------
