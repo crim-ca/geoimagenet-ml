@@ -191,6 +191,14 @@ class JobConflictError(JobError):
     pass
 
 
+class JobExecutionError(Exception):
+    """
+    Error indicating a problem occurred during :func:`geoimagenet_ml.api.routes.processes.utils.process_job_runner`
+    execution. Mostly employed for tracking in Sentry (see `geoimagenet_ml.api.main`).
+    """
+    pass
+
+
 class ActionError(Exception):
     """
     Error related to :class:`geoimagenet_ml.store.datatypes.Action`.

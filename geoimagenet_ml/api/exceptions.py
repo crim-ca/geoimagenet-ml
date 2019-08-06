@@ -14,11 +14,14 @@ from pyramid.httpexceptions import (
 from pyramid.request import Request
 from typing import Any, AnyStr, Dict, List, Optional, Tuple, Union  # noqa: F401
 import traceback
+import logging
 import json
 import six
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import JSON, ParamsType  # noqa: F401
+
+LOGGER = logging.getLogger(__name__)
 
 # control variables to avoid infinite recursion in case of
 # major programming error to avoid application hanging
@@ -268,6 +271,7 @@ def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
     global RAISE_RECURSIVE_SAFEGUARD_COUNT
     RAISE_RECURSIVE_SAFEGUARD_COUNT = RAISE_RECURSIVE_SAFEGUARD_COUNT + 1
     if RAISE_RECURSIVE_SAFEGUARD_COUNT > RAISE_RECURSIVE_SAFEGUARD_MAX:
+        LOGGER.critical("Too many recursions of `raise_http`. Terminated with plain HTTPInternalServerError (500).")
         raise HTTPInternalServerError(detail="Terminated. Too many recursions of `raise_http`.")
 
     # try dumping content with json format, `HTTPInternalServerError` with caller info if fails.
@@ -279,6 +283,9 @@ def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
     # reset counter for future calls (don't accumulate for different requests)
     # following raise is the last in the chain since it wasn't triggered by other functions
     RAISE_RECURSIVE_SAFEGUARD_COUNT = 0
+    if LOGGER.isEnabledFor(logging.ERROR):
+        cause = get_request_info(request) if isinstance(request, Request) else 'N/A'
+        LOGGER.error("HTTP error raised: [{!s}], cause: [{!s}]".format(resp, cause))
     if nothrow:
         return resp
     raise resp

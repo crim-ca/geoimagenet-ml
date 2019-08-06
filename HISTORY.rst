@@ -6,6 +6,20 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add error logging in case of request generating an exception (voluntary or by execution problem)
+* change ``gdal`` requirements and imports to avoid ``osgeo`` variant breaking too easily
+* support older ``thelper`` model checkpoint definitions using string parameters instead of JSON [GEOIM-241]
+* update to ``thelper>=0.3.7``
+* disable `Jenkins` online tests execution (download/upload model) as they now require login [GEOIM-180]
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* avoid key error of WPS-like process properties cleanup during initialization [GEOIM-225]
+* better filter and group common job error message to Sentry [GEOIM-227]
+* update test model checkpoint for unittest execution with more relevant ``thelper`` configuration [GEOIM-180]
+
 1.3.0 (2019-06-18)
 ---------------------
 

@@ -65,7 +65,7 @@ help:
 	@echo "pep8             check code style"
 	@echo "release          package and upload a release"
 	@echo "start            start the installed application"
-	@echo "test             run basic unit tests (not online)"
+	@echo "test-unit        run basic unit tests (not online)"
 	@echo "test-all         run tests with every marker enabled"
 	@echo "test-req         run test to validate no missing requirement for any package"
 	@echo "test-tox         run tests on every Python version with tox"
@@ -130,8 +130,8 @@ clean-ml:
 pep8:
 	@bash -c 'flake8 geoimagenet_ml && echo "All good!"'
 
-.PHONY: test
-test: install-dev
+.PHONY: test-unit
+test-unit: install-dev
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
 		"$(ANACONDA_HOME)/envs/$(CONDA_ENV)/bin/pytest" tests -vv -m "not online"'
 
@@ -273,7 +273,7 @@ conda-config: anaconda
 	@"$(ANACONDA_HOME)/bin/conda" config --set use_pip true
 	@"$(ANACONDA_HOME)/bin/conda" config --set channel_priority true
 	@"$(ANACONDA_HOME)/bin/conda" config --set auto_update_conda false
-	# cannot mix 'conda-forge' and 'defaults', causes errors for gdal/osgeo related bin packages
+	# cannot mix 'conda-forge' and 'defaults', causes errors for gdal/ogr/osr related bin packages
 	# @"$(ANACONDA_HOME)/bin/conda" config --add channels defaults
 	@"$(ANACONDA_HOME)/bin/conda" config --append channels birdhouse
 	@"$(ANACONDA_HOME)/bin/conda" config --append channels conda-forge

@@ -286,7 +286,7 @@ class MongodbProcessStore(ProcessStore, MongodbStore):
         process_properties = Process.__dict__.keys()
         process_prop_to_rm = [p for p in process if p not in process_properties]
         for prop in process_prop_to_rm:
-            process.pop(prop)
+            process.pop(prop, None)
         process.update({
             "type": PROCESS_WPS,
             "package": None,

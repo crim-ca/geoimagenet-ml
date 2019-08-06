@@ -1,10 +1,10 @@
-from geoimagenet_ml.utils import get_sane_name, fully_qualified_name
+from geoimagenet_ml.utils import get_sane_name, fully_qualified_name, isclass
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
-import osgeo.gdal
+import gdal
 import requests
 import logging
 import random
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     ClassMap = Dict[int, Optional[Union[int, AnyStr]]]  # noqa: F401
 
 # enforce GDAL exceptions (otherwise functions return None)
-osgeo.gdal.UseExceptions()
+gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +54,18 @@ MAPPING_TASK = "task"
 MAPPING_LOADER = "loader"
 MAPPING_RESULT = "result"
 MAPPING_TESTER = "tester"
+
+
+class ConfigurationError(Exception):
+    """Error related to ``thelper`` configuration."""
+
+
+class ConfigurationWarning(Warning):
+    """Warning related to ``thelper`` configuration."""
+
+
+class ConfigurationSecurityWarning(ConfigurationWarning):
+    """Warning related to ``thelper`` configuration specifically for security issues."""
 
 
 def load_model(model_file):
@@ -85,10 +97,10 @@ def load_model(model_file):
     return False, {}, None, None
 
 
-def valid_model(model_data):
+def validate_model(model_data):
     # type: (CkptData) -> Tuple[bool, Optional[Exception]]
     """
-    Accomplishes required model checkpoint validation to restrict expected behaviour during other function calls.
+    Accomplishes required model checkpoint validation to restrict unexpected behaviour during other function calls.
 
     All security checks or alternative behaviours allowed by native ``thelper`` library but that should be forbidden
     within this API for process execution should be done here.
@@ -97,19 +109,41 @@ def valid_model(model_data):
     :return: tuple of (success, exception) accordingly
     :raises: None (nothrow)
     """
-    # FIXME: thelper security risk, refuse literal string definition of task loaded by eval()
     model_task = model_data.get("task")
     if not isinstance(model_task, dict):
-        return False, TypeError("Forbidden checkpoint task definition as string. Only JSON configuration allowed.")
-    model_type = model_task.get("type")
-    if not isinstance(model_type, six.string_types) or model_type not in MODEL_TASK_MAPPING:
-        return False, ValueError("Forbidden checkpoint task defines unknown operation: [{!s}]".format(model_type))
-    model_params = model_task.get("params")
-    if not isinstance(model_params, dict):
-        return False, TypeError("Forbidden checkpoint task missing JSON definition of parameter section.")
-    model_classes = model_params.get("class_names")
-    if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
-        return False, TypeError("Forbidden checkpoint task contains invalid JSON class names parameter section.")
+        # thelper security risk, refuse literal string definition of task loaded by eval() unless it can be validated
+        LOGGER.warning(f"Model task not defined as dictionary: [{model_task!s}]")
+        if not (isinstance(model_task, str) and model_task.startswith("thelper.task")):
+            return False, ConfigurationSecurityWarning(
+                "Forbidden checkpoint task definition as string doesn't refer to a `thelper.task`."
+            )
+        model_task_cls = model_task.split("(")[0]
+        LOGGER.debug(f"Verifying model task as string: {model_task_cls!s}")
+        model_task_cls = thelper.utils.import_class(model_task_cls)
+        if not (isclass(model_task_cls) and issubclass(model_task_cls, thelper.tasks.Task)):
+            return False, ConfigurationSecurityWarning(
+                "Forbidden checkpoint task definition as string is not a known `thelper.task`."
+            )
+        if model_task.count("(") != 1 or model_task.count(")") != 1:
+            return False, ConfigurationSecurityWarning(
+                "Forbidden checkpoint task definition as string has unexpected syntax."
+            )
+        LOGGER.warning("Model task defined as string allowed after basic validation.")
+    else:
+        model_type = model_task.get("type")
+        if not isinstance(model_type, six.string_types):
+            LOGGER.debug(f"Model task: [{model_type!s}]")
+            return False, ConfigurationError(f"Forbidden checkpoint task defines unknown operation: [{model_type!s}]")
+        model_params = model_task.get("params")
+        if not isinstance(model_params, dict):
+            LOGGER.debug(f"Model task: [{model_params!s}]")
+            return False, ConfigurationError("Forbidden checkpoint task missing JSON definition of parameter section.")
+        model_classes = model_params.get("class_names")
+        if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
+            LOGGER.debug(f"Model task: [{model_classes!s}]")
+            return False, ConfigurationError(
+                "Forbidden checkpoint task contains invalid JSON class names parameter section."
+            )
     return True, None
 
 
@@ -702,7 +736,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                         raise AssertionError("bad crop channel size")
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
-                    output_driver = osgeo.gdal.GetDriverByName("GTiff")
+                    output_driver = gdal.GetDriverByName("GTiff")
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                     if os.path.exists(output_path):

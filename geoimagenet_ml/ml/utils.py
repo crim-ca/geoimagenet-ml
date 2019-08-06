@@ -8,11 +8,11 @@ import os
 # noinspection PyPackageRequirements
 import affine
 # noinspection PyPackageRequirements
-import osgeo.gdal
-# noinspection PyPackageRequirements
 import numpy as np
 # noinspection PyPackageRequirements
-import osgeo.ogr
+import gdal
+# noinspection PyPackageRequirements
+import ogr
 # noinspection PyPackageRequirements
 import osr
 # noinspection PyPackageRequirements
@@ -31,35 +31,35 @@ if TYPE_CHECKING:
     )
 
 # enforce GDAL exceptions (otherwise functions return None)
-osgeo.gdal.UseExceptions()
+gdal.UseExceptions()
 
 LOGGER = logging.getLogger(__name__)
 
 NUMPY2GDAL_TYPE_CONV = {
-    np.uint8: osgeo.gdal.GDT_Byte,
-    np.int8: osgeo.gdal.GDT_Byte,
-    np.uint16: osgeo.gdal.GDT_UInt16,
-    np.int16: osgeo.gdal.GDT_Int16,
-    np.uint32: osgeo.gdal.GDT_UInt32,
-    np.int32: osgeo.gdal.GDT_Int32,
-    np.float32: osgeo.gdal.GDT_Float32,
-    np.float64: osgeo.gdal.GDT_Float64,
-    np.complex64: osgeo.gdal.GDT_CFloat32,
-    np.complex128: osgeo.gdal.GDT_CFloat64,
+    np.uint8: gdal.GDT_Byte,
+    np.int8: gdal.GDT_Byte,
+    np.uint16: gdal.GDT_UInt16,
+    np.int16: gdal.GDT_Int16,
+    np.uint32: gdal.GDT_UInt32,
+    np.int32: gdal.GDT_Int32,
+    np.float32: gdal.GDT_Float32,
+    np.float64: gdal.GDT_Float64,
+    np.complex64: gdal.GDT_CFloat32,
+    np.complex128: gdal.GDT_CFloat64,
 }
 
 GDAL2NUMPY_TYPE_CONV = {
-    osgeo.gdal.GDT_Byte: np.uint8,
-    osgeo.gdal.GDT_UInt16: np.uint16,
-    osgeo.gdal.GDT_Int16: np.int16,
-    osgeo.gdal.GDT_UInt32: np.uint32,
-    osgeo.gdal.GDT_Int32: np.int32,
-    osgeo.gdal.GDT_Float32: np.float32,
-    osgeo.gdal.GDT_Float64: np.float64,
-    osgeo.gdal.GDT_CInt16: np.complex64,
-    osgeo.gdal.GDT_CInt32: np.complex64,
-    osgeo.gdal.GDT_CFloat32: np.complex64,
-    osgeo.gdal.GDT_CFloat64: np.complex128
+    gdal.GDT_Byte: np.uint8,
+    gdal.GDT_UInt16: np.uint16,
+    gdal.GDT_Int16: np.int16,
+    gdal.GDT_UInt32: np.uint32,
+    gdal.GDT_Int32: np.int32,
+    gdal.GDT_Float32: np.float32,
+    gdal.GDT_Float64: np.float64,
+    gdal.GDT_CInt16: np.complex64,
+    gdal.GDT_CInt32: np.complex64,
+    gdal.GDT_CFloat32: np.complex64,
+    gdal.GDT_CFloat64: np.complex128
 }
 
 
@@ -136,7 +136,7 @@ def parse_coordinate_system(body):
     crs_body = body.get("crs") or body.get("srs")
     crs_type = crs_body.get("type", "").upper()
     crs_opts = list(crs_body.get("properties").values())    # FIXME: no specific mapping of inputs, each is different
-    crs = osgeo.ogr.osr.SpatialReference()
+    crs = osr.SpatialReference()
     err = -1
     if crs_type == "EPSG":
         err = crs.ImportFromEPSG(*crs_opts)
@@ -184,7 +184,7 @@ def parse_geojson(geojson,          # type: JSON
                 raise AssertionError("unexpected poly coord format")
             poly = shapely.geometry.Polygon(coords[0])
             if shapes_srs_transform is not None:
-                ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(poly.wkb)
+                ogr_geometry = ogr.CreateGeometryFromWkb(poly.wkb)
                 ogr_geometry.Transform(shapes_srs_transform)
                 poly = shapely.wkt.loads(ogr_geometry.ExportToWkt())
             feature["geometry"] = poly
@@ -205,7 +205,7 @@ def parse_geojson(geojson,          # type: JSON
 def parse_shapefile(shapefile_path, srs_destination, category_field, id_field,
                     uncertain_flags=None, roi=None, target_category=None, target_id=None):
     uncertain_flags = [] if uncertain_flags is None else uncertain_flags
-    shapefile_driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
+    shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
     shapefile = shapefile_driver.Open(shapefile_path, 0)
     if shapefile is None:
         raise AssertionError("could not open vector data file at '{!s}'".format(shapefile_path))
@@ -321,7 +321,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
     global_rois = []
     raster_stats_map = []
     for rasterfile_path in rasterfile_paths:
-        rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
+        rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
         if rasterfile is None:
             raise AssertionError("could not open raster data file at '{!s}'".format(rasterfile_path))
         LOGGER.debug("Raster '{!s}' metadata printing below...".format(rasterfile_path))
@@ -372,7 +372,7 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
         local_roi = shapely.geometry.Polygon([list(pt) for pt in raster_extent]).buffer(0.01)
         if not raster_curr_srs.IsSame(default_srs):
             shapes_srs_transform = osr.CoordinateTransformation(raster_curr_srs, default_srs)
-            ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(local_roi.wkb)
+            ogr_geometry = ogr.CreateGeometryFromWkb(local_roi.wkb)
             ogr_geometry.Transform(shapes_srs_transform)
             global_roi = shapely.wkt.loads(ogr_geometry.ExportToWkt())
         else:
@@ -432,7 +432,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
         return None, None, None  # exact shape should be fully contained in a single raster
     if not raster_data["srs"].IsSame(crop_geom_srs):
         shapes_srs_transform = osr.CoordinateTransformation(crop_geom_srs, raster_data["srs"])
-        ogr_geometry = osgeo.ogr.CreateGeometryFromWkb(crop_geom.wkb)
+        ogr_geometry = ogr.CreateGeometryFromWkb(crop_geom.wkb)
         ogr_geometry.Transform(shapes_srs_transform)
         crop_geom = shapely.wkt.loads(ogr_geometry.ExportToWkt())
     if crop_fixed_size:
@@ -460,7 +460,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
     crop_inv = np.ma.copy(crop)
     bounds = np.asarray(list(roi_tl) + list(roi_br))
     rasterfile_path = raster_data["file_path"]
-    rasterfile = osgeo.gdal.Open(rasterfile_path, osgeo.gdal.GA_ReadOnly)
+    rasterfile = gdal.Open(rasterfile_path, gdal.GA_ReadOnly)
     if rasterfile is None:
         raise AssertionError("could not open raster data file at '{!s}'".format(rasterfile_path))
     raster_geotransform = raster_data["geotransform"]
@@ -482,27 +482,27 @@ def process_feature_crop(crop_geom,             # type: GeometryType
     local_geotransform = list(offset_geotransform)
     local_geotransform[0], local_geotransform[3] = local_roi_tl_real[0], local_roi_tl_real[1]
 
-    local_target_ds = osgeo.gdal.GetDriverByName("MEM").Create(
-        "", local_roi_cols, local_roi_rows, 2, osgeo.gdal.GDT_Byte)  # one band for mask, one inv mask
+    local_target_ds = gdal.GetDriverByName("MEM").Create(
+        "", local_roi_cols, local_roi_rows, 2, gdal.GDT_Byte)  # one band for mask, one inv mask
     local_target_ds.SetGeoTransform(local_geotransform)
     local_target_ds.SetProjection(raster_data["srs"].ExportToWkt())
     local_target_ds.GetRasterBand(1).WriteArray(np.zeros((local_roi_rows, local_roi_cols), dtype=np.uint8))
-    ogr_dataset = osgeo.ogr.GetDriverByName("Memory").CreateDataSource("masks")
+    ogr_dataset = ogr.GetDriverByName("Memory").CreateDataSource("masks")
     ogr_layer = ogr_dataset.CreateLayer("feature_mask", srs=raster_data["srs"])
-    ogr_feature = osgeo.ogr.Feature(ogr_layer.GetLayerDefn())
-    ogr_geometry = osgeo.ogr.CreateGeometryFromWkt(crop_geom.wkt)
+    ogr_feature = ogr.Feature(ogr_layer.GetLayerDefn())
+    ogr_geometry = ogr.CreateGeometryFromWkt(crop_geom.wkt)
     ogr_feature.SetGeometry(ogr_geometry)
     ogr_layer.CreateFeature(ogr_feature)
-    osgeo.gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
+    gdal.RasterizeLayer(local_target_ds, [1], ogr_layer, burn_values=[1], options=["ALL_TOUCHED=TRUE"])
     local_feature_mask_array = local_target_ds.GetRasterBand(1).ReadAsArray()
     if local_feature_mask_array is None:
         raise AssertionError("layer rasterization failed")
     local_target_ds.GetRasterBand(2).WriteArray(np.ones((local_roi_rows, local_roi_cols), dtype=np.uint8))
     ogr_layer_inv = ogr_dataset.CreateLayer("bg_mask", srs=raster_data["srs"])
-    ogr_feature_inv = osgeo.ogr.Feature(ogr_layer_inv.GetLayerDefn())
+    ogr_feature_inv = ogr.Feature(ogr_layer_inv.GetLayerDefn())
     ogr_feature_inv.SetGeometry(ogr_geometry)
     ogr_layer_inv.CreateFeature(ogr_feature_inv)
-    osgeo.gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
+    gdal.RasterizeLayer(local_target_ds, [2], ogr_layer_inv, burn_values=[0], options=["ALL_TOUCHED=TRUE"])
     local_bg_mask_array = local_target_ds.GetRasterBand(2).ReadAsArray()
     if local_bg_mask_array is None:
         raise AssertionError("layer rasterization failed")

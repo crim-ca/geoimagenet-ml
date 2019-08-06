@@ -139,12 +139,12 @@ class TestModelApi(unittest.TestCase):
             buffer.seek(0)
             return buffer.read()
 
-        def valid_model_no_check(data):
+        def validate_model_no_check(data):
             return True, None
 
         with mock.patch("thelper.utils.load_checkpoint", side_effect=load_checkpoint_no_check), \
-                mock.patch("geoimagenet_ml.ml.impl.valid_model", side_effect=valid_model_no_check), \
-                mock.patch("geoimagenet_ml.store.datatypes.valid_model", side_effect=valid_model_no_check):
+                mock.patch("geoimagenet_ml.ml.impl.validate_model", side_effect=validate_model_no_check), \
+                mock.patch("geoimagenet_ml.store.datatypes.validate_model", side_effect=validate_model_no_check):
             self.model_1 = self.db.models_store.save_model(self.model_1)
             self.model_2 = self.db.models_store.save_model(self.model_2)
 

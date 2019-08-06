@@ -5,6 +5,7 @@
 GeoImageNet ML API
 """
 from geoimagenet_ml.store.factories import migrate_database_when_ready
+from geoimagenet_ml.store.exceptions import JobExecutionError
 from pyramid.config import Configurator
 from pyramid.security import NO_PERMISSION_REQUIRED
 from pyramid.settings import asbool
@@ -20,8 +21,29 @@ if sentry_dsn:
     import sentry_sdk
     from sentry_sdk.integrations.celery import CeleryIntegration
     from sentry_sdk.integrations.pyramid import PyramidIntegration
+
+    def before_send(event, hint):
+        """
+        Make Sentry filter and group more aggressively corresponding Job errors to avoid
+        duplication of similar operations because of differing UUID or other unique fields.
+        """
+        task = event.get("extra", {}).get("celery-job", {})
+        log_msg = event.get("logentry", {}).get("message")
+        if not task or not log_msg:
+            return event
+        task_name = "geoimagenet_ml.api.routes.processes.utils.process_job_runner"
+        if task.get("task_name") == task_name and "failed to run" in log_msg:
+            try:
+                # see format of logged job error for parsing
+                task_msg = log_msg.split("[", 1)[-1].rsplit("]", 1)[0]
+            except (IndexError, KeyError):
+                task_msg = log_msg
+            event["fingerprint"] = [JobExecutionError.__name__, task_msg]
+            event["logentry"]["message"] = task_msg
+        return event
+
     sentry_sdk.init(sentry_dsn, debug=sentry_debug, server_name=sentry_server_name,
-                    integrations=[CeleryIntegration(), PyramidIntegration()])
+                    integrations=[CeleryIntegration(), PyramidIntegration()], before_send=before_send)
 
 
 # noinspection PyUnusedLocal
