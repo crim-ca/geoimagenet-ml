@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.4.0 (2019-08-06)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add error logging in case of request generating an exception (voluntary or by execution problem)
