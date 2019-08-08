@@ -6,6 +6,10 @@ History
 Unreleased
 ---------------------
 
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix incorrect descriptions returned for ``GET`` requests of job logs and exceptions
+
 1.4.0 (2019-08-06)
 ---------------------
 

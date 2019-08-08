@@ -160,7 +160,7 @@ def get_process_job_logs(request):
     job = get_job(request)
     database_factory(request).actions_store.save_action(job, OPERATION.INFO, request=request)
     return ex.valid_http(httpSuccess=HTTPOk, content={"logs": job.logs},
-                         detail=s.ProcessJobResult_GET_OkResponseSchema.description, request=request)
+                         detail=s.ProcessJobLogs_GET_OkResponseSchema.description, request=request)
 
 
 @s.ProcessJobExceptionsAPI.get(tags=[s.TagProcesses], renderer="json",
@@ -173,4 +173,4 @@ def get_process_job_exceptions(request):
     job = get_job(request)
     database_factory(request).actions_store.save_action(job, OPERATION.INFO, request=request)
     return ex.valid_http(httpSuccess=HTTPOk, content={"exceptions": job.exceptions},
-                         detail=s.ProcessJobResult_GET_OkResponseSchema.description, request=request)
+                         detail=s.ProcessJobExceptions_GET_OkResponseSchema.description, request=request)
