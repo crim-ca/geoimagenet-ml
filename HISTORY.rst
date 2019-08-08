@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.4.1 (2019-08-08)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * remove git clone of ``thelper`` in ``Jenkinsfile`` as it is installed with requirements pinned version from PyPI
