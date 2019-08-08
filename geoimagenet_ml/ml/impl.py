@@ -4,7 +4,7 @@ from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
-import gdal
+from osgeo import gdal
 import requests
 import logging
 import random

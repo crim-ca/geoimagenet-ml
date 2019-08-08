@@ -10,12 +10,6 @@ import affine
 # noinspection PyPackageRequirements
 import numpy as np
 # noinspection PyPackageRequirements
-import gdal
-# noinspection PyPackageRequirements
-import ogr
-# noinspection PyPackageRequirements
-import osr
-# noinspection PyPackageRequirements
 import shapely
 # noinspection PyPackageRequirements
 import shapely.geometry
@@ -23,6 +17,8 @@ import shapely.geometry
 import shapely.ops
 # noinspection PyPackageRequirements
 import shapely.wkt
+# noinspection PyPackageRequirements
+from osgeo import gdal, ogr, osr
 
 if TYPE_CHECKING:
     from geoimagenet_ml.typedefs import (  # noqa: F401
