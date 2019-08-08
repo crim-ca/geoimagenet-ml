@@ -6,6 +6,10 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* remove git clone of ``thelper`` in ``Jenkinsfile`` as it is installed with requirements pinned version from PyPI
+
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * fix incorrect descriptions returned for ``GET`` requests of job logs and exceptions

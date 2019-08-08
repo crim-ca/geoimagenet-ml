@@ -18,14 +18,8 @@ pipeline {
 
         stage('Build') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'f6c3d8c2-ac53-45bd-971e-1a3a02da3b19',
-                    passwordVariable: 'STASH_PASSWORD', usernameVariable: 'STASH_USERNAME')
-                ]) {
-                    sh 'env | sort'
-                    sh 'test -d thelper || git clone https://${STASH_USERNAME}:${STASH_PASSWORD}@www.crim.ca/stash/scm/VISI/thelper.git'
-                    sh 'docker build -t $LOCAL_IMAGE_NAME .'
-                }
+                sh 'env | sort'
+                sh 'docker build -t $LOCAL_IMAGE_NAME .'
             }
         }
 
