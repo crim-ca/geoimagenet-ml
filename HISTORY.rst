@@ -14,6 +14,7 @@ Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * fix incorrect descriptions returned for ``GET`` requests of job logs and exceptions
 * fix key error when parsing model task defined as literal string [GEOIM-245, GEOIM-247]
+* pin ``gdal==2.4.2`` as ``gdal==3.0.1`` fails on import (https://github.com/OSGeo/gdal/issues/1759)
 
 1.4.0 (2019-08-06)
 ---------------------
