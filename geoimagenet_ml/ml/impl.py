@@ -4,13 +4,15 @@ from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
-import gdal
+from osgeo import gdal
 import requests
 import logging
 import random
 import shutil
 import six
 import ssl
+import ast
+import re
 import os
 import thelper
 from typing import TYPE_CHECKING
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
     from geoimagenet_ml.typedefs import (  # noqa: F401
         Any, AnyStr, Callable, Dict, List, Tuple, Union, JSON, SettingsType, Number,
-        Optional, FeatureType, RasterDataType
+        Optional, FeatureType, RasterDataType, ParamsType
     )
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
     # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
@@ -115,36 +117,76 @@ def validate_model(model_data):
         LOGGER.warning(f"Model task not defined as dictionary: [{model_task!s}]")
         if not (isinstance(model_task, str) and model_task.startswith("thelper.task")):
             return False, ConfigurationSecurityWarning(
-                "Forbidden checkpoint task definition as string doesn't refer to a `thelper.task`."
+                "Forbidden model checkpoint task definition as string doesn't refer to a `thelper.task`."
             )
         model_task_cls = model_task.split("(")[0]
         LOGGER.debug(f"Verifying model task as string: {model_task_cls!s}")
         model_task_cls = thelper.utils.import_class(model_task_cls)
         if not (isclass(model_task_cls) and issubclass(model_task_cls, thelper.tasks.Task)):
             return False, ConfigurationSecurityWarning(
-                "Forbidden checkpoint task definition as string is not a known `thelper.task`."
+                "Forbidden model checkpoint task definition as string is not a known `thelper.task`."
             )
         if model_task.count("(") != 1 or model_task.count(")") != 1:
             return False, ConfigurationSecurityWarning(
-                "Forbidden checkpoint task definition as string has unexpected syntax."
+                "Forbidden model checkpoint task definition as string has unexpected syntax."
             )
         LOGGER.warning("Model task defined as string allowed after basic validation.")
+        try:
+            fix_str_model_task(model_task)  # attempt update but don't actually apply it
+        except ValueError:
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task defined as string doesn't respect expected syntax."
+            )
+        LOGGER.debug("Model task as string validated with successful parameter conversion")
     else:
         model_type = model_task.get("type")
         if not isinstance(model_type, six.string_types):
             LOGGER.debug(f"Model task: [{model_type!s}]")
-            return False, ConfigurationError(f"Forbidden checkpoint task defines unknown operation: [{model_type!s}]")
+            return False, ConfigurationError(
+                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
+            )
         model_params = model_task.get("params")
         if not isinstance(model_params, dict):
             LOGGER.debug(f"Model task: [{model_params!s}]")
-            return False, ConfigurationError("Forbidden checkpoint task missing JSON definition of parameter section.")
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task missing JSON definition of parameter section."
+            )
         model_classes = model_params.get("class_names")
         if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
             LOGGER.debug(f"Model task: [{model_classes!s}]")
             return False, ConfigurationError(
-                "Forbidden checkpoint task contains invalid JSON class names parameter section."
+                "Forbidden model checkpoint task contains invalid JSON class names parameter section."
             )
     return True, None
+
+
+def fix_str_model_task(model_task):
+    # type: (str) -> ParamsType
+    """
+    Attempts to convert the input model task definition as literal string to the equivalent dictionary of task
+    input parameters.
+
+    For example, a model with classification task is expected to have the following format::
+
+        "thelper.tasks.classif.Classification(class_names=['cls1', 'cls2'], input_key='0', label_key='1', meta_keys=[])"
+
+    And will be converted to::
+
+        {'class_names': ['cls1', 'cls2'], 'input_key': '0', 'label_key': '1', 'meta_keys': []}
+
+    :return: dictionary of task input parameters converted from the literal string definition
+    :raises ValueError: if the literal string cannot be parsed as a task input parameters definition
+    """
+    try:
+        if not isinstance(model_task, str):
+            raise ValueError(f"Invalid input is not a literal string for model task parsing, got '{type(model_task)}'")
+        params = model_task.split("(", 1)[-1].split(")", 1)[0]
+        params = re.sub(r"(\w+)\s*=", r"'\1': ", params)
+        return ast.literal_eval(f"{{{params}}}")
+    except ValueError:
+        raise   # failing ast converting raises ValueError
+    except Exception as exc:
+        raise ValueError(f"Failed literal string parsing for model task, exception: [{exc!s}]")
 
 
 def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
@@ -322,10 +364,18 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         test_config.pop(key, None)
 
     # override deployed model and dataset references
+    #   - override model task defined as string to equivalent parameter dictionary representation
     #   - override model task input/label keys that could be modified by user to match definitions of dataset loader
     #   - override model task classes instead of full dataset so we don't specialize the model
     #     (test only on classes known by the model, or on any class nested under a more generic category)
     test_dataset_name = dataset_config_override["name"]
+    if isinstance(test_config["task"], str):
+        task_str = test_config["task"]
+        task_params = fix_str_model_task(task_str)
+        LOGGER.debug("Overriding model task string definition by parameter dictionary representation:\n"
+                     f"  original task: [{task_str}]\n"
+                     f"  modified task: [{task_params}]")
+        test_config["task"] = task_params
     test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
     test_model_task = thelper.tasks.create_task(test_config["task"])
     test_model_task_name = fully_qualified_name(test_model_task)

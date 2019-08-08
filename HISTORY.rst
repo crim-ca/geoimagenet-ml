@@ -6,9 +6,15 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* remove git clone of ``thelper`` in ``Jenkinsfile`` as it is installed with requirements pinned version from PyPI
+
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * fix incorrect descriptions returned for ``GET`` requests of job logs and exceptions
+* fix key error when parsing model task defined as literal string [GEOIM-245, GEOIM-247]
+* pin ``gdal==2.4.2`` as ``gdal==3.0.1`` fails on import (https://github.com/OSGeo/gdal/issues/1759)
 
 1.4.0 (2019-08-06)
 ---------------------
@@ -18,7 +24,7 @@ Changes
 * add error logging in case of request generating an exception (voluntary or by execution problem)
 * change ``gdal`` requirements and imports to avoid ``osgeo`` variant breaking too easily
 * support older ``thelper`` model checkpoint definitions using string parameters instead of JSON [GEOIM-241]
-* update to ``thelper>=0.3.7``
+* update to ``thelper>=0.3.7``, help better support old format for model task definitions [GEOIM-247]
 * disable `Jenkins` online tests execution (download/upload model) as they now require login [GEOIM-180]
 
 Fixes

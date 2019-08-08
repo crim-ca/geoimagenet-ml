@@ -1,3 +1,4 @@
 pyproj
 libiconv
-gdal>=3
+gdal==2.4.2
+libgdal==2.4.2
