@@ -110,6 +110,29 @@ def test_str2paths_multi_walk_files(tmp_path):
     assert p[2] == str(f2)
 
 
+def test_str2paths_walk_files_filtered(tmp_path):
+    f0 = tmp_path / "file0.txt"
+    d1 = tmp_path / "sub"
+    f1 = tmp_path / "file1.txt"
+    f2 = tmp_path / "file2.log"
+    f3 = tmp_path / "file3.tmp"
+    d2 = d1 / "other"
+    f4 = d2 / "file4.log"
+    f5 = d2 / "file5.txt"
+    f6 = d2 / "file6.tmp"
+    d1.mkdir()
+    d2.mkdir()
+    for f in [f0, f1, f2, f3, f4, f5, f6]:
+        f.write_text("random")
+    p = utils.str2paths(str(tmp_path), list_files=True, allowed_extensions=["log", ".tmp"])
+    assert isinstance(p, list)
+    assert len(p) == 4
+    assert p[0] == str(f2)
+    assert p[1] == str(f3)
+    assert p[2] == str(f4)
+    assert p[3] == str(f6)
+
+
 statuses_except_unknown = set(status.STATUS.__members__.values()) - {status.STATUS.UNKNOWN}
 
 

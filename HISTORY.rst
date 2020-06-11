@@ -6,6 +6,15 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add support of ``MultiPolygon`` feature if it is defined as a single set of ``Polygon`` during ``batch-creation``
+* drop Sentry events in case of HTTP Client errors (4xx) to avoid over reporting expected responses by API
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* filter directory walker file types to ``tif`` only for retrieval of rasters within ``batch-creation`` process runner
+
 1.4.1 (2019-08-08)
 ---------------------
 
