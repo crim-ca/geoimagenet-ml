@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+1.5.0 (2020-06-11)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add support of ``MultiPolygon`` feature if it is defined as a single set of ``Polygon`` during ``batch-creation``
