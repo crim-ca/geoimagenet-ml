@@ -156,6 +156,28 @@ def parse_geojson(geojson,          # type: JSON
                   srs_destination,  # type: osr.SpatialReference
                   roi=None,         # type: Optional[GeometryType]
                   ):                # type: (...) -> Tuple[List[FeatureType], ClassCounter]
+    """
+    Parses a `FeatureCollection` GeoJSON body where `features` with ``Polygon`` from which coordinates can be extracted
+    in order to return them as patch regions with the desired SRS and counts per class.
+
+    Features of type ``MultiPolygon`` are handled and converted to ``Polygon`` if a single one is defined within it.
+    Actual ``MultiPolygon`` of more than one ``Polygon`` are not supported. Each such ``Polygon`` is expected to be
+    registered as individual and independent features.
+
+    Any `hole(s)` specified in each ``Polygon`` (either obtained directly or converted from multi) are ignored (dropped)
+    since the expected end result is to generate an image-patch that contains the whole `outer` area of the feature.
+    Only the `outer` ring (that must be unique) is therefore validated to have minimally 4 points (at least 3 for a
+    triangle +1 to close the ring).
+
+    :param geojson: FeatureCollection GeoJSON
+    :param srs_destination:
+        Desired spatial reference system of resulting features. Any feature not using the same spatial reference will be
+        transformed to the destination one.
+    :param roi:
+        Region of Interest to preserve features. If specified, any feature not `fully` contained within the ROI will be
+        dropped.
+    :return: tuple of retained features and counter of occurrences for each corresponding taxonomy class ID.
+    """
     if geojson is None or not isinstance(geojson, dict):
         raise AssertionError("unexpected geojson type")
     if "features" not in geojson or not isinstance(geojson["features"], list):
@@ -170,22 +192,34 @@ def parse_geojson(geojson,          # type: JSON
     LOGGER.debug("scanning parsed features for out-of-bounds cases...")
     for feature in features:
         raw_geometry = feature["geometry"]
-        if raw_geometry["type"] == "Polygon":
+        geom_type = raw_geometry["type"]
+        feat_id = str(feature.get("id", "<unknown-id>"))
+        if geom_type == "MultiPolygon":  # can be resolved if has only 1 polygon
+            coords = raw_geometry["coordinates"]
+            if isinstance(coords, list) and len(coords) == 1:
+                LOGGER.warning("converting MultiPolygon to Polygon from feature with single coordinates subset")
+                raw_geometry["type"] = "Polygon"
+                raw_geometry["coordinates"] = coords[0]
+        if raw_geometry["type"] == "Polygon":  # original or converted
             coords = raw_geometry["coordinates"]
             if not isinstance(coords, list):
-                raise AssertionError("unexpected poly coords type")
-            if len(coords) != 1:
-                raise AssertionError("unexpected coords embedding; should be list-of-list-of-points w/ unique ring")
-            if not all([isinstance(c, list) and len(c) == 2 for c in coords[0]]) or len(coords[0]) < 4:
-                raise AssertionError("unexpected poly coord format")
-            poly = shapely.geometry.Polygon(coords[0])
+                raise AssertionError("unexpected poly coords type for feature ({})".format(feat_id))
+            if len(coords) < 1:
+                raise AssertionError("unexpected coords embedding for feature ({}); ".format(feat_id) +
+                                     "should be list-of-list-of-points w/ unique ring")
+            elif len(coords) > 1:  # warning only for traceability
+                LOGGER.warning("dropping 'hole' coordinates from Polygon feature (%s)", feat_id)
+            coords = coords[0]  # always a list-of-list-of-points regardless if holes are there or not
+            if len(coords) < 4 or not all([isinstance(c, list) and len(c) == 2 for c in coords]):
+                raise AssertionError("unexpected poly coord format for feature ({})".format(feat_id))
+            poly = shapely.geometry.Polygon(coords)  # if holes were kept, would be 2nd arg as list (rest of coords)
             if shapes_srs_transform is not None:
                 ogr_geometry = ogr.CreateGeometryFromWkb(poly.wkb)
                 ogr_geometry.Transform(shapes_srs_transform)
                 poly = shapely.wkt.loads(ogr_geometry.ExportToWkt())
             feature["geometry"] = poly
         else:
-            raise AssertionError("unhandled raw geometry type [{}]".format(raw_geometry["type"]))
+            raise AssertionError("unhandled raw geometry type [{}]".format(geom_type))  # raise with original type
         if roi is not None and roi and roi.contains(feature["geometry"]):
             kept_features.append(feature)
     LOGGER.info("kept features: {}".format(count_and_percent(len(kept_features), len(features))))

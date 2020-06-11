@@ -111,15 +111,21 @@ def get_user_id(request):
     return user_id
 
 
-def str2paths(str_list=None, list_files=False):
-    # type: (Optional[AnyStr], bool) -> List[AnyStr]
+def str2paths(str_list=None, list_files=False, allowed_extensions=None):
+    # type: (Optional[AnyStr], bool, Optional[List[AnyStr]]) -> List[AnyStr]
     """
     Obtains a list of *existing* paths from a comma-separated string of *potential* paths.
 
-    If ``list_files=True``, recursively lists contained files under paths matching existing directories.
+    :param str_list: comma-separated string of lookup directory path(s) for files.
+    :param list_files: if enabled, recursively lists contained files under paths matching existing directories.
+    :param allowed_extensions: list of permitted extensions by which to filter files, or every existing file if omitted.
+    :returns: extended and sorted list of files according to arguments.
     """
     if not isinstance(str_list, six.string_types) or not str_list:
         return []
+    if not allowed_extensions:
+        allowed_extensions = []
+    allowed_extensions = [(".{}".format(ext) if not ext.startswith(".") else ext) for ext in allowed_extensions]
     path_list = [p.strip() for p in str_list.split(',')]
     path_list = [os.path.abspath(p) for p in path_list if os.path.isdir(p) or os.path.isfile(p)]
     if list_files:
@@ -127,7 +133,8 @@ def str2paths(str_list=None, list_files=False):
         for path in path_list:
             for root, _, file_name in os.walk(path, followlinks=True):
                 for fn in file_name:
-                    path_files.append(os.path.join(root, fn))
+                    if not allowed_extensions or os.path.splitext(fn)[-1] in allowed_extensions:
+                        path_files.append(os.path.join(root, fn))
         path_list = path_files
     return list(sorted(set(path_list)))  # remove duplicates
 

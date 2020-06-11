@@ -7,6 +7,7 @@ GeoImageNet ML API
 from geoimagenet_ml.store.factories import migrate_database_when_ready
 from geoimagenet_ml.store.exceptions import JobExecutionError
 from pyramid.config import Configurator
+from pyramid.httpexceptions import HTTPClientError
 from pyramid.security import NO_PERMISSION_REQUIRED
 from pyramid.settings import asbool
 import logging
@@ -26,11 +27,17 @@ if sentry_dsn:
         """
         Make Sentry filter and group more aggressively corresponding Job errors to avoid
         duplication of similar operations because of differing UUID or other unique fields.
+
+        Also ignore expected HTTP Client errors (4xx) to only report unhandled HTTP Server errors (5xx).
         """
         task = event.get("extra", {}).get("celery-job", {})
         log_msg = event.get("logentry", {}).get("message")
         if not task or not log_msg:
             return event
+        if "exc_info" in hint:
+            exc_type, exc_value, tb = hint["exc_info"]
+            if isinstance(exc_value, HTTPClientError):
+                return  # empty drops the event reporting
         task_name = "geoimagenet_ml.api.routes.processes.utils.process_job_runner"
         if task.get("task_name") == task_name and "failed to run" in log_msg:
             try:
