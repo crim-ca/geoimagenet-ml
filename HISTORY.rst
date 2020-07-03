@@ -6,6 +6,11 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* add ``scripts/run_model_tester.py`` to execute ``ProcessRunnerModelTester`` process offline.
+* add ``memory`` implementations of database stores for testing and scripts.
+
 1.5.0 (2020-06-11)
 ---------------------
 

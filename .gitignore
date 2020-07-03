@@ -125,3 +125,4 @@ env.local
 /output/
 /saved/
 /docker-compose.override.yml
+**/output.json
