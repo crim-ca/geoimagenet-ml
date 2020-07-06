@@ -369,14 +369,27 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     #   - override model task classes instead of full dataset so we don't specialize the model
     #     (test only on classes known by the model, or on any class nested under a more generic category)
     test_dataset_name = dataset_config_override["name"]
+
     if isinstance(test_config["task"], str):
         task_str = test_config["task"]
+        task_class_str = task_str.split("(", 1)[0]
+        if "thelper.tasks" not in task_class_str:
+            raise AssertionError("Invalid task 'type' in task config")
+        LOGGER.debug("Task type in the config:\n"
+                     f"  task type: [{task_class_str}]")
         task_params = fix_str_model_task(task_str)
         LOGGER.debug("Overriding model task string definition by parameter dictionary representation:\n"
                      f"  original task: [{task_str}]\n"
                      f"  modified task: [{task_params}]")
-        test_config["task"] = task_params
-    test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
+        test_config["task"] = {"params" : task_params, "type" : task_class_str}
+    # task_type = thelper.utils.import_class(test_config["task"]["type"])
+    # if task_class_str == "thelper.tasks.detect.Detection":
+    #    test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
+    # else:
+    if "Detection" not in task_class_str:
+        test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
+    else:
+        test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
     test_model_task = thelper.tasks.create_task(test_config["task"])
     test_model_task_name = fully_qualified_name(test_model_task)
     test_config["config"]["name"] = model_config_override["name"]
