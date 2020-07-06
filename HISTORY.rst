@@ -8,8 +8,15 @@ Unreleased
 
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
-* add ``scripts/run_model_tester.py`` to execute ``ProcessRunnerModelTester`` process offline.
-* add ``memory`` implementations of database stores for testing and scripts.
+* add ``scripts/update_model_classes.py`` to update taxonomy class indices of model task in checkpoint.
+  (CLI script callable after install with ``gin_ml_update_model_classes``)
+* add ``scripts/run_model_tester.py`` to execute ``ProcessRunnerModelTester`` process offline
+  (CLI script callable after install with ``gin_ml_run_model_tester``)
+* add ``memory`` implementations of database stores for testing and scripts
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* fix validation of model task if already parsed as instance of ``thelper.tasks.Task``
 
 1.5.0 (2020-06-11)
 ---------------------

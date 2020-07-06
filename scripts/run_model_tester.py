@@ -15,10 +15,10 @@ import json
 import os
 import sys
 import uuid
+from typing import TYPE_CHECKING
 
 from pyramid.registry import Registry
 from pyramid.request import Request
-from typing import TYPE_CHECKING
 
 from geoimagenet_ml.processes.runners import ProcessRunnerBatchCreator, ProcessRunnerModelTester
 from geoimagenet_ml.store.datatypes import Dataset, Job, Model, Process
@@ -89,62 +89,53 @@ def run_model_tester(dataset_data, model_path, dataset_root=None):
     return job.results
 
 
-def update_logging(parsed_args):
-    # type: (argparse.Namespace) -> None
+def update_logging(log_level, logger_names=None):
+    # type: (int, Optional[List[str]]) -> None
     """Update logger levels that will be used by the script, which can provide more details during execution."""
-    proc_logger = logging.getLogger(ProcessRunnerModelTester.identifier)
-    proc_gin_ml = logging.getLogger("geoimagenet_ml")
-    proc_logger.addHandler(logging.StreamHandler(sys.stdout))
-    proc_gin_ml.addHandler(logging.StreamHandler(sys.stdout))
-    if parsed_args.verbose:
-        proc_logger.setLevel(logging.DEBUG)
-        proc_gin_ml.setLevel(logging.DEBUG)
-    elif parsed_args.warn:
-        proc_logger.setLevel(logging.WARNING)
-        proc_gin_ml.setLevel(logging.WARNING)
-    elif parsed_args.quiet:
-        proc_logger.setLevel(logging.ERROR)
-        proc_gin_ml.setLevel(logging.ERROR)
-    else:
-        proc_logger.setLevel(logging.INFO)
-        proc_gin_ml.setLevel(logging.INFO)
+    logger_names = logger_names or []
+    logger_names.append("geoimagenet_ml")
+    for name in logger_names:
+        logger = logging.getLogger(name)
+        logger.addHandler(logging.StreamHandler(sys.stdout))
+        logger.setLevel(log_level)
 
 
-if __name__ == "__main__":
+def main():
     ap = argparse.ArgumentParser(prog=__file__, description=__doc__, add_help=True, # noqa
                                  formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("dataset_data", help="""JSON file path with dataset 'data' field contents.
-    Expected Format: 
-      {
-        "taxonomy": [
-          # top most should have COUV and OBJE for respectively land-cover and object-detection annotations 
-          # See GeoImageNet API Taxonomy route 
-          { "id": <int>, "name_fr": "<>", "name_en": "<>", "code": "<4-letter-code>", 
-            "children": [<same-object-format-recursively>]
+    ap.add_argument("dataset_data", help="""
+JSON file path with dataset 'data' field contents.
+Expected Format: 
+  {
+    "taxonomy": [
+      # top most should have COUV and OBJE for respectively land-cover and object-detection annotations 
+      # See GeoImageNet API Taxonomy route 
+      { "id": <int>, "name_fr": "<>", "name_en": "<>", "code": "<4-letter-code>", 
+        "children": [<same-object-format-recursively>]
+      },
+      <...>
+    ], 
+    "patches": [
+      { 
+        "image": "<original-image-reference>",
+        "class": <taxonomy-class-id>, 
+        "feature": "<annotation.UUID>",   # identifier of original annotation
+        "split": "<train|valid|test>",    # only 'test' are considered with this script
+        # crops are a variation of each annotated patch (think of it as data augmentation or some other viewpoint)
+        "crops": [
+          {
+            "type": "<raw|fixed>",
+            "path": "<path-to-image-patch>"
+            "shape": [<int>, <int>, <...>],
+            "data_type": 1,               # enum-based (see Shapely, but basically indicates Polygon)
+            "coordinates": [<double>],    # 6 values for lat/lon and relative position on Polygon
           },
-          <...>
-        ], 
-        "patches": [
-          { 
-            "image": "<original-image-reference>",
-            "class": <taxonomy-class-id>, 
-            "feature": "<annotation.UUID>",   # identifier of original annotation
-            "split": "<train|valid|test>",    # only 'test' are considered with this script
-            # crops are a variation of each annotated patch (think of it as data augmentation or some other viewpoint)
-            "crops": [
-              {
-                "type": "<raw|fixed>",
-                "path": "<path-to-image-patch>"
-                "shape": [<int>, <int>, <...>],
-                "data_type": 1,               # enum-based (see Shapely, but basically indicates Polygon)
-                "coordinates": [<double>],    # 6 values for lat/lon and relative position on Polygon
-              },
-              <...>   # other crops (if any)
-            ]
-          }
-          <...>   # other patches
+          <...>   # other crops (if any)
         ]
       }
+      <...>   # other patches
+    ]
+  }
     """)
     ap.add_argument("model_path", help="Path to the model to employ.")
     ap.add_argument("-d", "--dataset-root", dest="dataset_root",
@@ -153,13 +144,21 @@ if __name__ == "__main__":
     ap.add_argument("-o", "--output", dest="output_path", help="Path to the model to employ (default: %(default)s).",
                     default="./output.json")
     ap_log = ap.add_mutually_exclusive_group()
-    ap_log.add_argument("-v", "--verbose", action="store_true", help="Increase logging verbosity.")
-    ap_log.add_argument("-w", "--warn", action="store_true", help="Reduce logging verbosity to only warning and error.")
-    ap_log.add_argument("-q", "--quiet", action="store_true", help="Reduce logging verbosity to only errors.")
+    ap_log.add_argument("-v", "--verbose", action="store_const", const=logging.DEBUG,
+                        help="Increase logging verbosity.")
+    ap_log.add_argument("-w", "--warn", action="store_const", const=logging.WARNING,
+                        help="Reduce logging verbosity to only warning and error.")
+    ap_log.add_argument("-q", "--quiet", action="store_const", const=logging.ERROR,
+                        help="Reduce logging verbosity to only errors.")
     args = ap.parse_args()
-    update_logging(args)
+    log_level = args.verbose or args.warn or args.quiet or logging.INFO
+    update_logging(log_level, [ProcessRunnerModelTester.identifier])
     with open(args.dataset_data, "r") as fd:
         data = json.load(fd)
     results = run_model_tester(data, args.model_path, args.dataset_root or os.path.split(args.dataset_data)[0])
     with open(args.output_path, "w") as fd:
         json.dump(results, fd)
+
+
+if __name__ == "__main__":
+    main()

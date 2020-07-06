@@ -51,7 +51,7 @@ setup(
     ],
 
     # -- Package structure -------------------------------------------------
-    packages=[__meta__.__package__],    # find_packages(),
+    packages=[__meta__.__package__, "scripts"],    # find_packages(),
     package_dir={__meta__.__package__: __meta__.__package__},
     include_package_data=True,
     install_requires=REQUIREMENTS,
@@ -62,9 +62,13 @@ setup(
     tests_require=TEST_REQUIREMENTS,
 
     # -- script entry points -----------------------------------------------
-    entry_points="{section}\n{main}\n{after}".format(
-        section="[paste.app_factory]",
-        main=f"main = {__meta__.__package__}.api.main:main",
-        after="[console_scripts]",
-    )
+    entry_points={
+        "paste.app_factory": [
+            f"main = {__meta__.__package__}.api.main:main"
+        ],
+        "console_scripts": [
+            "gin_ml_run_model_tester = scripts.run_model_tester:main",
+            "gin_ml_update_model_classes = scripts.update_model_classes:main"
+        ]
+    }
 )

@@ -104,17 +104,43 @@ def validate_model(model_data):
     """
     Accomplishes required model checkpoint validation to restrict unexpected behaviour during other function calls.
 
-    All security checks or alternative behaviours allowed by native ``thelper`` library but that should be forbidden
+    All security checks or alternative behaviours allowed by native :mod:`thelper` library but that should be forbidden
     within this API for process execution should be done here.
 
-    :param model_data: model checkpoint data with configuration parameters (typically loaded by `load_model`)
+    :param model_data: model checkpoint data with configuration parameters (typically loaded by :func:`load_model`)
     :return: tuple of (success, exception) accordingly
     :raises: None (nothrow)
     """
     model_task = model_data.get("task")
-    if not isinstance(model_task, dict):
+    if isinstance(model_task, dict):
+        model_type = model_task.get("type")
+        if not isinstance(model_type, six.string_types):
+            LOGGER.debug(f"Model task: [{model_type!s}]")
+            return False, ConfigurationError(
+                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
+            )
+        model_params = model_task.get("params")
+        if not isinstance(model_params, dict):
+            LOGGER.debug(f"Model task: [{model_params!s}]")
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task missing JSON definition of parameter section."
+            )
+        model_classes = model_params.get("class_names")
+        if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
+            LOGGER.debug(f"Model task: [{model_classes!s}]")
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task contains invalid JSON class names parameter section."
+            )
+    elif isinstance(model_task, thelper.tasks.Task):
+        model_type = fully_qualified_name(model_task)
+        if model_type not in MODEL_TASK_MAPPING:
+            LOGGER.debug(f"Model task: [{model_type!s}]")
+            return False, ConfigurationError(
+                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
+            )
+    else:
         # thelper security risk, refuse literal string definition of task loaded by eval() unless it can be validated
-        LOGGER.warning(f"Model task not defined as dictionary: [{model_task!s}]")
+        LOGGER.warning(f"Model task not defined as dictionary nor `thelper.task.Task` class: [{model_task!s}]")
         if not (isinstance(model_task, str) and model_task.startswith("thelper.task")):
             return False, ConfigurationSecurityWarning(
                 "Forbidden model checkpoint task definition as string doesn't refer to a `thelper.task`."
@@ -138,25 +164,6 @@ def validate_model(model_data):
                 "Forbidden model checkpoint task defined as string doesn't respect expected syntax."
             )
         LOGGER.debug("Model task as string validated with successful parameter conversion")
-    else:
-        model_type = model_task.get("type")
-        if not isinstance(model_type, six.string_types):
-            LOGGER.debug(f"Model task: [{model_type!s}]")
-            return False, ConfigurationError(
-                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
-            )
-        model_params = model_task.get("params")
-        if not isinstance(model_params, dict):
-            LOGGER.debug(f"Model task: [{model_params!s}]")
-            return False, ConfigurationError(
-                "Forbidden model checkpoint task missing JSON definition of parameter section."
-            )
-        model_classes = model_params.get("class_names")
-        if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
-            LOGGER.debug(f"Model task: [{model_classes!s}]")
-            return False, ConfigurationError(
-                "Forbidden model checkpoint task contains invalid JSON class names parameter section."
-            )
     return True, None
 
 
