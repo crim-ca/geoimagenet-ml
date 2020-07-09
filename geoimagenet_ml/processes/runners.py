@@ -397,7 +397,10 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             },
             {
                 "id": "crop_fixed_size",
-                "abstract": "Overwrite an existing batch if it already exists.",
+                "abstract": "Request creation of additional patch crops of fixed dimension (m). "
+                            "These optional crops will be stored under key 'fixed' of the generated dataset. "
+                            "Note that some annotation will not be fully contained within generated crops if the "
+                            "provided dimension is smaller than the original feature square bounding box.",
                 "type": ["integer", "float"],
                 "default": None,
                 "minOccurs": 0,

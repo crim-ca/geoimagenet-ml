@@ -17,6 +17,7 @@ Changes
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * fix validation of model task if already parsed as instance of ``thelper.tasks.Task``
+* fix incorrect ``crop_fixed_size`` input description of ``ProcessRunnerBatchCreator``.
 
 1.5.0 (2020-06-11)
 ---------------------
