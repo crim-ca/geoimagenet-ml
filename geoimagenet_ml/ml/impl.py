@@ -14,6 +14,7 @@ import ssl
 import ast
 import re
 import os
+import cv2
 import thelper
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -802,9 +803,13 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
                     dataset_container.files.append(output_path)
+                    output_path_mask = os.path.join(dataset_container.path, "{}.png".format(output_name))
+                    cv2.imwrite(output_path_mask, crop.mask)
+                    dataset_container.files.append(output_path_mask)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
                         "path": output_path,
+                        "path_mask": output_path_mask,
                         "shape": list(crop.shape),
                         "data_type": raster_data["data_type"],
                         "coordinates": output_geotransform,
