@@ -313,7 +313,7 @@ class ProcessRunnerModelTester(ProcessRunner):
             test_runner.eval_iter_callback = batch_iter.__call__
 
             # link the predictions with a callback for progress update during evaluation
-            pred_metric = test_runner.test_metrics["predictions"]
+            pred_metric = test_runner.test_metrics["AveragePrecision"]
             pred_metric.callback = lambda: \
                 _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=95)
             self.update_job_status(STATUS.RUNNING, "starting test data prediction evaluation", 5)
