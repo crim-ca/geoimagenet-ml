@@ -202,7 +202,11 @@ def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings)
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
+    jobs_path = settings.get("geoimagenet_ml.ml.jobs_path")
+    if jobs_path is None: # FIXME: for some reason the jobs_path is not set
+        jobs_path = os.path.abspath(os.path.join(os.path.dirname(__file__),'../../sessions'))
+        LOGGER.debug("Session path is:  {}".format(jobs_path))
+    save_dir = os.path.join(jobs_path, job.uuid)
     _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     config = test_config["config"]
     model = thelper.nn.create_model(config, None, save_dir=save_dir, ckptdata=test_config)
@@ -291,7 +295,7 @@ def adapt_dataset_for_model_task(model_task, dataset):
         all_model_ordering = list()         # class ID order as defined by the model
         all_model_mapping = dict()          # taxonomy->model class ID mapping
         all_child_classes = set()           # only taxonomy child classes IDs
-
+        all_test_patch_files = list()       # list of the test patch files
         # find existing mappings defined by taxonomy
         def find_class_mapping(taxonomy_class, parent=None):
             children = taxonomy_class.get("children")
@@ -347,6 +351,25 @@ def adapt_dataset_for_model_task(model_task, dataset):
         # update obtained mapping with dataset parameters for loader
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY] = all_model_mapping
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY] = all_model_ordering
+        dataset_params[DATASET_FILES_KEY] = all_test_patch_files
+
+        # update patch info for classes of interest
+        # this is necessary for BatchTestPatchesClassificationDatasetLoader
+        class_mapped = [c for c, m in all_model_mapping.items() if m is not None]
+        samples_all = dataset_params[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]  # type: JSON
+        samples_mapped = [s for s in samples_all if s[DATASET_DATA_PATCH_CLASS_KEY] in sorted(set(class_mapped + all_model_ordering))] #
+        classes_with_files = sorted(set([s['class'] for s in samples_mapped if s['split'] == 'test'])) # retain class Ids with test patches
+        if len(classes_with_files) == 0:
+            raise ValueError("No test patches for the classes of interest!")
+        all_test_patch_files = [s[DATASET_DATA_PATCH_CROPS_KEY][0]['path'] for s in samples_mapped]
+        dataset_params[DATASET_FILES_KEY] = all_test_patch_files
+
+        # test_samples = [
+        #    {"class_id": s[DATASET_DATA_PATCH_CLASS_KEY],
+        #     "sample_id": s[DATASET_DATA_PATCH_FEATURE_KEY]} for s in samples_all
+        # ]
+
+
         model_task_name = fully_qualified_name(model_task)
         return {
             "type": MODEL_TASK_MAPPING[model_task_name][MAPPING_LOADER],
@@ -439,15 +462,30 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
 
     # override metrics to retrieve the ones required for result output
+    # trainer["metrics"] = {
+    #     "predictions": {
+    #         "type": "thelper.optim.metrics.RawPredictions", # this metric is causing a bug in create_trainer
+    #     },
+    #     "top_1_accuracy": {
+    #         "type": "thelper.optim.metrics.CategoryAccuracy",
+    #         "params": {
+    #             "top_k": 1,
+    #         }
+    #     },
+    #     "top_5_accuracy": {
+    #         "type": "thelper.optim.metrics.CategoryAccuracy",
+    #         "params": {
+    #             "top_k": 5,
+    #         }
+    #     }
+    # }
+    # Metrics more appropriate for segmentation
     trainer["metrics"] = {
-        "predictions": {
-            "type": "thelper.optim.metrics.RawPredictions",
+        "AveragePrecision": {
+            "type": "thelper.optim.metrics.AveragePrecision",
         },
-        "top_1_accuracy": {
-            "type": "thelper.optim.metrics.CategoryAccuracy",
-            "params": {
-                "top_k": 1,
-            }
+        "mIoU": {
+            "type": "thelper.optim.metrics.IntersectionOverUnion",
         },
         "top_5_accuracy": {
             "type": "thelper.optim.metrics.CategoryAccuracy",
@@ -456,6 +494,8 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
             }
         }
     }
+    if "model_params" not in test_config: #FIXME: for some reason we need to copy the model parameters because this field is expected by thelper.create_models
+        test_config['model_params'] = test_config["config"]['params']
     return test_config
 
 
