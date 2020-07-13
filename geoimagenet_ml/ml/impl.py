@@ -790,6 +790,8 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_driver = gdal.GetDriverByName("GTiff")
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
+                    output_path_mask = os.path.join(dataset_container.path, "{}_mask.png".format(output_name))
+                    cv2.imwrite(output_path_mask, crop.mask)
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
                         update_func(msg + " Removing...", logging.WARNING)
@@ -803,8 +805,6 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
                     dataset_container.files.append(output_path)
-                    output_path_mask = os.path.join(dataset_container.path, "{}.png".format(output_name))
-                    cv2.imwrite(output_path_mask, crop.mask)
                     dataset_container.files.append(output_path_mask)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
