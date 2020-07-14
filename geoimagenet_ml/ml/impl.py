@@ -5,6 +5,7 @@ from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
 from osgeo import gdal
+from PIL import Image
 import requests
 import logging
 import random
@@ -16,6 +17,7 @@ import re
 import os
 import cv2
 import thelper
+import numpy as np
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
@@ -791,7 +793,8 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
                     output_path_mask = os.path.join(dataset_container.path, "{}_mask.png".format(output_name))
-                    cv2.imwrite(output_path_mask, crop.mask)
+                    crop_image = Image.fromarray((255*crop.mask).astype(np.uint8))
+                    crop_image.save(output_path_mask)
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
                         update_func(msg + " Removing...", logging.WARNING)
