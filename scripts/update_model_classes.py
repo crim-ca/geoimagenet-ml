@@ -74,7 +74,8 @@ different sets while commas separate the from/to items of that mapping set.
 First item of each set must be a string or integer that matches exactly an existing class name
 from the model's task. The second item must be an integer that will be mapped to some taxonomy 
 class index. Alternatively, second item can be 'dontcare' which will mark it as to be ignored
-in the updated model task during inference. 
+in the updated model task during inference. If the model requires a background class, simply add
+ (background,999) to the class_mappings list.
 
 Note: if your class name has spaces, use quotes around the set (e.g.: 'Small plane,120').""")
     ap.add_argument("-o", "--output", dest="model_output",

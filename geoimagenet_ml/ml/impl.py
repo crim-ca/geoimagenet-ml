@@ -49,7 +49,9 @@ DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
 DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
 DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
 DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
+DATASET_DATA_PATCH_MASK_KEY = 'path_mask'    # original mask path that was used to generate the patch
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
+DATASET_BACKGROUND_ID = 999                  # background class id
 
 # see bottom for mapping definition
 MAPPING_TASK = "task"
@@ -240,6 +242,7 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
         self.path_key = "path"              # actual file path of the patch
         self.idx_key = "index"              # increment for __getitem__
+        self.mask_key = 'mask'        # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -255,6 +258,53 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = patch_path
                     samples[-1][self.label_key] = class_name
+
+        if not len(sample_class_ids):
+            raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
+        self.samples = samples
+        self.sample_class_ids = sample_class_ids
+
+class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
+    """
+    Batch dataset parser that loads only patches from 'test' split and matching
+    class IDs (or their parents) known by the model as defined in its ``task``.
+
+    .. note::
+
+        Uses :class:`thelper.data.SegmentationDataset` ``__getitem__`` implementation to load image
+        from a folder, but overrides the ``__init__`` to adapt the configuration to batch format.
+    """
+
+    # noinspection PyMissingConstructor
+    def __init__(self, dataset=None, transforms=None):
+        if not (isinstance(dataset, dict) and len(dataset)):
+            raise ValueError("Expected dataset parameters as configuration input.")
+        thelper.data.Dataset.__init__(self, transforms=transforms, deepcopy=False)
+        self.root = dataset["path"]
+        # keys matching dataset config for easy loading and referencing to same fields
+        self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
+        self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
+        self.path_key = "path"              # actual file path of the patch
+        self.idx_key = "index"              # increment for __getitem__
+        self.mask_key = 'mask'        # actual mask path of the patch
+        self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
+                          DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
+        model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
+        sample_class_ids = set()
+        samples = []
+        for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
+                                          dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
+            if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
+                # convert the dataset class ID into the model class ID using mapping, drop sample if not found
+                class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                if class_name is not None:
+                    sample_class_ids.add(class_name)
+                    samples.append(deepcopy(patch_info))
+                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
+                    samples[-1][self.label_key] = class_name
+                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_KEY,None)
+                    if mask_name is not None:
+                        samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
@@ -267,10 +317,20 @@ class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoa
         self.task = thelper.tasks.Classification(
             class_names=list(self.sample_class_ids),
             input_key=self.image_key,
-            label_key=self.label_key,
+            label_map_key=self.label_key,
             meta_keys=self.meta_keys,
         )
 
+class BatchTestPatchesSegmentationDatasetLoader(BatchTestPatchesBaseSegDatasetLoader):
+    def __init__(self, dataset=None, transforms=None):
+        super(BatchTestPatchesSegmentationDatasetLoader, self).__init__(dataset, transforms)
+        class_names = [str(c) for c in dataset.get('data').get('model_class_order', list(self.sample_class_ids))]
+        self.task = thelper.tasks.Segmentation(
+            class_names= class_names,
+            input_key=self.image_key,
+            label_map_key=self.label_key,
+            meta_keys=self.meta_keys,
+        )
 
 def adapt_dataset_for_model_task(model_task, dataset):
     # type: (AnyTask, Dataset) -> JSON
@@ -306,6 +366,15 @@ def adapt_dataset_for_model_task(model_task, dataset):
             else:
                 all_child_classes.add(class_id)
             all_classes_mapping[class_id] = None if not parent else parent.get("id")
+
+        # Some models will use a generic background class so we add it systematically in case the model needs it
+        for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
+            taxo.get("children").insert(0,{'id': DATASET_BACKGROUND_ID,
+                                           'name_fr': 'Classe autre',
+                                           'taxonomy_id': taxo.get("taxonomy_id"),
+                                           'code': 'BACK',
+                                           'name_en': 'Background',
+                                            'children': []})
 
         for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
             find_class_mapping(taxo)
@@ -894,7 +963,7 @@ MODEL_TASK_MAPPING = {
     },
     fully_qualified_name(thelper.tasks.segm.Segmentation): {
         MAPPING_TASK:   fully_qualified_name(thelper.tasks.segm.Segmentation),
-        MAPPING_LOADER: fully_qualified_name(BatchTestPatchesClassificationDatasetLoader), #FIXME: should point to a segmentation loader
+        MAPPING_LOADER: fully_qualified_name(BatchTestPatchesSegmentationDatasetLoader),
         MAPPING_TESTER: fully_qualified_name(thelper.train.segm.ImageSegmTrainer),
         MAPPING_RESULT: classification_test_results_finder, #FIXME: should point to a segmentation evaluation
     },
