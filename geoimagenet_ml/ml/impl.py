@@ -44,6 +44,7 @@ DATASET_DATA_KEY = "data"               # dict of data below
 DATASET_DATA_TAXO_KEY = "taxonomy"
 DATASET_DATA_MAPPING_KEY = "taxonomy_model_map"     # taxonomy ID -> model labels
 DATASET_DATA_ORDERING_KEY = "model_class_order"     # model output classes (same indices)
+DATASET_DATA_MODEL_MAPPING = "model_output_mapping"    # model output classes (same indices)
 DATASET_DATA_PATCH_KEY = "patches"
 DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
 DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
@@ -246,6 +247,7 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
+        model_class_to_id = dataset[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING]
         sample_class_ids = set()
         samples = []
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
@@ -253,11 +255,12 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
                 # convert the dataset class ID into the model class ID using mapping, drop sample if not found
                 class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                class_model_id = model_class_to_id.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
                 if class_name is not None:
                     sample_class_ids.add(class_name)
                     samples.append(deepcopy(patch_info))
-                    samples[-1][self.path_key] = patch_path
-                    samples[-1][self.label_key] = class_name
+                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
+                    samples[-1][self.label_key] = class_model_id
 
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
@@ -317,7 +320,7 @@ class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoa
         self.task = thelper.tasks.Classification(
             class_names=list(self.sample_class_ids),
             input_key=self.image_key,
-            label_map_key=self.label_key,
+            label_key=self.label_key,
             meta_keys=self.meta_keys,
         )
 
@@ -420,6 +423,7 @@ def adapt_dataset_for_model_task(model_task, dataset):
         # update obtained mapping with dataset parameters for loader
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY] = all_model_mapping
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY] = all_model_ordering
+        dataset_params[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING] = model_task.class_indices
         dataset_params[DATASET_FILES_KEY] = all_test_patch_files
 
         # update patch info for classes of interest
@@ -531,38 +535,40 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
 
     # override metrics to retrieve the ones required for result output
-    # trainer["metrics"] = {
-    #     "predictions": {
-    #         "type": "thelper.optim.metrics.RawPredictions", # this metric is causing a bug in create_trainer
-    #     },
-    #     "top_1_accuracy": {
-    #         "type": "thelper.optim.metrics.CategoryAccuracy",
-    #         "params": {
-    #             "top_k": 1,
-    #         }
-    #     },
-    #     "top_5_accuracy": {
-    #         "type": "thelper.optim.metrics.CategoryAccuracy",
-    #         "params": {
-    #             "top_k": 5,
-    #         }
-    #     }
-    # }
-    # Metrics more appropriate for segmentation
-    trainer["metrics"] = {
-        "AveragePrecision": {
-            "type": "thelper.optim.metrics.AveragePrecision",
-        },
-        "mIoU": {
-            "type": "thelper.optim.metrics.IntersectionOverUnion",
-        },
-        "top_5_accuracy": {
-            "type": "thelper.optim.metrics.CategoryAccuracy",
-            "params": {
-                "top_k": 5,
+    if "Classification" in task_class_str:
+        trainer["metrics"] = {
+            # "predictions": {
+            #    "type": "thelper.optim.metrics.RawPredictions", # this metric is causing a bug in create_trainer
+            # },
+            "top_1_accuracy": {
+                "type": "thelper.optim.metrics.Accuracy",
+                "params": {
+                    "top_k": 1,
+                }
+            },
+            "top_5_accuracy": {
+                "type": "thelper.optim.metrics.Accuracy",
+                "params": {
+                    "top_k": 5,
+                }
             }
         }
-    }
+    elif "Segmentation" in task_class_str:
+        # Metrics more appropriate for segmentation
+        trainer["metrics"] = {
+            "AveragePrecision": {
+                "type": "thelper.optim.metrics.AveragePrecision",
+            },
+            "mIoU": {
+                "type": "thelper.optim.metrics.IntersectionOverUnion",
+            },
+            "top_5_accuracy": {
+                "type": "thelper.optim.metrics.CategoryAccuracy",
+                "params": {
+                    "top_k": 5,
+                }
+            }
+        }
     if "model_params" not in test_config: #FIXME: for some reason we need to copy the model parameters because this field is expected by thelper.create_models
         test_config['model_params'] = test_config["config"]['params']
     return test_config
@@ -599,8 +605,11 @@ def classification_test_results_finder(test_dataset, test_results):
     test_classes = [
         {"model_index": i, "class_id": c} for i, c in enumerate(class_outputs)
     ]
-    test_predictions = [{"class_id": s[DATASET_DATA_PATCH_CLASS_KEY], "scores": p["predictions"]}
-                        for s, p in zip(samples_mapped, test_results["predictions"])]
+    if test_results.get('predictions', None):
+        test_predictions = [{"class_id": s[DATASET_DATA_PATCH_CLASS_KEY], "scores": p["predictions"]}
+                            for s, p in zip(samples_mapped, test_results["predictions"])]
+    else:
+        test_predictions = []
     test_metrics = {m: s for m, s in test_results.items() if m != "predictions"}
     # since storage doesn't support int keys and classes could be defined as int, convert to dict
     test_mapping = [{"class_id": c, "model_id": m} for c, m in class_mapping.items()]
@@ -612,6 +621,7 @@ def classification_test_results_finder(test_dataset, test_results):
         "mapping": test_mapping,
         "predictions": test_predictions,
     }
+
     return classification_results
 
 
