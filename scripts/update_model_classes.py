@@ -36,7 +36,7 @@ def update_model_class_mapping(class_mappings, model_path, model_output=None):
         class_mapped[new_class] = idx_class
     setattr(model_task, "_class_indices", class_mapped)
     model_outputs_sorted_by_index = list(sorted(class_mapped.items(), key=lambda _map: _map[1]))
-    setattr(model_task, "_class_names", [_map[0] for _map in model_outputs_sorted_by_index])
+    setattr(model_task, "_class_names", [str(_map[0]) for _map in model_outputs_sorted_by_index])
     model["task"] = model_task
     model["config"]["task"] = model_task
     model_params = model.pop("model_params", None)
