@@ -540,17 +540,17 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
             # "predictions": {
             #    "type": "thelper.optim.metrics.RawPredictions", # this metric is causing a bug in create_trainer
             # },
+            "predictions": {
+                "type": "thelper.train.utils.ClassifLogger",
+            },
             "top_1_accuracy": {
                 "type": "thelper.optim.metrics.Accuracy",
                 "params": {
                     "top_k": 1,
                 }
             },
-            "top_5_accuracy": {
-                "type": "thelper.optim.metrics.Accuracy",
-                "params": {
-                    "top_k": 5,
-                }
+            "ConfusionMatrix": {
+                "type": "thelper.train.utils.ConfusionMatrix",
             }
         }
     elif "Segmentation" in task_class_str:
