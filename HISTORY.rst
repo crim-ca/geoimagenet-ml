@@ -8,16 +8,18 @@ Unreleased
 
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
-* add ``scripts/update_model_classes.py`` to update taxonomy class indices of model task in checkpoint.
+* add ``scripts/update_model_classes.py`` to update taxonomy class indices of model task in checkpoint
   (CLI script callable after install with ``gin_ml_update_model_classes``)
 * add ``scripts/run_model_tester.py`` to execute ``ProcessRunnerModelTester`` process offline
   (CLI script callable after install with ``gin_ml_run_model_tester``)
 * add ``memory`` implementations of database stores for testing and scripts
+* update ``thelper>=0.5.0`` requirement for latest changes and features
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * fix validation of model task if already parsed as instance of ``thelper.tasks.Task``
-* fix incorrect ``crop_fixed_size`` input description of ``ProcessRunnerBatchCreator``.
+* fix incorrect ``crop_fixed_size`` input description of ``ProcessRunnerBatchCreator``
+* fix ``Classification`` task execution of ``ProcessRunnerModelTester`` with updated ``thelper`` definitions
 
 1.5.0 (2020-06-11)
 ---------------------

@@ -1,17 +1,30 @@
-custom.ini
-
+## CI
 .git
+.gitignore
+.dockerignore
+Dockerfile
 
-# Unit test / Coverage reports
+## Unit test / Coverage reports
 .cache
 .pytest_cache
+/tests/
 
-# PyCharm
+## IDE
 .idea
+.vscode
 
-# Byte-compiled / optimized / DLL files
+## Environment
+/env
+/venv
+
+## Byte-compiled / optimized / DLL files
 **/__pycache__
 **/*.py[cod]
+*.egg-info
 
-# Project
+## Project
 **/output.json
+custom.ini
+/data
+/sessions
+/scripts

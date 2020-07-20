@@ -7,6 +7,8 @@ from io import BytesIO
 from osgeo import gdal
 import requests
 import logging
+import json
+import numpy as np
 import random
 import shutil
 import six
@@ -14,8 +16,10 @@ import ssl
 import ast
 import re
 import os
-import thelper
 from typing import TYPE_CHECKING
+
+import thelper  # noqa
+
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
@@ -23,6 +27,7 @@ if TYPE_CHECKING:
         Any, AnyStr, Callable, Dict, List, Tuple, Union, JSON, SettingsType, Number,
         Optional, FeatureType, RasterDataType, ParamsType
     )
+    from geoimagenet_ml.processes.runners import ProcessRunnerModelTester
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
     # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
     AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
@@ -199,25 +204,71 @@ def fix_str_model_task(model_task):
         raise ValueError(f"Failed literal string parsing for model task, exception: [{exc!s}]")
 
 
-def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
-    # type: (Job, CkptData, Model, Dataset, SettingsType) -> thelper.train.Trainer
+class CallbackIterator(thelper.session.base.SessionRunner):
+    def __init__(self, runner, loader, start_percent, final_percent):
+        # type: (ProcessRunnerModelTester, thelper.data.loader.DataLoader, Number, Number) -> None
+        self._runner = runner
+        self._loader = loader
+        self._start_percent = float(start_percent)
+        self._final_percent = float(final_percent)
+
+    def _iter_logger_callback(self,  # see `thelper.typedefs.IterCallbackParams` for more info
+                              task,  # type: thelper.tasks.utils.Task
+                              input,  # type: thelper.typedefs.InputType
+                              pred,  # type: thelper.typedefs.AnyPredictionType
+                              target,  # type: thelper.typedefs.AnyTargetType
+                              sample,  # type: thelper.typedefs.SampleType
+                              loss,  # type: Optional[float]
+                              iter_idx,  # type: int
+                              max_iters,  # type: int
+                              epoch_idx,  # type: int
+                              max_epochs,  # type: int
+                              output_path,  # type: AnyStr
+                              # note: kwargs must contain two args here: 'set_name' and 'writers'
+                              **kwargs,  # type: Any
+                              ):  # type: (...) -> None
+        """
+        Callback called on each batch iteration of the evaluation process.
+        Must have same signature as original.
+
+        Update job log using available progress metadata for progressive feedback of job execution.
+        """
+
+        total_sample_count = self._loader.sample_count
+        batch_size = self._loader.batch_size
+        batch_index = iter_idx + 1
+        eval_sample_count = min(batch_size * batch_index, total_sample_count)  # if last batch is partial
+        progress = np.interp(float(batch_index) / float(max_iters), [0, 1], [self._start_percent, self._final_percent])
+        msg = "evaluating... [samples: {}/{}, batches: {}/{}]" \
+            .format(eval_sample_count, total_sample_count, batch_index, max_iters)
+        self._runner.update_job_status(self._runner.job.status, msg, progress)
+        self._runner.db.jobs_store.update_job(self._runner.job)
+
+
+def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset, start_percent, final_percent):
+    # type: (ProcessRunnerModelTester, CkptData, Model, Dataset, SettingsType, Number, Number) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
+    settings = process_runner.registry.settings
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    jobs_path = settings.get("geoimagenet_ml.ml.jobs_path")
-    if jobs_path is None: # FIXME: for some reason the jobs_path is not set
-        jobs_path = os.path.abspath(os.path.join(os.path.dirname(__file__),'../../sessions'))
-        LOGGER.debug("Session path is:  {}".format(jobs_path))
-    save_dir = os.path.join(jobs_path, job.uuid)
-    _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     config = test_config["config"]
+
+    job_uuid = process_runner.job.uuid
+    jobs_path = settings.get("geoimagenet_ml.ml.jobs_path")
+    save_dir = os.path.join(jobs_path, job_uuid)
+    _, _, _, test_loader = thelper.data.utils.create_loaders(config, save_dir=save_dir)
     model = thelper.nn.create_model(config, None, save_dir=save_dir, ckptdata=test_config)
     task = model.task
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
+    # link the batch iteration with a callback for progress tracking
+    loader_batch_size = config["loaders"]["test_batch_size"]
+    logger_callback = CallbackIterator(process_runner, test_loader, start_percent, final_percent)
+    config["trainer"]["test_logger"] = logger_callback._iter_logger_callback  # noqa
+
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
-    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
+    trainer = thelper.train.create_trainer(job_uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
     return trainer
 
 
@@ -267,6 +318,7 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         self.samples = samples
         self.sample_class_ids = sample_class_ids
 
+
 class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
     """
     Batch dataset parser that loads only patches from 'test' split and matching
@@ -305,7 +357,7 @@ class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = os.path.join(self.root, patch_path)
                     samples[-1][self.label_key] = class_name
-                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_KEY,None)
+                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_KEY, None)
                     if mask_name is not None:
                         samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
@@ -324,16 +376,18 @@ class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoa
             meta_keys=self.meta_keys,
         )
 
+
 class BatchTestPatchesSegmentationDatasetLoader(BatchTestPatchesBaseSegDatasetLoader):
     def __init__(self, dataset=None, transforms=None):
         super(BatchTestPatchesSegmentationDatasetLoader, self).__init__(dataset, transforms)
         class_names = [str(c) for c in dataset.get('data').get('model_class_order', list(self.sample_class_ids))]
         self.task = thelper.tasks.Segmentation(
-            class_names= class_names,
+            class_names=class_names,
             input_key=self.image_key,
             label_map_key=self.label_key,
             meta_keys=self.meta_keys,
         )
+
 
 def adapt_dataset_for_model_task(model_task, dataset):
     # type: (AnyTask, Dataset) -> JSON
@@ -359,8 +413,9 @@ def adapt_dataset_for_model_task(model_task, dataset):
         all_model_mapping = dict()          # taxonomy->model class ID mapping
         all_child_classes = set()           # only taxonomy child classes IDs
         all_test_patch_files = list()       # list of the test patch files
-        # find existing mappings defined by taxonomy
+
         def find_class_mapping(taxonomy_class, parent=None):
+            """Finds existing mappings defined by taxonomy."""
             children = taxonomy_class.get("children")
             class_id = taxonomy_class.get("id")
             if children:
@@ -372,12 +427,12 @@ def adapt_dataset_for_model_task(model_task, dataset):
 
         # Some models will use a generic background class so we add it systematically in case the model needs it
         for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
-            taxo.get("children").insert(0,{'id': DATASET_BACKGROUND_ID,
-                                           'name_fr': 'Classe autre',
-                                           'taxonomy_id': taxo.get("taxonomy_id"),
-                                           'code': 'BACK',
-                                           'name_en': 'Background',
-                                            'children': []})
+            taxo.get("children").insert(0, {"id": DATASET_BACKGROUND_ID,
+                                            "name_fr": "Classe autre",
+                                            "taxonomy_id": taxo.get("taxonomy_id"),
+                                            "code": "BACK",
+                                            "name_en": "Background",
+                                            "children": []})
 
         for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
             find_class_mapping(taxo)
@@ -430,18 +485,19 @@ def adapt_dataset_for_model_task(model_task, dataset):
         # this is necessary for BatchTestPatchesClassificationDatasetLoader
         class_mapped = [c for c, m in all_model_mapping.items() if m is not None]
         samples_all = dataset_params[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]  # type: JSON
-        samples_mapped = [s for s in samples_all if s[DATASET_DATA_PATCH_CLASS_KEY] in sorted(set(class_mapped + all_model_ordering))] #
-        classes_with_files = sorted(set([s['class'] for s in samples_mapped if s['split'] == 'test'])) # retain class Ids with test patches
+        all_model_classes = set(class_mapped + all_model_ordering)
+        samples_mapped = [s for s in samples_all if s[DATASET_DATA_PATCH_CLASS_KEY] in all_model_classes]
+        # retain class Ids with test patches
+        classes_with_files = sorted(set([s["class"] for s in samples_mapped if s["split"] == "test"]))
         if len(classes_with_files) == 0:
             raise ValueError("No test patches for the classes of interest!")
-        all_test_patch_files = [s[DATASET_DATA_PATCH_CROPS_KEY][0]['path'] for s in samples_mapped]
+        all_test_patch_files = [s[DATASET_DATA_PATCH_CROPS_KEY][0]["path"] for s in samples_mapped]
         dataset_params[DATASET_FILES_KEY] = all_test_patch_files
 
         # test_samples = [
         #    {"class_id": s[DATASET_DATA_PATCH_CLASS_KEY],
         #     "sample_id": s[DATASET_DATA_PATCH_FEATURE_KEY]} for s in samples_all
         # ]
-
 
         model_task_name = fully_qualified_name(model_task)
         return {
@@ -484,7 +540,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         LOGGER.debug("Overriding model task string definition by parameter dictionary representation:\n"
                      f"  original task: [{task_str}]\n"
                      f"  modified task: [{task_params}]")
-        test_config["task"] = {"params" : task_params, "type" : task_class_str}
+        test_config["task"] = {"params": task_params, "type": task_class_str}
         if "Detection" in task_class_str:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
         elif "Segmentation" in task_class_str:
@@ -522,26 +578,37 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     loaders["test_split"] = {
         test_dataset_name: 1.0    # use every single dataset patch found by the test loader
     }
+    loaders["shuffle"] = False  # easier to compare inference samples when order matches + cannot merge lists otherwise
     trainer["use_tbx"] = False
     trainer["type"] = MODEL_TASK_MAPPING[test_model_task_name][MAPPING_TESTER]
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
 
-    # enforce multiprocessing workers count according to settings
+    # enforce multiprocessing workers count and batch size according to settings
     # note:
     #   job worker process must be non-daemonic to allow data loader workers spawning
     # see:
     #   ``geoimagenet_ml.api.routes.processes.utils.process_ml_job_runner`` for worker setup
-    loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
+    loaders["workers"] = int(settings.get("geoimagenet_ml.ml.data_loader_workers", 0))
+    loaders["test_batch_size"] = int(settings.get("geoimagenet_ml.ml.data_loader_batch_size", 10))
+    loaders.pop("batch_size", None)  # raises if both generic and test-specific exist at the same time
 
     # override metrics to retrieve the ones required for result output
-    if "Classification" in task_class_str:
+    if "Classification" in task_class_str or thelper.concepts.supports(test_model_task, "classification"):
+        class_count = len(test_model_task.class_names)
         trainer["metrics"] = {
-            # "predictions": {
-            #    "type": "thelper.optim.metrics.RawPredictions", # this metric is causing a bug in create_trainer
-            # },
             "predictions": {
                 "type": "thelper.train.utils.ClassifLogger",
+                "params": {
+                    "format": "json",
+                    "top_k": class_count,  # obtain the prediction of every class from the model
+                }
+            },
+            "report": {
+                "type": "thelper.train.utils.ClassifReport",
+                "params": {
+                    "format": "json"
+                }
             },
             "top_1_accuracy": {
                 "type": "thelper.optim.metrics.Accuracy",
@@ -553,9 +620,12 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
                 "type": "thelper.train.utils.ConfusionMatrix",
             }
         }
-    elif "Segmentation" in task_class_str:
+    elif "Segmentation" in task_class_str or thelper.concepts.supports(test_model_task, "segmentation"):
         # Metrics more appropriate for segmentation
         trainer["metrics"] = {
+            # FIXME: segmentation results must be extracted specifically for this task type
+            #        see 'classification_test_results_finder' and 'MODEL_TASK_MAPPING'
+            #        without correct extraction of results, job output will have nothing
             "AveragePrecision": {
                 "type": "thelper.optim.metrics.AveragePrecision",
             },
@@ -569,21 +639,38 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
                 }
             }
         }
-    if "model_params" not in test_config: #FIXME: for some reason we need to copy the model parameters because this field is expected by thelper.create_models
-        test_config['model_params'] = test_config["config"]['params']
+    # need to copy the model parameters because this field is expected by 'thelper.nn.create_model'
+    if "model_params" not in test_config:
+        test_config["model_params"] = test_config["config"]["params"]
     return test_config
 
 
-def classification_test_results_finder(test_dataset, test_results):
-    # type: (JSON, JSON) -> JSON
+def classification_test_results_finder(test_dataset, test_results, test_output_path):
+    # type: (Dataset, JSON, AnyStr) -> JSON
     """Specialized result finder for classification task.
 
-    Format of predictions for this task type is::
+    Format of ``predictions`` sub-field for this task type is:
 
-        { "<class_id>": <id>, "scores": [<score>] }
+    .. code-blocK:: json
+
+        {
+            "target": {
+                "class_id": "<class_id>", "score": <score>
+            },
+            "outputs": [
+                {"class_id": "<class-id>", "score": <score>}
+                <...>
+            ]
+        }
+
+    Where ``outputs`` are the Top-K output predictions (inference) of every class generated by the classification model,
+    and ``target`` contains the prediction score of the defined ground-truth sample class.
+
+    Output conforms to schema definition of :func:`get_test_results`.
 
     .. seealso::
-        :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+        - :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+        - :func:`test_loader_from_configs` for configured metrics available for the given task type.
     """
     class_mapping = test_dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]   # type: ClassMap
     class_outputs = test_dataset[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY]
@@ -605,9 +692,21 @@ def classification_test_results_finder(test_dataset, test_results):
     test_classes = [
         {"model_index": i, "class_id": c} for i, c in enumerate(class_outputs)
     ]
-    if test_results.get('predictions', None):
-        test_predictions = [{"class_id": s[DATASET_DATA_PATCH_CLASS_KEY], "scores": p["predictions"]}
-                            for s, p in zip(samples_mapped, test_results["predictions"])]
+    test_predictions = test_results.get("predictions", None)
+    if not test_predictions:
+        prediction_path = os.path.join(test_output_path, "predictions.json")
+        if os.path.isfile(prediction_path):
+            with open(prediction_path, "r") as f:
+                test_predictions = json.load(f)
+    if test_predictions:
+        test_predictions = [
+            {
+                "target": {"class_id": p["target_name"], "score": p["target_score"]},
+                "outputs": [{"class_id": p[f"pred_{i}_name"], "score": p[f"pred_{i}_score"]}
+                            for i in range(1, len(class_outputs) + 1)]
+            }
+            for p in test_predictions
+        ]
     else:
         test_predictions = []
     test_metrics = {m: s for m, s in test_results.items() if m != "predictions"}
@@ -638,7 +737,9 @@ def get_test_results(test_runner, test_results):
     The function ensures the backward mapping of predictions to class IDs.
     It also cleans up the results as they would otherwise be too verbose for output.
 
-    The resulting JSON is in the form::
+    The resulting JSON is in the form:
+
+    .. code-block:: json
 
         {
             "summary": {"<stat>": <value>},
@@ -650,7 +751,7 @@ def get_test_results(test_runner, test_results):
         }
 
     .. seealso::
-        :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
+        - :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
     """
     test_task_name = fully_qualified_name(test_runner.task)
     test_result_finder = MODEL_TASK_MAPPING[test_task_name][MAPPING_RESULT]
@@ -658,8 +759,9 @@ def get_test_results(test_runner, test_results):
     # only one test dataset submitted for evaluation (ie: unique 'test_split' in 'test_loader_from_configs')
     test_results = test_results[0].get("test/metrics")
     test_dataset = list(test_runner.config["datasets"].values())[0]["params"][TEST_DATASET_KEY]
+    test_outputs = test_runner.output_paths["test"]  # where additional metric loggers are dumped to file
 
-    return test_result_finder(test_dataset, test_results)
+    return test_result_finder(test_dataset, test_results, test_outputs)
 
 
 def retrieve_annotations(geojson_urls):
@@ -969,12 +1071,12 @@ MODEL_TASK_MAPPING = {
         MAPPING_TASK:   fully_qualified_name(thelper.tasks.classif.Classification),
         MAPPING_LOADER: fully_qualified_name(BatchTestPatchesClassificationDatasetLoader),
         MAPPING_TESTER: fully_qualified_name(thelper.train.classif.ImageClassifTrainer),
-        MAPPING_RESULT: classification_test_results_finder,
+        MAPPING_RESULT: classification_test_results_finder,  # type: Callable[[Dataset, JSON, AnyStr], JSON]
     },
     fully_qualified_name(thelper.tasks.segm.Segmentation): {
         MAPPING_TASK:   fully_qualified_name(thelper.tasks.segm.Segmentation),
         MAPPING_LOADER: fully_qualified_name(BatchTestPatchesSegmentationDatasetLoader),
         MAPPING_TESTER: fully_qualified_name(thelper.train.segm.ImageSegmTrainer),
-        MAPPING_RESULT: classification_test_results_finder, #FIXME: should point to a segmentation evaluation
+        MAPPING_RESULT: classification_test_results_finder,  # FIXME: should point to a segmentation evaluation
     },
 }

@@ -26,7 +26,11 @@ from geoimagenet_ml.store.databases.types import MEMORY_TYPE
 from geoimagenet_ml.store.factories import database_factory
 
 if TYPE_CHECKING:
-    from geoimagenet_ml.typedefs import JSON, List, Optional, SettingsType
+    from geoimagenet_ml.typedefs import JSON, List, Optional, SettingsType, Tuple
+
+
+SCRIPTS_PATH = os.path.abspath(os.path.dirname(__file__))
+DEFAULT_SESSIONS_PATH = os.path.join(os.path.dirname(SCRIPTS_PATH), "sessions")
 
 
 class MockRegistry(Registry):
@@ -49,15 +53,15 @@ class MockRequest(Request):
         self.id = uuid.uuid4()
 
 
-def run_model_tester(dataset_data, model_path, dataset_root=None):
-    # type: (JSON, str, Optional[str]) -> List[JSON]
+def run_model_tester(dataset_data, model_path, dataset_root=None, output_root=DEFAULT_SESSIONS_PATH):
+    # type: (JSON, str, Optional[str], str) -> Tuple[bool, List[JSON]]
     """Runs :class:`geoimagenet_ml.processes.runners.ProcessRunnerModelTester` with provided script inputs."""
 
     # configure some registries that the process uses to retrieve data
     task = None
     process = Process(identifier=ProcessRunnerModelTester.identifier, type=ProcessRunnerModelTester.type)
     job = Job(process=process.uuid)
-    registry = MockRegistry({})
+    registry = MockRegistry({"geoimagenet_ml.ml.jobs_path": output_root})
     request = MockRequest(registry)
     db = database_factory(registry)
 
@@ -86,7 +90,9 @@ def run_model_tester(dataset_data, model_path, dataset_root=None):
 
     runner = ProcessRunnerModelTester(task, registry, request, job.uuid)  # noqa
     runner()  # call is wrapped in try/except block, so nothing will be raised (logged in job)
-    return job.results
+    if job.results:
+        return True, job.results
+    return False, job.exceptions
 
 
 def update_logging(log_level, logger_names=None):
@@ -141,8 +147,10 @@ Expected Format:
     ap.add_argument("-d", "--dataset-root", dest="dataset_root",
                     help="Override dataset root of image patch location. "
                          "Use containing directory of dataset data JSON file by default.")
-    ap.add_argument("-o", "--output", dest="output_path", help="Path to the model to employ (default: %(default)s).",
-                    default="./output.json")
+    ap.add_argument("-o", "--output", dest="output_path",
+                    help="Path where to output job session results. Will always generate an unique job ID "
+                         "(default: '<GIN_ML_ROOT>/sessions').",
+                    default=DEFAULT_SESSIONS_PATH)
     ap_log = ap.add_mutually_exclusive_group()
     ap_log.add_argument("-v", "--verbose", action="store_const", const=logging.DEBUG,
                         help="Increase logging verbosity.")
@@ -155,9 +163,15 @@ Expected Format:
     update_logging(log_level, [ProcessRunnerModelTester.identifier])
     with open(args.dataset_data, "r") as fd:
         data = json.load(fd)
-    results = run_model_tester(data, args.model_path, args.dataset_root or os.path.split(args.dataset_data)[0])
-    with open(args.output_path, "w") as fd:
-        json.dump(results, fd)
+    success, results = run_model_tester(data, args.model_path,
+                                        args.dataset_root or os.path.split(args.dataset_data)[0],
+                                        os.path.abspath(args.output_path))
+    if success:
+        with open(args.output_path, "w") as fd:
+            json.dump(results, fd)
+        print(f"Success. Results location: [{args.output_path}]")
+        sys.exit(0)
+    print(f"Failure:\n{results}")
 
 
 if __name__ == "__main__":

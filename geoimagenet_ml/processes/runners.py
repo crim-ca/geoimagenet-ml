@@ -14,7 +14,6 @@ from pyramid.settings import asbool
 from celery.utils.log import get_task_logger
 import os
 import six
-import numpy
 import logging
 import multiprocessing
 from typing import TYPE_CHECKING
@@ -242,46 +241,6 @@ class ProcessRunnerModelTester(ProcessRunner):
         ]
 
     def __call__(self, *args, **kwargs):
-
-        class CallbackIterator(object):
-            def __init__(self):
-                self._iter = 0
-
-            def __call__(self, *it_args, **it_kwargs):
-                self._iter = self._iter + 1
-
-            @property
-            def iteration(self):
-                return self._iter
-
-        def _update_job_eval_progress(_job, _batch_iterator, start_percent=0, final_percent=100):
-            # type: (Job, CallbackIterator, Optional[Number], Optional[Number]) -> None
-            """
-            Updates the job progress based on evaluation progress (after each batch).
-            Called using callback of prediction metric.
-            """
-            metric = test_runner.test_metrics["predictions"]    # type: thelper.optim.metrics.RawPredictions
-            total_sample_count = test_runner.test_loader.sample_count
-            evaluated_sample_count = len(metric.predictions)  # gradually expanded on each evaluation callback
-            batch_count = len(test_runner.test_loader)
-            batch_index = _batch_iterator.iteration + 1
-            progress = numpy.interp(batch_index / batch_count, [0, 100], [start_percent, final_percent])
-            msg = "evaluating... [samples: {}/{}, batches: {}/{}]" \
-                .format(evaluated_sample_count, total_sample_count, batch_index, batch_count)
-            self.update_job_status(STATUS.RUNNING, msg, progress)
-
-            # update job results and add important fields
-            _job.results = [{
-                "id": "predictions",
-                "value": metric.predictions,
-            }]
-            if hasattr(test_runner, "class_names"):
-                _job.results.insert(0, {
-                    "id": "classes",
-                    "value": test_runner.class_names
-                })
-            self.db.jobs_store.update_job(_job)
-
         try:
             # note:
             #   for dataset loader using multiple worker sub-processes to load samples by batch,
@@ -306,17 +265,10 @@ class ProcessRunnerModelTester(ProcessRunner):
             model_config = model.data  # calls loading method, raises failure accordingly
 
             self.update_job_status(STATUS.RUNNING, "retrieving data loader for model and dataset", 4)
-            test_runner = get_test_data_runner(self.job, model_config, model, dataset, self.registry.settings)
+            test_runner = get_test_data_runner(self, model_config, model, dataset, start_percent=5, final_percent=95)
 
-            # link the batch iteration with a callback for progress tracking
-            batch_iter = CallbackIterator()
-            test_runner.eval_iter_callback = batch_iter.__call__
-
-            # link the predictions with a callback for progress update during evaluation
-            pred_metric = test_runner.test_metrics["top_1_accuracy"] #TODO: this metric should depend on the kind of task
-            pred_metric.callback = lambda: \
-                _update_job_eval_progress(self.job, batch_iter, start_percent=5, final_percent=95)
             self.update_job_status(STATUS.RUNNING, "starting test data prediction evaluation", 5)
+            # results obtained here are only for single-value monitor 'Metric' instances, loggers are dumped to file
             results = test_runner.eval()
 
             self.update_job_status(STATUS.RUNNING, "retrieving complete test data prediction results", 97)
