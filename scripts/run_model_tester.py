@@ -21,6 +21,7 @@ from pyramid.registry import Registry
 from pyramid.request import Request
 
 from geoimagenet_ml.processes.runners import ProcessRunnerBatchCreator, ProcessRunnerModelTester
+from geoimagenet_ml.status import STATUS
 from geoimagenet_ml.store.datatypes import Dataset, Job, Model, Process
 from geoimagenet_ml.store.databases.types import MEMORY_TYPE
 from geoimagenet_ml.store.factories import database_factory
@@ -54,7 +55,7 @@ class MockRequest(Request):
 
 
 def run_model_tester(dataset_data, model_path, dataset_root=None, output_root=DEFAULT_SESSIONS_PATH):
-    # type: (JSON, str, Optional[str], str) -> Tuple[bool, List[JSON]]
+    # type: (JSON, str, Optional[str], str) -> Job
     """Runs :class:`geoimagenet_ml.processes.runners.ProcessRunnerModelTester` with provided script inputs."""
 
     # configure some registries that the process uses to retrieve data
@@ -90,9 +91,7 @@ def run_model_tester(dataset_data, model_path, dataset_root=None, output_root=DE
 
     runner = ProcessRunnerModelTester(task, registry, request, job.uuid)  # noqa
     runner()  # call is wrapped in try/except block, so nothing will be raised (logged in job)
-    if job.results:
-        return True, job.results
-    return False, job.exceptions
+    return job
 
 
 def update_logging(log_level, logger_names=None):
@@ -163,15 +162,15 @@ Expected Format:
     update_logging(log_level, [ProcessRunnerModelTester.identifier])
     with open(args.dataset_data, "r") as fd:
         data = json.load(fd)
-    success, results = run_model_tester(data, args.model_path,
-                                        args.dataset_root or os.path.split(args.dataset_data)[0],
-                                        os.path.abspath(args.output_path))
-    if success:
-        with open(args.output_path, "w") as fd:
-            json.dump(results, fd)
-        print(f"Success. Results location: [{args.output_path}]")
+    out_path = os.path.abspath(args.output_path)
+    job = run_model_tester(data, args.model_path, args.dataset_root or os.path.split(args.dataset_data)[0], out_path)
+    job_out_path = os.path.join(out_path, job.uuid)
+    if job.status == STATUS.SUCCEEDED:
+        with open(os.path.join(job_out_path, "results.json"), "w") as fd:
+            json.dump(job.results, fd, indent=4, sort_keys=False)
+        print(f"Success. Full results session location: [{job_out_path}]")
         sys.exit(0)
-    print(f"Failure:\n{results}")
+    print(f"Failure:\nLogs:\n{job.logs}\nExceptions:\n{job.exceptions}")
 
 
 if __name__ == "__main__":
