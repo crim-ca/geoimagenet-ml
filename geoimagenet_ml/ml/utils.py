@@ -544,7 +544,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
         if raw_band_crop_data is None:
             raise AssertionError("raster crop data read failed")
         band_crop_inv_data = np.where(local_bg_mask_array > 0, raw_band_crop_data, band_nodataval)
-        band_crop_data = np.where(local_feature_mask_array > 0, raw_band_crop_data, band_nodataval)
+        band_crop_data = np.where(local_feature_mask_array > 0, raw_band_crop_data, raw_band_crop_data)
         crop_i_min = local_roi_offset[0]
         crop_i_max = local_roi_offset[0] + local_roi_rows
         crop_j_min = local_roi_offset[1]

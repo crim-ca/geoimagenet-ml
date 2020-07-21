@@ -5,6 +5,7 @@ from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
 from osgeo import gdal
+from PIL import Image
 import requests
 import logging
 import json
@@ -16,6 +17,7 @@ import ssl
 import ast
 import re
 import os
+import cv2
 from typing import TYPE_CHECKING
 
 import thelper  # noqa
@@ -1038,6 +1040,9 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_driver = gdal.GetDriverByName("GTiff")
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
+                    output_mask = os.path.join(dataset_container.path, "{}_mask.png".format(output_name))
+                    crop_image = Image.fromarray((255*crop.mask).astype(np.uint8))
+                    crop_image.save(output_mask)
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
                         update_func(msg + " Removing...", logging.WARNING)
@@ -1051,6 +1056,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
                     dataset_container.files.append(output_path)
+                    dataset_container.files.append(output_mask)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
                         DATASET_DATA_PATCH_PATH_KEY: output_path,
