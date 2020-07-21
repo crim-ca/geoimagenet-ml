@@ -55,7 +55,9 @@ DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
 DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
 DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
 DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
-DATASET_DATA_PATCH_MASK_KEY = 'path_mask'    # original mask path that was used to generate the patch
+DATASET_DATA_PATCH_PATH_KEY = "path"         # crop image path of the generated patch
+DATASET_DATA_PATCH_MASK_KEY = "mask"         # mask image path of the generated patch
+DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
 DATASET_BACKGROUND_ID = 999                  # background class id
 
@@ -292,9 +294,9 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         # keys matching dataset config for easy loading and referencing to same fields
         self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
         self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
-        self.path_key = "path"              # actual file path of the patch
-        self.idx_key = "index"              # increment for __getitem__
-        self.mask_key = 'mask'        # actual mask path of the patch
+        self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
+        self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
+        self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -339,9 +341,9 @@ class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
         # keys matching dataset config for easy loading and referencing to same fields
         self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
         self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
-        self.path_key = "path"              # actual file path of the patch
-        self.idx_key = "index"              # increment for __getitem__
-        self.mask_key = 'mask'        # actual mask path of the patch
+        self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
+        self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
+        self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -997,14 +999,18 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                                    .format(feature["id"]))
             # copy information, but replace patch copies
             for i_crop, _ in enumerate(patch_info[DATASET_DATA_PATCH_CROPS_KEY]):
-                old_patch_path = patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"]
-                new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
-                if not new_patch_path.startswith(dataset_container.path):
-                    raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
-                                       .format(dataset_container.path, new_patch_path))
-                patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"] = new_patch_path
-                shutil.copy(old_patch_path, new_patch_path)
-                dataset_container.files.append(new_patch_path)
+                for path_field in [DATASET_DATA_PATCH_PATH_KEY, DATASET_DATA_PATCH_MASK_KEY]:
+                    old_patch_path = patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop].get(path_field)
+                    if not old_patch_path and path_field == DATASET_DATA_PATCH_MASK_KEY:
+                        raise RuntimeError(f"Dataset [{dataset_latest.uuid}] is not compatible for incremental feature."
+                                           " Missing mask image files.")
+                    new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
+                    if not new_patch_path.startswith(dataset_container.path):
+                        raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
+                                           .format(dataset_container.path, new_patch_path))
+                    patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop][path_field] = new_patch_path
+                    shutil.copy(old_patch_path, new_patch_path)
+                    dataset_container.files.append(new_patch_path)
             dataset_container.data[DATASET_DATA_PATCH_KEY].append(patch_info)
             # update counter with previously selected split set
             select_split(train_test_splits, patch_info[DATASET_DATA_PATCH_CLASS_KEY],
@@ -1047,7 +1053,8 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     dataset_container.files.append(output_path)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
-                        "path": output_path,
+                        DATASET_DATA_PATCH_PATH_KEY: output_path,
+                        DATASET_DATA_PATCH_MASK_KEY: output_mask,
                         "shape": list(crop.shape),
                         "data_type": raster_data["data_type"],
                         "coordinates": output_geotransform,
