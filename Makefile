@@ -270,12 +270,11 @@ conda-config: anaconda
 	@echo "Update ~/.condarc"
 	@"$(ANACONDA_HOME)/bin/conda" config --add envs_dirs $(CONDA_ENVS_DIR)
 	@"$(ANACONDA_HOME)/bin/conda" config --set ssl_verify true
-	@"$(ANACONDA_HOME)/bin/conda" config --set use_pip true
+	# @"$(ANACONDA_HOME)/bin/conda" config --set use_pip true
 	@"$(ANACONDA_HOME)/bin/conda" config --set channel_priority true
 	@"$(ANACONDA_HOME)/bin/conda" config --set auto_update_conda false
 	# cannot mix 'conda-forge' and 'defaults', causes errors for gdal/ogr/osr related bin packages
 	# @"$(ANACONDA_HOME)/bin/conda" config --add channels defaults
-	@"$(ANACONDA_HOME)/bin/conda" config --append channels birdhouse
 	@"$(ANACONDA_HOME)/bin/conda" config --append channels conda-forge
 
 .PHONY: conda-env
