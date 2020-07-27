@@ -59,6 +59,7 @@ DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
 DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
 DATASET_DATA_PATCH_PATH_KEY = "path"         # crop image path of the generated patch
 DATASET_DATA_PATCH_MASK_KEY = "mask"         # mask image path of the generated patch
+DATASET_DATA_PATCH_MASK_PATH_KEY = 'path_mask'    # original mask path that was used to generate the patch
 DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
 DATASET_BACKGROUND_ID = 999                  # background class id
@@ -323,7 +324,91 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         self.sample_class_ids = sample_class_ids
 
 
-class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
+#FIXME: this class is the equivalent of thelper.data.ImageFolderDataset but for a segmentation task
+class ImageFolderSegDataset(thelper.data.SegmentationDataset):
+    """Image folder dataset specialization interface for segmentation tasks.
+
+    This specialization is used to parse simple image subfolders, and it essentially replaces the very
+    basic ``torchvision.datasets.ImageFolder`` interface with similar functionalities. It it used to provide
+    a proper task interface as well as path metadata in each loaded packet for metrics/logging output.
+
+    .. seealso::
+        | :class:`thelper.data.parsers.ImageDataset`
+        | :class:`thelper.data.parsers.SegmentationDataset`
+    """
+
+    def __init__(self, root, transforms=None, image_key="image", label_key="label", mask_key="mask", mask_path_key="mask_path", path_key="path", idx_key="idx"):
+        """Image folder dataset parser constructor."""
+        self.root = root
+        if self.root is None or not os.path.isdir(self.root):
+            raise AssertionError("invalid input data root '%s'" % self.root)
+        class_map = {}
+        for child in os.listdir(self.root):
+            if os.path.isdir(os.path.join(self.root, child)):
+                class_map[child] = []
+        if not class_map:
+            raise AssertionError("could not find any image folders at '%s'" % self.root)
+        image_exts = [".jpg", ".jpeg", ".bmp", ".png", ".ppm", ".pgm", ".tif"]
+        self.image_key = image_key
+        self.path_key = path_key
+        self.idx_key = idx_key
+        self.label_key = label_key
+        self.mask_key = mask_key
+        self.mask_path_key = mask_path_key
+        samples = []
+        for class_name in class_map:
+            class_folder = os.path.join(self.root, class_name)
+            for folder, subfolder, files in os.walk(class_folder):
+                for file in files:
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in image_exts:
+                        class_map[class_name].append(len(samples))
+                        samples.append({
+                            self.path_key: os.path.join(folder, file),
+                            self.label_key: class_name
+                        })
+        old_unsorted_class_names = list(class_map.keys())
+        class_map = {k: class_map[k] for k in sorted(class_map.keys()) if len(class_map[k]) > 0}
+        if old_unsorted_class_names != list(class_map.keys()):
+            # new as of v0.4.4; this may only be an issue for old models trained on windows and ported to linux
+            # (this is caused by the way os.walk returns folders in an arbitrary order on some platforms)
+            logger.warning("class name ordering changed due to folder name sorting; this may impact the "
+                           "behavior of previously-trained models as task class indices may be swapped!")
+        if not class_map:
+            raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
+        meta_keys = [self.path_key, self.idx_key]
+        super(ImageFolderDataset, self).__init__(class_names=list(class_map.keys()), input_key=self.image_key,
+                                                 label_key=self.label_key, meta_keys=meta_keys, transforms=transforms)
+        self.samples = samples
+
+    def __getitem__(self, idx):
+        """Returns the data sample (a dictionary) for a specific (0-based) index."""
+        if isinstance(idx, slice):
+            return self._getitems(idx)
+        if idx >= len(self.samples):
+            raise AssertionError("sample index is out-of-range")
+        if idx < 0:
+            idx = len(self.samples) + idx
+        sample = self.samples[idx]
+        image_path = sample[self.path_key]
+        image = cv2.imread(image_path)
+        mask_path = sample[self.mask_path_key]
+        mask = cv2.imread(mask_path)
+        mask = mask if mask.ndim == 2 else mask[:, :, 0]
+        if image is None:
+            raise AssertionError("invalid image at '%s'" % image_path)
+        sample = {
+            self.image_key: image,
+            self.mask_key: mask,
+            self.label_key: sample[self.label_key],
+            self.idx_key: idx,
+            **sample
+        }
+        if self.transforms:
+            sample = self.transforms(sample)
+        return sample
+
+class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
     """
     Batch dataset parser that loads only patches from 'test' split and matching
     class IDs (or their parents) known by the model as defined in its ``task``.
@@ -346,6 +431,7 @@ class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
         self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
         self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
         self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
+        self.mask_path_key = DATASET_DATA_PATCH_MASK_PATH_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -361,9 +447,9 @@ class BatchTestPatchesBaseSegDatasetLoader(thelper.data.SegmentationDataset):
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = os.path.join(self.root, patch_path)
                     samples[-1][self.label_key] = class_name
-                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_KEY, None)
+                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_PATH_KEY, None)
                     if mask_name is not None:
-                        samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
+                        samples[-1][self.mask_path_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
@@ -625,23 +711,26 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
             }
         }
     elif "Segmentation" in task_class_str or thelper.concepts.supports(test_model_task, "segmentation"):
+        # FIXME: Not sure this the right mechanism but we need to enforce the right keys that are expected by the data loader, those keys should not be specified by the input config
+        test_model_task.input_key = IMAGE_DATA_KEY
+        test_model_task.gt_key = DATASET_DATA_PATCH_MASK_KEY
         # Metrics more appropriate for segmentation
         trainer["metrics"] = {
             # FIXME: segmentation results must be extracted specifically for this task type
             #        see 'classification_test_results_finder' and 'MODEL_TASK_MAPPING'
             #        without correct extraction of results, job output will have nothing
-            "AveragePrecision": {
-                "type": "thelper.optim.metrics.AveragePrecision",
-            },
+            # "AveragePrecision": {
+            #    "type": "thelper.optim.metrics.AveragePrecision",
+            # },
             "mIoU": {
                 "type": "thelper.optim.metrics.IntersectionOverUnion",
             },
-            "top_5_accuracy": {
-                "type": "thelper.optim.metrics.CategoryAccuracy",
-                "params": {
-                    "top_k": 5,
-                }
-            }
+            # "top_5_accuracy": {
+            #    "type": "thelper.optim.metrics.CategoryAccuracy",
+            #    "params": {
+            #        "top_k": 5,
+            #    }
+            # }
         }
     # need to copy the model parameters because this field is expected by 'thelper.nn.create_model'
     if "model_params" not in test_config:
