@@ -311,7 +311,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.label_key = label_key
         self.mask_key = mask_key
         self.mask_path_key = mask_path_key
-        self.channels = channels if channels else [0, 1, 2]
+        self.channels = channels if channels else [1, 2, 3]
         samples = []
         for class_name in class_map:
             class_folder = os.path.join(self.root, class_name)
@@ -352,11 +352,11 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         # image = cv2.imread(image_path)
         image = []
         for raster_band_idx in self.channels:
-            curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)  # offset, starts at 1
+            curr_band = rasterfile.GetRasterBand(raster_band_idx)  # offset, starts at 1
             band_array = curr_band.ReadAsArray()
             band_nodataval = curr_band.GetNoDataValue()
-            band_ma = np.ma.array(band_array.astype(np.float32))
-            image.append(band_ma)
+            # band_ma = np.ma.array(band_array.astype(np.float32))
+            image.append(band_array)
         image = np.dstack(image)
         rasterfile = None  # close input fd
         mask_path = sample[self.mask_path_key] if hasattr(self, 'mask_path_key') else None
@@ -367,11 +367,11 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
-            self.image_key: image,
+            self.image_key: np.array(image.data, copy=True, dtype='float32'),
             self.mask_key: mask,
             self.label_key: sample[self.label_key],
             self.idx_key: idx,
-            **sample
+            # **sample
         }
         # FIXME: not clear how to handle transformations on the image as well as on the mask
         #  in particular for geometric transformations
@@ -409,7 +409,7 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
         sample_class_ids = set()
         samples = []
         channels = dataset.get(DATASET_DATA_CHANNELS, None) #FIXME: the user needs to specified the channels used by the model
-        self.channels = channels if channels else [0, 1, 2] # by default we take the first 3 channels
+        self.channels = channels if channels else [1, 2, 3] # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
                                           dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
@@ -456,6 +456,8 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
         sample_class_ids = set()
         samples = []
+        channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
+        self.channels = channels if channels else [1, 2, 3]  # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
                                           dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
