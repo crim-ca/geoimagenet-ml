@@ -61,14 +61,16 @@ def process():
     datasets_config = {
         # loader for the test data
         "deepglobe_test": {
-            "type": "thelper.data.ImageDataset",
+            "type": "thelper.data.geo.ImageFolderGDataset",
             # "type": "thelper.data.SegmentationDataset",
-            "params": {"root": "/home/sfoucher/DEV/geoimagenet/dataset_test/deepglobe_classif/val",
+            "params": {"root": "/home/sfoucher/DEV/geoimagenet/dataset_test/deepglobe_classif",
                        # "class_names": ["AgriculturalLand", "BarrenLand", "ForestLand", "RangeLand", "UrbanLand", "Water"],
                         # "input_key": "image",
                         # 'dontcare' : 255,
                         # "label_map_key": "label"
-                       "image_key": "image"
+                       "image_key": "image",
+                       "channels": [1,2,3]
+
                        },
             "task": task_config
         }
