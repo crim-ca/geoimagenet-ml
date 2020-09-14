@@ -283,9 +283,10 @@ def raise_http(httpError=HTTPInternalServerError,   # type: Optional[HTTPError]
     # reset counter for future calls (don't accumulate for different requests)
     # following raise is the last in the chain since it wasn't triggered by other functions
     RAISE_RECURSIVE_SAFEGUARD_COUNT = 0
-    if LOGGER.isEnabledFor(logging.ERROR):
+    if LOGGER.isEnabledFor(logging.WARNING):
+        level = logging.WARNING if httpError.code < 500 else logging.ERROR
         cause = get_request_info(request) if isinstance(request, Request) else 'N/A'
-        LOGGER.error("HTTP error raised: [{!s}], cause: [{!s}]".format(resp, cause))
+        LOGGER.log(level, "HTTP error raised: [{!s}], cause: [{!s}]".format(resp, cause))
     if nothrow:
         return resp
     raise resp
