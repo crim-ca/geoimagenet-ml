@@ -16,18 +16,29 @@ RUN apt-get update && apt-get install -y \
 	libfontconfig1 \
 	libssl-dev \
 	libffi-dev \
-	python-dev \
 	libxml2-dev \
 	libxslt1-dev \
-	zlib1g-dev \
-	python-pip
+	python3-dev \
+	python3-pip \
+	zlib1g-dev
 
 ENV GEOIMAGENET_ML_PROJECT_ROOT /opt/local/src/geoimagenet_ml
-COPY ./ ${GEOIMAGENET_ML_PROJECT_ROOT}/
 WORKDIR ${GEOIMAGENET_ML_PROJECT_ROOT}
 
-# install packages
-RUN make install -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make && make test-req
+# install all dependencies except source api code to save time during development
+# note: don't fetch README/HISTORY as they are often modified simultaneously with source code
+COPY ./requirements* ./setup* ./MANIFEST.in ./Makefile ${GEOIMAGENET_ML_PROJECT_ROOT}/
+RUN ls -la ${GEOIMAGENET_ML_PROJECT_ROOT}/ && \
+    make install-dep -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make && \
+    make test-req
+
+# install api source code
+COPY ./*.rst ${GEOIMAGENET_ML_PROJECT_ROOT}/
+COPY ./geoimagenet_ml/ ${GEOIMAGENET_ML_PROJECT_ROOT}/geoimagenet_ml/
+COPY ./scripts/ ${GEOIMAGENET_ML_PROJECT_ROOT}/scripts/
+RUN ls -la ${GEOIMAGENET_ML_PROJECT_ROOT}/ && \
+    make install-api -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make && \
+    make test-req
 
 ENV DAEMON_OPTS --nodaemon
 

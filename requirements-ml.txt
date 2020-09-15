@@ -1,4 +1,4 @@
-thelper>=0.5.0
+thelper>=0.5.0,<0.6
 opencv-python
 scipy
 shapely

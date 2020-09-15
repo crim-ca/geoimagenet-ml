@@ -58,6 +58,7 @@ help:
 	@echo "docker-build     build the docker image with the current version"
 	@echo "docker-push      push the docker image with the current version"
 	@echo "docs             generate Sphinx HTML documentation, including API docs"
+	@echo "docs-serve       serve the generated Sphinx HTML documentation in local browser"
 	@echo "install          install the package to the active Python's site-packages"
 	@echo "install-api      install API related components"
 	@echo "install-ml       install ML related components"
@@ -70,7 +71,7 @@ help:
 	@echo "test-req         run test to validate no missing requirement for any package"
 	@echo "test-tox         run tests on every Python version with tox"
 	@echo "update           same as 'install' but without conda packages installation"
-	@echo "version          retrive the application version"
+	@echo "version          retrieve the application version"
 
 # Bumpversion 'dry' config
 # if 'dry' is specified as target, any bumpversion call using 'BUMP_XARGS' will not apply changes
@@ -137,10 +138,9 @@ test-unit: install-dev
 
 .PHONY: test-req
 test-req:
-	# list requirements check, then evalute it
+	# list requirements check, then evaluate it
 	@bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; \
-	 	pip check; \
-	 	pip check | grep "requirements found";'
+	 	pip check | grep "No broken requirements found";'
 
 .PHONY: test-all
 test-all: install-dev
@@ -170,8 +170,8 @@ docs:
 	@"$(MAKE)" -C "$(CUR_DIR)/docs" clean
 	@"$(MAKE)" -C "$(CUR_DIR)/docs" html
 
-.PHONY: servedocs
-servedocs: docs
+.PHONY: docs-serve
+docs-serve: docs
 	watchmedo shell-command -p '*.rst' -c '"$(MAKE)" -C docs html' -R -D .
 
 .PHONY: release
@@ -189,9 +189,18 @@ dist: clean
 install: install-ml install-api
 	@echo "Installing all packages..."
 
-.PHONY: install-api
-install-api: clean conda-env
+.PHONY: install-req
+install-req: clean conda-env
+	@echo "Installing base packages..."
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install -r "$(CUR_DIR)/requirements.txt"'
+
+.PHONY: install-dep
+install-dep: install-req install-ml
+	@echo "Installing dependencies..."
+
+.PHONY: install-api
+install-api: clean conda-env install-req
+	@echo "Installing API packages..."
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; python "$(CUR_DIR)/setup.py" install'
 	@-bash -c 'source "$(ANACONDA_HOME)/bin/activate" "$(CONDA_ENV)"; pip install "$(CUR_DIR)"'
 
@@ -227,12 +236,17 @@ docker-info:
 
 .PHONY: docker-build
 docker-build:
-	@bash -c "docker build $(CUR_DIR) \
-		-t $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
+	@bash -c " \
+		docker build $(CUR_DIR) -t $(DOCKER_REPO):latest && \
+		docker tag $(DOCKER_REPO):latest \
+			$(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
+
 
 .PHONY: docker-push
 docker-push:
-	@bash -c "docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
+	@bash -c " \
+		docker push $(DOCKER_REPO):latest && \
+		docker push $(DOCKER_REPO):`python -c 'from geoimagenet_ml.__meta__ import __version__; print(__version__)'`"
 
 ## Supervisor targets
 
