@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+2.0.0 (2020-09-15)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add ``scripts/update_model_classes.py`` to update taxonomy class indices of model task in checkpoint
