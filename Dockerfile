@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
 	build-essential \
 	supervisor \
 	curl \
+    libgl1-mesa-glx \
 	libsm6 \
 	libxext6 \
 	libxrender1 \
@@ -39,6 +40,11 @@ COPY ./scripts/ ${GEOIMAGENET_ML_PROJECT_ROOT}/scripts/
 RUN ls -la ${GEOIMAGENET_ML_PROJECT_ROOT}/ && \
     make install-api -f ${GEOIMAGENET_ML_PROJECT_ROOT}/Makefile --always-make && \
     make test-req
+
+# ensure libGL does not get called from unavailable GUI
+# this can happen from OpenCV or matplotlib that offer window popups
+# set non-interactive backend
+ENV MPLBACKEND "agg"
 
 ENV DAEMON_OPTS --nodaemon
 
