@@ -6,7 +6,6 @@ from pyramid.registry import Registry
 from pyramid_celery import Celery
 from six.moves.configparser import ConfigParser
 from datetime import datetime
-# noinspection PyPackageRequirements
 from dateutil.parser import parse
 import collections
 import requests

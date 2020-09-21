@@ -6,6 +6,7 @@ include README.rst
 
 recursive-include geoimagenet_ml *
 recursive-include geoimagenet_ml/alembic/version/ *
+recursive-include scripts *
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

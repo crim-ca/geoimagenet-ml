@@ -6,14 +6,11 @@ circus
 colander
 cornice
 cornice_swagger>=0.7.0
-coverage==4.0
 dateutils
-flake8==3.5.0
 futures==3.1.1
-gunicorn
+gunicorn<20
 numpy
 paste
-psycopg2>=2.7.1
 pymongo
 pyramid==1.8.3
 pyramid_celery

@@ -5,8 +5,11 @@ from six.moves.urllib.request import urlopen
 from copy import deepcopy
 from io import BytesIO
 from osgeo import gdal
+from PIL import Image
 import requests
 import logging
+import json
+import numpy as np
 import random
 import shutil
 import six
@@ -14,8 +17,11 @@ import ssl
 import ast
 import re
 import os
-import thelper
+import cv2
 from typing import TYPE_CHECKING
+
+import thelper  # noqa
+
 if TYPE_CHECKING:
     from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
     from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
@@ -23,6 +29,7 @@ if TYPE_CHECKING:
         Any, AnyStr, Callable, Dict, List, Tuple, Union, JSON, SettingsType, Number,
         Optional, FeatureType, RasterDataType, ParamsType
     )
+    from geoimagenet_ml.processes.runners import ProcessRunnerModelTester
     from geoimagenet_ml.utils import ClassCounter  # noqa: F401
     # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
     AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
@@ -44,12 +51,20 @@ DATASET_DATA_KEY = "data"               # dict of data below
 DATASET_DATA_TAXO_KEY = "taxonomy"
 DATASET_DATA_MAPPING_KEY = "taxonomy_model_map"     # taxonomy ID -> model labels
 DATASET_DATA_ORDERING_KEY = "model_class_order"     # model output classes (same indices)
+DATASET_DATA_MODEL_MAPPING = "model_output_mapping"    # model output classes (same indices)
 DATASET_DATA_PATCH_KEY = "patches"
 DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
 DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
 DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
 DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
+DATASET_DATA_PATCH_PATH_KEY = "path"         # crop image path of the generated patch
+DATASET_DATA_PATCH_MASK_KEY = "mask"         # mask image path of the generated patch
+DATASET_DATA_PATCH_MASK_PATH_KEY = 'mask'    # original mask path that was used to generate the patch
+DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
+DATASET_BACKGROUND_ID = 999                  # background class id
+DATASET_DATA_PATCH_DONTCARE = 255            # dontcare value in the test set
+DATASET_DATA_CHANNELS = "channels"           # channels information
 
 # see bottom for mapping definition
 MAPPING_TASK = "task"
@@ -104,17 +119,43 @@ def validate_model(model_data):
     """
     Accomplishes required model checkpoint validation to restrict unexpected behaviour during other function calls.
 
-    All security checks or alternative behaviours allowed by native ``thelper`` library but that should be forbidden
+    All security checks or alternative behaviours allowed by native :mod:`thelper` library but that should be forbidden
     within this API for process execution should be done here.
 
-    :param model_data: model checkpoint data with configuration parameters (typically loaded by `load_model`)
+    :param model_data: model checkpoint data with configuration parameters (typically loaded by :func:`load_model`)
     :return: tuple of (success, exception) accordingly
     :raises: None (nothrow)
     """
     model_task = model_data.get("task")
-    if not isinstance(model_task, dict):
+    if isinstance(model_task, dict):
+        model_type = model_task.get("type")
+        if not isinstance(model_type, six.string_types):
+            LOGGER.debug(f"Model task: [{model_type!s}]")
+            return False, ConfigurationError(
+                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
+            )
+        model_params = model_task.get("params")
+        if not isinstance(model_params, dict):
+            LOGGER.debug(f"Model task: [{model_params!s}]")
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task missing JSON definition of parameter section."
+            )
+        model_classes = model_params.get("class_names")
+        if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
+            LOGGER.debug(f"Model task: [{model_classes!s}]")
+            return False, ConfigurationError(
+                "Forbidden model checkpoint task contains invalid JSON class names parameter section."
+            )
+    elif isinstance(model_task, thelper.tasks.Task):
+        model_type = fully_qualified_name(model_task)
+        if model_type not in MODEL_TASK_MAPPING:
+            LOGGER.debug(f"Model task: [{model_type!s}]")
+            return False, ConfigurationError(
+                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
+            )
+    else:
         # thelper security risk, refuse literal string definition of task loaded by eval() unless it can be validated
-        LOGGER.warning(f"Model task not defined as dictionary: [{model_task!s}]")
+        LOGGER.warning(f"Model task not defined as dictionary nor `thelper.task.Task` class: [{model_task!s}]")
         if not (isinstance(model_task, str) and model_task.startswith("thelper.task")):
             return False, ConfigurationSecurityWarning(
                 "Forbidden model checkpoint task definition as string doesn't refer to a `thelper.task`."
@@ -138,25 +179,6 @@ def validate_model(model_data):
                 "Forbidden model checkpoint task defined as string doesn't respect expected syntax."
             )
         LOGGER.debug("Model task as string validated with successful parameter conversion")
-    else:
-        model_type = model_task.get("type")
-        if not isinstance(model_type, six.string_types):
-            LOGGER.debug(f"Model task: [{model_type!s}]")
-            return False, ConfigurationError(
-                f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
-            )
-        model_params = model_task.get("params")
-        if not isinstance(model_params, dict):
-            LOGGER.debug(f"Model task: [{model_params!s}]")
-            return False, ConfigurationError(
-                "Forbidden model checkpoint task missing JSON definition of parameter section."
-            )
-        model_classes = model_params.get("class_names")
-        if not (isinstance(model_classes, list) and all([isinstance(c, (int, str)) for c in model_classes])):
-            LOGGER.debug(f"Model task: [{model_classes!s}]")
-            return False, ConfigurationError(
-                "Forbidden model checkpoint task contains invalid JSON class names parameter section."
-            )
     return True, None
 
 
@@ -189,25 +211,175 @@ def fix_str_model_task(model_task):
         raise ValueError(f"Failed literal string parsing for model task, exception: [{exc!s}]")
 
 
-def get_test_data_runner(job, model_checkpoint_config, model, dataset, settings):
-    # type: (Job, CkptData, Model, Dataset, SettingsType) -> thelper.train.Trainer
+class CallbackIterator(thelper.session.base.SessionRunner):
+    def __init__(self, runner, loader, start_percent, final_percent):
+        # type: (ProcessRunnerModelTester, thelper.data.loader.DataLoader, Number, Number) -> None
+        self._runner = runner
+        self._loader = loader
+        self._start_percent = float(start_percent)
+        self._final_percent = float(final_percent)
+
+    def _iter_logger_callback(self,  # see `thelper.typedefs.IterCallbackParams` for more info
+                              task,  # type: thelper.tasks.utils.Task
+                              input,  # type: thelper.typedefs.InputType
+                              pred,  # type: thelper.typedefs.AnyPredictionType
+                              target,  # type: thelper.typedefs.AnyTargetType
+                              sample,  # type: thelper.typedefs.SampleType
+                              loss,  # type: Optional[float]
+                              iter_idx,  # type: int
+                              max_iters,  # type: int
+                              epoch_idx,  # type: int
+                              max_epochs,  # type: int
+                              output_path,  # type: AnyStr
+                              # note: kwargs must contain two args here: 'set_name' and 'writers'
+                              **kwargs,  # type: Any
+                              ):  # type: (...) -> None
+        """
+        Callback called on each batch iteration of the evaluation process.
+        Must have same signature as original.
+
+        Update job log using available progress metadata for progressive feedback of job execution.
+        """
+
+        total_sample_count = self._loader.sample_count
+        batch_size = self._loader.batch_size
+        batch_index = iter_idx + 1
+        eval_sample_count = min(batch_size * batch_index, total_sample_count)  # if last batch is partial
+        progress = np.interp(float(batch_index) / float(max_iters), [0, 1], [self._start_percent, self._final_percent])
+        msg = "evaluating... [samples: {}/{}, batches: {}/{}]" \
+            .format(eval_sample_count, total_sample_count, batch_index, max_iters)
+        self._runner.update_job_status(self._runner.job.status, msg, progress)
+        self._runner.db.jobs_store.update_job(self._runner.job)
+
+
+def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset, start_percent, final_percent):
+    # type: (ProcessRunnerModelTester, CkptData, Model, Dataset, SettingsType, Number, Number) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
+    settings = process_runner.registry.settings
     test_config = test_loader_from_configs(model_checkpoint_config, model, dataset, settings)
-    save_dir = os.path.join(settings.get("geoimagenet_ml.ml.jobs_path"), job.uuid)
-    _, _, _, test_loader = thelper.data.utils.create_loaders(test_config["config"], save_dir=save_dir)
     config = test_config["config"]
+
+    job_uuid = process_runner.job.uuid
+    jobs_path = settings.get("geoimagenet_ml.ml.jobs_path")
+    save_dir = os.path.join(jobs_path, job_uuid)
+    _, _, _, test_loader = thelper.data.utils.create_loaders(config, save_dir=save_dir)
     model = thelper.nn.create_model(config, None, save_dir=save_dir, ckptdata=test_config)
     task = model.task
     loaders = None, None, test_loader   # type: thelper.typedefs.MultiLoaderType
 
+    # link the batch iteration with a callback for progress tracking
+    loader_batch_size = config["loaders"]["test_batch_size"]
+    logger_callback = CallbackIterator(process_runner, test_loader, start_percent, final_percent)
+    config["trainer"]["test_logger"] = logger_callback._iter_logger_callback  # noqa
+
     # session name as Job UUID will write data under '<geoimagenet_ml.ml.models_path>/<model-UUID>/output/<job-UUID>/'
-    trainer = thelper.train.create_trainer(job.uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
+    trainer = thelper.train.create_trainer(job_uuid, save_dir, config, model, task, loaders, model_checkpoint_config)
     return trainer
 
 
-class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
+
+#FIXME: this class is the equivalent of thelper.data.ImageFolderDataset but for a segmentation task
+class ImageFolderSegDataset(thelper.data.SegmentationDataset):
+    """Image folder dataset specialization interface for segmentation tasks.
+
+    This specialization is used to parse simple image subfolders, and it essentially replaces the very
+    basic ``torchvision.datasets.ImageFolder`` interface with similar functionalities. It it used to provide
+    a proper task interface as well as path metadata in each loaded packet for metrics/logging output.
+
+    .. seealso::
+        | :class:`thelper.data.parsers.ImageDataset`
+        | :class:`thelper.data.parsers.SegmentationDataset`
+    """
+
+    def __init__(self, root, transforms=None, channels= None, image_key="image", label_key="label", mask_key="mask", mask_path_key="mask_path", path_key="path", idx_key="idx"):
+        """Image folder dataset parser constructor."""
+        self.root = root
+        if self.root is None or not os.path.isdir(self.root):
+            raise AssertionError("invalid input data root '%s'" % self.root)
+        class_map = {}
+        for child in os.listdir(self.root):
+            if os.path.isdir(os.path.join(self.root, child)):
+                class_map[child] = []
+        if not class_map:
+            raise AssertionError("could not find any image folders at '%s'" % self.root)
+        image_exts = [".jpg", ".jpeg", ".bmp", ".png", ".ppm", ".pgm", ".tif"]
+        self.image_key = image_key
+        self.path_key = path_key
+        self.idx_key = idx_key
+        self.label_key = label_key
+        self.mask_key = mask_key
+        self.mask_path_key = mask_path_key
+        self.channels = channels if channels else [1, 2, 3]
+        samples = []
+        for class_name in class_map:
+            class_folder = os.path.join(self.root, class_name)
+            for folder, subfolder, files in os.walk(class_folder):
+                for file in files:
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in image_exts:
+                        class_map[class_name].append(len(samples))
+                        samples.append({
+                            self.path_key: os.path.join(folder, file),
+                            self.label_key: class_name
+                        })
+        old_unsorted_class_names = list(class_map.keys())
+        class_map = {k: class_map[k] for k in sorted(class_map.keys()) if len(class_map[k]) > 0}
+        if old_unsorted_class_names != list(class_map.keys()):
+            # new as of v0.4.4; this may only be an issue for old models trained on windows and ported to linux
+            # (this is caused by the way os.walk returns folders in an arbitrary order on some platforms)
+            logger.warning("class name ordering changed due to folder name sorting; this may impact the "
+                           "behavior of previously-trained models as task class indices may be swapped!")
+        if not class_map:
+            raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
+        meta_keys = [self.path_key, self.idx_key]
+        super(ImageFolderSegDataset, self).__init__(class_names=list(class_map.keys()), input_key=self.image_key,
+                                                 label_key=self.label_key, meta_keys=meta_keys, transforms=transforms)
+        self.samples = samples
+
+    def __getitem__(self, idx):
+        """Returns the data sample (a dictionary) for a specific (0-based) index."""
+        if isinstance(idx, slice):
+            return self._getitems(idx)
+        if idx >= len(self.samples):
+            raise AssertionError("sample index is out-of-range")
+        if idx < 0:
+            idx = len(self.samples) + idx
+        sample = self.samples[idx]
+        image_path = sample[self.path_key]
+        rasterfile = gdal.Open(image_path, gdal.GA_ReadOnly)
+        # image = cv2.imread(image_path)
+        image = []
+        for raster_band_idx in self.channels:
+            curr_band = rasterfile.GetRasterBand(raster_band_idx)  # offset, starts at 1
+            band_array = curr_band.ReadAsArray()
+            band_nodataval = curr_band.GetNoDataValue()
+            # band_ma = np.ma.array(band_array.astype(np.float32))
+            image.append(band_array)
+        image = np.dstack(image)
+        rasterfile = None  # close input fd
+        mask_path = sample[self.mask_path_key] if hasattr(self, 'mask_path_key') else None
+        mask = None
+        if mask_path is not None:
+            mask = cv2.imread(mask_path)
+            mask = mask if mask.ndim == 2 else mask[:, :, 0] # masks saved with PIL have three bands
+        if image is None:
+            raise AssertionError("invalid image at '%s'" % image_path)
+        sample = {
+            self.image_key: np.array(image.data, copy=True, dtype='float32'),
+            self.mask_key: mask,
+            self.label_key: sample[self.label_key],
+            self.idx_key: idx,
+            # **sample
+        }
+        # FIXME: not clear how to handle transformations on the image as well as on the mask
+        #  in particular for geometric transformations
+        if self.transforms:
+            sample = self.transforms(sample)
+        return sample
+
+class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
     """
     Batch dataset parser that loads only patches from 'test' split and matching
     class IDs (or their parents) known by the model as defined in its ``task``.
@@ -227,13 +399,65 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
         # keys matching dataset config for easy loading and referencing to same fields
         self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
         self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
-        self.path_key = "path"              # actual file path of the patch
-        self.idx_key = "index"              # increment for __getitem__
+        self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
+        self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
+        self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
+                          DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
+        model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
+        model_class_to_id = dataset[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING]
+        sample_class_ids = set()
+        samples = []
+        channels = dataset.get(DATASET_DATA_CHANNELS, None) #FIXME: the user needs to specified the channels used by the model
+        self.channels = channels if channels else [1, 2, 3] # by default we take the first 3 channels
+        for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
+                                          dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
+            if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
+                # convert the dataset class ID into the model class ID using mapping, drop sample if not found
+                class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                class_model_id = model_class_to_id.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                if class_name is not None:
+                    sample_class_ids.add(class_name)
+                    samples.append(deepcopy(patch_info))
+                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
+                    samples[-1][self.label_key] = class_model_id
+
+        if not len(sample_class_ids):
+            raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
+        self.samples = samples
+        self.sample_class_ids = sample_class_ids
+
+class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
+    """
+    Batch dataset parser that loads only patches from 'test' split and matching
+    class IDs (or their parents) known by the model as defined in its ``task``.
+
+    .. note::
+
+        Uses :class:`thelper.data.SegmentationDataset` ``__getitem__`` implementation to load image
+        from a folder, but overrides the ``__init__`` to adapt the configuration to batch format.
+    """
+
+    # noinspection PyMissingConstructor
+    def __init__(self, dataset=None, transforms=None):
+        if not (isinstance(dataset, dict) and len(dataset)):
+            raise ValueError("Expected dataset parameters as configuration input.")
+        thelper.data.Dataset.__init__(self, transforms=transforms, deepcopy=False)
+        self.root = dataset["path"]
+        # keys matching dataset config for easy loading and referencing to same fields
+        self.image_key = IMAGE_DATA_KEY     # key employed by loader to extract image data (pixel values)
+        self.label_key = IMAGE_LABEL_KEY    # class id from API mapped to match model task
+        self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
+        self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
+        self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
+        self.mask_path_key = DATASET_DATA_PATCH_MASK_PATH_KEY  # actual mask path of the patch
+        self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
         sample_class_ids = set()
         samples = []
+        channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
+        self.channels = channels if channels else [1, 2, 3]  # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
                                           dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
@@ -242,8 +466,11 @@ class BatchTestPatchesBaseDatasetLoader(thelper.data.ImageFolderDataset):
                 if class_name is not None:
                     sample_class_ids.add(class_name)
                     samples.append(deepcopy(patch_info))
-                    samples[-1][self.path_key] = patch_path
+                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
                     samples[-1][self.label_key] = class_name
+                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_PATH_KEY, None)
+                    if mask_name is not None:
+                        samples[-1][self.mask_path_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
@@ -257,6 +484,18 @@ class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoa
             class_names=list(self.sample_class_ids),
             input_key=self.image_key,
             label_key=self.label_key,
+            meta_keys=self.meta_keys,
+        )
+
+
+class BatchTestPatchesSegmentationDatasetLoader(BatchTestPatchesBaseSegDatasetLoader):
+    def __init__(self, dataset=None, transforms=None):
+        super(BatchTestPatchesSegmentationDatasetLoader, self).__init__(dataset, transforms)
+        class_names = [str(c) for c in dataset.get('data').get('model_class_order', list(self.sample_class_ids))]
+        self.task = thelper.tasks.Segmentation(
+            class_names=class_names,
+            input_key=self.image_key,
+            label_map_key=self.label_key,
             meta_keys=self.meta_keys,
         )
 
@@ -284,9 +523,10 @@ def adapt_dataset_for_model_task(model_task, dataset):
         all_model_ordering = list()         # class ID order as defined by the model
         all_model_mapping = dict()          # taxonomy->model class ID mapping
         all_child_classes = set()           # only taxonomy child classes IDs
+        all_test_patch_files = list()       # list of the test patch files
 
-        # find existing mappings defined by taxonomy
         def find_class_mapping(taxonomy_class, parent=None):
+            """Finds existing mappings defined by taxonomy."""
             children = taxonomy_class.get("children")
             class_id = taxonomy_class.get("id")
             if children:
@@ -295,6 +535,15 @@ def adapt_dataset_for_model_task(model_task, dataset):
             else:
                 all_child_classes.add(class_id)
             all_classes_mapping[class_id] = None if not parent else parent.get("id")
+
+        # Some models will use a generic background class so we add it systematically in case the model needs it
+        for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
+            taxo.get("children").insert(0, {"id": DATASET_BACKGROUND_ID,
+                                            "name_fr": "Classe autre",
+                                            "taxonomy_id": taxo.get("taxonomy_id"),
+                                            "code": "BACK",
+                                            "name_en": "Background",
+                                            "children": []})
 
         for taxo in dataset_params[DATASET_DATA_KEY][DATASET_DATA_TAXO_KEY]:
             find_class_mapping(taxo)
@@ -340,6 +589,27 @@ def adapt_dataset_for_model_task(model_task, dataset):
         # update obtained mapping with dataset parameters for loader
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY] = all_model_mapping
         dataset_params[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY] = all_model_ordering
+        dataset_params[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING] = model_task.class_indices
+        dataset_params[DATASET_FILES_KEY] = all_test_patch_files
+
+        # update patch info for classes of interest
+        # this is necessary for BatchTestPatchesClassificationDatasetLoader
+        class_mapped = [c for c, m in all_model_mapping.items() if m is not None]
+        samples_all = dataset_params[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]  # type: JSON
+        all_model_classes = set(class_mapped + all_model_ordering)
+        samples_mapped = [s for s in samples_all if s[DATASET_DATA_PATCH_CLASS_KEY] in all_model_classes]
+        # retain class Ids with test patches
+        classes_with_files = sorted(set([s["class"] for s in samples_mapped if s["split"] == "test"]))
+        if len(classes_with_files) == 0:
+            raise ValueError("No test patches for the classes of interest!")
+        all_test_patch_files = [s[DATASET_DATA_PATCH_CROPS_KEY][0]["path"] for s in samples_mapped]
+        dataset_params[DATASET_FILES_KEY] = all_test_patch_files
+
+        # test_samples = [
+        #    {"class_id": s[DATASET_DATA_PATCH_CLASS_KEY],
+        #     "sample_id": s[DATASET_DATA_PATCH_FEATURE_KEY]} for s in samples_all
+        # ]
+
         model_task_name = fully_qualified_name(model_task)
         return {
             "type": MODEL_TASK_MAPPING[model_task_name][MAPPING_LOADER],
@@ -369,15 +639,30 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     #   - override model task classes instead of full dataset so we don't specialize the model
     #     (test only on classes known by the model, or on any class nested under a more generic category)
     test_dataset_name = dataset_config_override["name"]
+
     if isinstance(test_config["task"], str):
         task_str = test_config["task"]
+        task_class_str = task_str.split("(", 1)[0]
+        if "thelper.tasks" not in task_class_str:
+            raise AssertionError("Invalid task 'type' in task config")
+        LOGGER.debug("Task type in the config:\n"
+                     f"  task type: [{task_class_str}]")
         task_params = fix_str_model_task(task_str)
         LOGGER.debug("Overriding model task string definition by parameter dictionary representation:\n"
                      f"  original task: [{task_str}]\n"
                      f"  modified task: [{task_params}]")
-        test_config["task"] = task_params
-    test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
-    test_model_task = thelper.tasks.create_task(test_config["task"])
+        test_config["task"] = {"params": task_params, "type": task_class_str}
+        if "Detection" in task_class_str:
+            test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
+        elif "Segmentation" in task_class_str:
+            test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_map_key": IMAGE_LABEL_KEY})
+        else:
+            test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
+        test_model_task = thelper.tasks.create_task(test_config["task"])
+    else:
+        task_class_str = fully_qualified_name(test_config["task"])
+        test_model_task = test_config["task"]
+
     test_model_task_name = fully_qualified_name(test_model_task)
     test_config["config"]["name"] = model_config_override["name"]
     test_config["config"]["datasets"] = {
@@ -404,49 +689,104 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     loaders["test_split"] = {
         test_dataset_name: 1.0    # use every single dataset patch found by the test loader
     }
+    loaders["shuffle"] = False  # easier to compare inference samples when order matches + cannot merge lists otherwise
     trainer["use_tbx"] = False
     trainer["type"] = MODEL_TASK_MAPPING[test_model_task_name][MAPPING_TESTER]
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
 
-    # enforce multiprocessing workers count according to settings
+    # enforce multiprocessing workers count and batch size according to settings
     # note:
     #   job worker process must be non-daemonic to allow data loader workers spawning
     # see:
     #   ``geoimagenet_ml.api.routes.processes.utils.process_ml_job_runner`` for worker setup
-    loaders["workers"] = int(settings.get('geoimagenet_ml.ml.data_loader_workers', 0))
+    loaders["workers"] = int(settings.get("geoimagenet_ml.ml.data_loader_workers", 0))
+    loaders["test_batch_size"] = int(settings.get("geoimagenet_ml.ml.data_loader_batch_size", 10))
+    loaders.pop("batch_size", None)  # raises if both generic and test-specific exist at the same time
 
     # override metrics to retrieve the ones required for result output
-    trainer["metrics"] = {
-        "predictions": {
-            "type": "thelper.optim.metrics.RawPredictions",
-        },
-        "top_1_accuracy": {
-            "type": "thelper.optim.metrics.CategoryAccuracy",
-            "params": {
-                "top_k": 1,
-            }
-        },
-        "top_5_accuracy": {
-            "type": "thelper.optim.metrics.CategoryAccuracy",
-            "params": {
-                "top_k": 5,
+    if "Classification" in task_class_str or thelper.concepts.supports(test_model_task, "classification"):
+        class_count = len(test_model_task.class_names)
+        trainer["metrics"] = {
+            "predictions": {
+                "type": "thelper.train.utils.ClassifLogger",
+                "params": {
+                    "format": "json",
+                    "top_k": class_count,  # obtain the prediction of every class from the model
+                }
+            },
+            "report": {
+                "type": "thelper.train.utils.ClassifReport",
+                "params": {
+                    "format": "json"
+                }
+            },
+            "top_1_accuracy": {
+                "type": "thelper.optim.metrics.Accuracy",
+                "params": {
+                    "top_k": 1,
+                }
+            },
+            "ConfusionMatrix": {
+                "type": "thelper.train.utils.ConfusionMatrix",
             }
         }
-    }
+    elif "Segmentation" in task_class_str or thelper.concepts.supports(test_model_task, "segmentation"):
+        # FIXME: Not sure this the right mechanism but we need to enforce the right keys
+        #  that are expected by the data loader, those keys should not be specified by the user
+        test_model_task.input_key = IMAGE_DATA_KEY
+        test_model_task.gt_key = DATASET_DATA_PATCH_MASK_KEY
+        test_model_task.dontcare = DATASET_DATA_PATCH_DONTCARE
+        # Metrics more appropriate for segmentation
+        trainer["metrics"] = {
+            # FIXME: segmentation results must be extracted specifically for this task type
+            #        see 'classification_test_results_finder' and 'MODEL_TASK_MAPPING'
+            #        without correct extraction of results, job output will have nothing
+            # "AveragePrecision": {
+            #    "type": "thelper.optim.metrics.AveragePrecision",
+            # },
+            "mIoU": {
+                "type": "thelper.optim.metrics.IntersectionOverUnion",
+            },
+            # "top_5_accuracy": {
+            #    "type": "thelper.optim.metrics.CategoryAccuracy",
+            #    "params": {
+            #        "top_k": 5,
+            #    }
+            # }
+        }
+    # need to copy the model parameters because this field is expected by 'thelper.nn.create_model'
+    if "model_params" not in test_config:
+        test_config["model_params"] = test_config["config"]["params"]
     return test_config
 
 
-def classification_test_results_finder(test_dataset, test_results):
-    # type: (JSON, JSON) -> JSON
+def classification_test_results_finder(test_dataset, test_results, test_output_path):
+    # type: (Dataset, JSON, AnyStr) -> JSON
     """Specialized result finder for classification task.
 
-    Format of predictions for this task type is::
+    Format of ``predictions`` sub-field for this task type is:
 
-        { "<class_id>": <id>, "scores": [<score>] }
+    .. code-blocK:: json
+
+        {
+            "target": {
+                "class_id": "<class_id>", "score": <score>
+            },
+            "outputs": [
+                {"class_id": "<class-id>", "score": <score>}
+                <...>
+            ]
+        }
+
+    Where ``outputs`` are the Top-K output predictions (inference) of every class generated by the classification model,
+    and ``target`` contains the prediction score of the defined ground-truth sample class.
+
+    Output conforms to schema definition of :func:`get_test_results`.
 
     .. seealso::
-        :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+        - :func:`get_test_results` and ``MODEL_TASK_MAPPING`` for automatic resolution by task type.
+        - :func:`test_loader_from_configs` for configured metrics available for the given task type.
     """
     class_mapping = test_dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]   # type: ClassMap
     class_outputs = test_dataset[DATASET_DATA_KEY][DATASET_DATA_ORDERING_KEY]
@@ -468,8 +808,23 @@ def classification_test_results_finder(test_dataset, test_results):
     test_classes = [
         {"model_index": i, "class_id": c} for i, c in enumerate(class_outputs)
     ]
-    test_predictions = [{"class_id": s[DATASET_DATA_PATCH_CLASS_KEY], "scores": p["predictions"]}
-                        for s, p in zip(samples_mapped, test_results["predictions"])]
+    test_predictions = test_results.get("predictions", None)
+    if not test_predictions:
+        prediction_path = os.path.join(test_output_path, "predictions.json")
+        if os.path.isfile(prediction_path):
+            with open(prediction_path, "r") as f:
+                test_predictions = json.load(f)
+    if test_predictions:
+        test_predictions = [
+            {
+                "target": {"class_id": p["target_name"], "score": p["target_score"]},
+                "outputs": [{"class_id": p[f"pred_{i}_name"], "score": p[f"pred_{i}_score"]}
+                            for i in range(1, len(class_outputs) + 1)]
+            }
+            for p in test_predictions
+        ]
+    else:
+        test_predictions = []
     test_metrics = {m: s for m, s in test_results.items() if m != "predictions"}
     # since storage doesn't support int keys and classes could be defined as int, convert to dict
     test_mapping = [{"class_id": c, "model_id": m} for c, m in class_mapping.items()]
@@ -481,6 +836,7 @@ def classification_test_results_finder(test_dataset, test_results):
         "mapping": test_mapping,
         "predictions": test_predictions,
     }
+
     return classification_results
 
 
@@ -497,7 +853,9 @@ def get_test_results(test_runner, test_results):
     The function ensures the backward mapping of predictions to class IDs.
     It also cleans up the results as they would otherwise be too verbose for output.
 
-    The resulting JSON is in the form::
+    The resulting JSON is in the form:
+
+    .. code-block:: json
 
         {
             "summary": {"<stat>": <value>},
@@ -509,7 +867,7 @@ def get_test_results(test_runner, test_results):
         }
 
     .. seealso::
-        :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
+        - :func:`test_loader_from_configs` for configuration that leads to produced results by the task runner.
     """
     test_task_name = fully_qualified_name(test_runner.task)
     test_result_finder = MODEL_TASK_MAPPING[test_task_name][MAPPING_RESULT]
@@ -517,8 +875,9 @@ def get_test_results(test_runner, test_results):
     # only one test dataset submitted for evaluation (ie: unique 'test_split' in 'test_loader_from_configs')
     test_results = test_results[0].get("test/metrics")
     test_dataset = list(test_runner.config["datasets"].values())[0]["params"][TEST_DATASET_KEY]
+    test_outputs = test_runner.output_paths["test"]  # where additional metric loggers are dumped to file
 
-    return test_result_finder(test_dataset, test_results)
+    return test_result_finder(test_dataset, test_results, test_outputs)
 
 
 def retrieve_annotations(geojson_urls):
@@ -754,14 +1113,18 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                                    .format(feature["id"]))
             # copy information, but replace patch copies
             for i_crop, _ in enumerate(patch_info[DATASET_DATA_PATCH_CROPS_KEY]):
-                old_patch_path = patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"]
-                new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
-                if not new_patch_path.startswith(dataset_container.path):
-                    raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
-                                       .format(dataset_container.path, new_patch_path))
-                patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop]["path"] = new_patch_path
-                shutil.copy(old_patch_path, new_patch_path)
-                dataset_container.files.append(new_patch_path)
+                for path_field in [DATASET_DATA_PATCH_PATH_KEY, DATASET_DATA_PATCH_MASK_KEY]:
+                    old_patch_path = patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop].get(path_field)
+                    if not old_patch_path and path_field == DATASET_DATA_PATCH_MASK_KEY:
+                        raise RuntimeError(f"Dataset [{dataset_latest.uuid}] is not compatible for incremental feature."
+                                           " Missing mask image files.")
+                    new_patch_path = old_patch_path.replace(dataset_latest.path, dataset_container.path)
+                    if not new_patch_path.startswith(dataset_container.path):
+                        raise RuntimeError("Invalid patch path from copy. Expected base: '{}', but got: '{}'"
+                                           .format(dataset_container.path, new_patch_path))
+                    patch_info[DATASET_DATA_PATCH_CROPS_KEY][i_crop][path_field] = new_patch_path
+                    shutil.copy(old_patch_path, new_patch_path)
+                    dataset_container.files.append(new_patch_path)
             dataset_container.data[DATASET_DATA_PATCH_KEY].append(patch_info)
             # update counter with previously selected split set
             select_split(train_test_splits, patch_info[DATASET_DATA_PATCH_CLASS_KEY],
@@ -789,6 +1152,9 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_driver = gdal.GetDriverByName("GTiff")
                     output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
                     output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
+                    output_mask = os.path.join(dataset_container.path, "{}_mask.png".format(output_name))
+                    crop_image = Image.fromarray((255*crop.mask).astype(np.uint8))
+                    crop_image.save(output_mask)
                     if os.path.exists(output_path):
                         msg = "Output path [{}] already exists but is expected to not exist.".format(output_path)
                         update_func(msg + " Removing...", logging.WARNING)
@@ -802,9 +1168,11 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_dataset.SetGeoTransform(output_geotransform)
                     output_dataset = None  # close output fd
                     dataset_container.files.append(output_path)
+                    dataset_container.files.append(output_mask)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
                         "type": crop_name,
-                        "path": output_path,
+                        DATASET_DATA_PATCH_PATH_KEY: output_path,
+                        DATASET_DATA_PATCH_MASK_KEY: output_mask,
                         "shape": list(crop.shape),
                         "data_type": raster_data["data_type"],
                         "coordinates": output_geotransform,
@@ -828,6 +1196,12 @@ MODEL_TASK_MAPPING = {
         MAPPING_TASK:   fully_qualified_name(thelper.tasks.classif.Classification),
         MAPPING_LOADER: fully_qualified_name(BatchTestPatchesClassificationDatasetLoader),
         MAPPING_TESTER: fully_qualified_name(thelper.train.classif.ImageClassifTrainer),
-        MAPPING_RESULT: classification_test_results_finder,
-    }
+        MAPPING_RESULT: classification_test_results_finder,  # type: Callable[[Dataset, JSON, AnyStr], JSON]
+    },
+    fully_qualified_name(thelper.tasks.segm.Segmentation): {
+        MAPPING_TASK:   fully_qualified_name(thelper.tasks.segm.Segmentation),
+        MAPPING_LOADER: fully_qualified_name(BatchTestPatchesSegmentationDatasetLoader),
+        MAPPING_TESTER: fully_qualified_name(thelper.train.segm.ImageSegmTrainer),
+        MAPPING_RESULT: classification_test_results_finder,  # FIXME: should point to a segmentation evaluation
+    },
 }

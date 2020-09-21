@@ -1,8 +1,8 @@
 bump2version
-pytest
+coverage==4.0
+flake8==3.5.0
 mock
+mock
+pytest
 WebTest
 wsgiproxy
-flake8
-coverage
-mock

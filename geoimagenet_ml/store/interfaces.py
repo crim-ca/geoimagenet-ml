@@ -14,9 +14,8 @@ if TYPE_CHECKING:
 
 
 class DatabaseInterface(object):
-    # noinspection PyUnusedLocal
     def __init__(self, settings):
-        pass
+        self._settings = settings
 
     @property
     def datasets_store(self):
@@ -140,7 +139,7 @@ class ModelStore(object):
         """
         raise NotImplementedError
 
-    def delete_model(self, process_uuid, request=None):
+    def delete_model(self, model_uuid, request=None):
         # type: (AnyUUID, Optional[Request]) -> bool
         """
         Removes model from database.
