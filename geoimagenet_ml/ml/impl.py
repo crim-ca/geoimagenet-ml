@@ -368,8 +368,8 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
             self.image_key: np.array(image.data, copy=True, dtype='float32'),
-            self.mask_key: mask,
-            self.label_key: sample[self.label_key],
+            # self.mask_key: mask,
+            self.label_key: mask,#sample[self.label_key],
             self.idx_key: idx,
             # **sample
         }
