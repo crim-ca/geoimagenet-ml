@@ -44,6 +44,7 @@ LOGGER = logging.getLogger(__name__)
 # keys used across methods to find matching configs, must be unique and non-conflicting with other sample keys
 IMAGE_DATA_KEY = "data"     # key used to store temporarily the loaded image data
 IMAGE_LABEL_KEY = "label"   # key used to store the class label used by the model
+IMAGE_MASK_KEY = "mask"   # key used to store the mask used by the model
 TEST_DATASET_KEY = "dataset"
 
 DATASET_FILES_KEY = "files"             # list of all files in the dataset batch
@@ -368,8 +369,8 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
             self.image_key: np.array(image.data, copy=True, dtype='float32'),
-            # self.mask_key: mask,
-            self.label_key: mask,#sample[self.label_key],
+            self.mask_key: mask,
+            self.label_key: sample[self.label_key],
             self.idx_key: idx,
             # **sample
         }
@@ -655,7 +656,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         if "Detection" in task_class_str:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
         elif "Segmentation" in task_class_str:
-            test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_map_key": IMAGE_LABEL_KEY})
+            test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_map_key": IMAGE_MASK_KEY})
         else:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
         test_model_task = thelper.tasks.create_task(test_config["task"])
