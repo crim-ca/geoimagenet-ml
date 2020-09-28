@@ -8,7 +8,7 @@ Unreleased
 
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
-* add ``crim-ca/gin-model-repo (1.0.0) <https://github.com/crim-ca/gin-model-repo/tree/1.0.0>`` to dependencies
+* add `crim-ca/gin-model-repo (1.0.0) <https://github.com/crim-ca/gin-model-repo/tree/1.0.0>`_ to dependencies
   to facilitate import of corresponding utilities and model implementations
 
 2.0.0 (2020-09-15)
