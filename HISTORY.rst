@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+2.1.0 (2020-09-28)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * add `crim-ca/gin-model-repo (1.0.0) <https://github.com/crim-ca/gin-model-repo/tree/1.0.0>`_ to dependencies
