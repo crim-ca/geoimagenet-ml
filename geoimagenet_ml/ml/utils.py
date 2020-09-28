@@ -428,8 +428,23 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
     return rasters_data, coverage
 
 
-def get_feature_bbox(geom, offsets=None):
-    # type: (GeometryType, Optional[PointType]) -> Tuple[PointType, PointType]
+def get_feature_bbox(geom, offsets=None, square_mode=0):
+    # type: (GeometryType, Optional[PointType], int) -> Tuple[PointType, PointType]
+    """
+    Obtains the bounding box top-left and bottom-right corners of the feature geometry.
+
+    :param geom: feature's geometry for which to obtain the bounding box.
+    :param offsets: offsets from the geometry's centroid to generate the bounding box (enforced dimensions).
+    :param square_mode:
+        Automated extraction method of dimensions for the generated bounding box (ignored if offsets given).
+        When:
+            - <0: Obtain the *square* that minimally fits inside the geometry (final dimensions are both min(w,h)).
+                  Could crop part of the actual geometry's minimal rectangle to form the bounding box.
+            - =0: Obtain the minimal *rectangle* that completely contains the geometry.
+            - >0: Obtain the *square* that minimally fits inside the geometry (final dimensions are both max(w,h)).
+                  Could pad and extend the bounding box outside the geometry's minimal rectangle.
+    :return:
+    """
     if offsets and len(offsets) != 2:
         raise AssertionError("offset param must be 2d")
     bounds = geom.bounds
@@ -437,24 +452,42 @@ def get_feature_bbox(geom, offsets=None):
         centroid = geom.centroid
         roi_tl = (centroid.x - offsets[0], centroid.y + offsets[1])
         roi_br = (centroid.x + offsets[0], centroid.y - offsets[1])
-    else:
+    elif square_mode == 0:
         roi_tl = (bounds[0], bounds[3])
         roi_br = (bounds[2], bounds[1])
+    else:
+        roi_hw = abs(bounds[2] - bounds[0]) / 2.0
+        roi_hh = abs(bounds[3] - bounds[1]) / 2.0
+        roi_cx = bounds[0] + roi_hw
+        roi_cy = bounds[1] + roi_hh
+        roi_half = min(roi_hw, roi_hh) if square_mode < 0 else max(roi_hw, roi_hh)
+        roi_tl = (roi_cx - roi_half, roi_cy + roi_half)
+        roi_br = (roi_cx + roi_half, roi_cy - roi_half)
     return roi_tl, roi_br
 
 
-def process_feature_crop(crop_geom,             # type: GeometryType
-                         crop_geom_srs,         # type: osr.SpatialReference
-                         raster_data,           # type: RasterDataType
-                         crop_fixed_size=None,  # type: Optional[Number]
+def process_feature_crop(crop_geom,                 # type: GeometryType
+                         crop_geom_srs,             # type: osr.SpatialReference
+                         raster_data,               # type: RasterDataType
+                         crop_fixed_size=None,      # type: Optional[Number]
+                         crop_square_mode=0,        # type: int
                          ):
     # type: (...) -> Tuple[Optional[np.ma.MaskedArray], Optional[np.ma.MaskedArray], Optional[np.ndarray]]
     """
-    Extracts from a raster the minimal image crop data that contains the feature specified by
-    geometry and spatial reference. A mark within the image crop is saved to indicate the specific feature area.
+    Extracts from a raster the minimal image crop data that contains the feature specified by geometry and spatial
+    reference.
 
-    - If ``crop_fixed_size`` is provided, ``crop_geom`` is updated before extraction of the feature crop data.
-    - If ``crop_geom_srs`` doesn't match the raster's SRS, ``crop_geom`` is updated using the appropriate transform.
+    A mask within the image crop is saved to indicate the specific feature area.
+
+    If ``crop_fixed_size`` is provided, ``crop_geom`` is updated before extraction of the feature crop data in order
+    to obtain the specified pixel size. In this case, the crop will be enforced to square shape. The extracted crop
+    of fixed size is obtained to be centered according to the feature's centroid location.
+
+    Otherwise, the crop is extracted using original dimensions of the minimal rectangle bounding box that contains the
+    original feature. Using ``crop_square_mode``, the shape of that crop can be enforced to be square or not. See
+    :func:`get_feature_bbox` for mode details.
+
+    If ``crop_geom_srs`` doesn't match the raster's SRS, ``crop_geom`` is updated using the appropriate transform.
 
     :returns: masked image crop, inverse of the crop, bounds of the crop within the raster
     """
@@ -469,7 +502,7 @@ def process_feature_crop(crop_geom,             # type: GeometryType
         offset = float(crop_fixed_size) / 2
         roi_tl, roi_br = get_feature_bbox(crop_geom, (offset, offset))
     else:
-        roi_tl, roi_br = get_feature_bbox(crop_geom)
+        roi_tl, roi_br = get_feature_bbox(crop_geom, None, crop_square_mode)
 
     # round projected geometry bounds to nearest pixel in raster
     offset_geotransform = raster_data["offset_geotransform"]

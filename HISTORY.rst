@@ -6,6 +6,16 @@ History
 Unreleased
 ---------------------
 
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* Enforce ``BatchCreation`` process to generate *raw* crops as squares that completely contain the minimal rectangle
+  forming the bounding box around the annotated feature. Previously, the bounding box minimal rectangles were directly
+  used to generate non-squared patch crops. The lower dimension is now extended to enforce squared shape [GEOIM-238].
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* Fix creation of crop masks as UINT8 black/white PNG images [GEOIM-337].
+
 2.1.0 (2020-09-28)
 ---------------------
 
