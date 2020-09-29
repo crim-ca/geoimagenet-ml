@@ -1,6 +1,7 @@
 from geoimagenet_ml.constants import SORT, ORDER
 from geoimagenet_ml.utils import classproperty, null, isnull, str2paths
 from geoimagenet_ml.ml.impl import (
+    DATASET_CROP_MODES,
     get_test_data_runner,
     get_test_results,
     create_batch_patches,
@@ -349,14 +350,35 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             },
             {
                 "id": "crop_fixed_size",
-                "abstract": "Request creation of additional patch crops of fixed dimension (m). "
-                            "These optional crops will be stored under key 'fixed' of the generated dataset. "
+                "abstract": "Request creation of patch crops of fixed dimension (in meters) instead of original size. "
+                            "These patch crops will be stored as 'fixed' type within the generated dataset. "
                             "Note that some annotation will not be fully contained within generated crops if the "
-                            "provided dimension is smaller than the original feature square bounding box.",
+                            "provided dimension is smaller than the original feature square bounding box. "
+                            "Features that are larger than the requested dimension will be cropped at their centroid "
+                            "to generate the patch of fixed size. Smaller features will be padded with 'nodata'.",
                 "type": ["integer", "float"],
                 "default": None,
                 "minOccurs": 0,
                 "maxOccurs": 1,
+            },
+            {
+                "id": "crop_mode",
+                "abstract": "Method for handling the generation of bounding boxes of patch crops around features. "
+                            "When 'crop_fixed_size' is provided, this parameter is ignored in favor of the requested "
+                            "size. Otherwise, crops are processed according to the provided value. "
+                            "When ('extend' or >0), the bounding box of the feature will be extended "
+                            "along the smallest of the two dimensions with 'nodata' in order to generate the minimal "
+                            "square crops that completely contains the original feature. When ('raw' or =0), the "
+                            "minimal and original rectangle bounding box that contains the feature will be returned as "
+                            "is without any padding. When ('reduce' or <0), the largest of the two dimensions of the "
+                            "bounding box containing the feature will be reduced to match the smallest one in order to "
+                            "from a square crop. No padding occurs in this case, but there is partial lost of feature "
+                            "data due to the clipping.",
+                "type": ["integer", "string"],
+                "default": 1,
+                "minOccurs": 0,
+                "maxOccurs": 1,
+                "allowedValues": list(DATASET_CROP_MODES)
             },
             {
                 "id": "split_ratio",
@@ -448,6 +470,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
             raster_paths = str2paths(self.registry.settings["geoimagenet_ml.ml.source_images_paths"],
                                      list_files=True, allowed_extensions=[".tif"])
             crop_fixed_size = self.get_input("crop_fixed_size", one=True)
+            crop_mode = self.get_input("crop_mode", one=True)
             split_ratio = self.get_input("split_ratio", one=True)
             latest_batch = self.get_input("incremental_batch", one=True)
 
@@ -462,7 +485,7 @@ class ProcessRunnerBatchCreator(ProcessRunner):
 
             self.update_job_status(STATUS.RUNNING, "starting batch patches creation", 7)
             dataset = create_batch_patches(annotations, taxonomy, raster_paths, self.db.datasets_store,
-                                           dataset, latest_batch, dataset_update_count, crop_fixed_size,
+                                           dataset, latest_batch, dataset_update_count, crop_fixed_size, crop_mode,
                                            lambda s, p=None: self.update_job_status(STATUS.RUNNING, s, p),
                                            start_percent=8, final_percent=98, train_test_ratio=split_ratio)
 

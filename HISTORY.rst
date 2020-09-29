@@ -8,9 +8,15 @@ Unreleased
 
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
-* Enforce ``BatchCreation`` process to generate *raw* crops as squares that completely contain the minimal rectangle
-  forming the bounding box around the annotated feature. Previously, the bounding box minimal rectangles were directly
-  used to generate non-squared patch crops. The lower dimension is now extended to enforce squared shape [GEOIM-238].
+* Provide ``crop_mode`` parameter to ``BatchCreation`` process that specifies whether to generate ``extend``
+  (pad crops to have squares), ``raw`` (original minimal rectangle) or ``reduce`` (clip bbox to make a square).
+  When ``crop_fixed_size`` is not provided (has priority), ``crop_mode`` indicates how to generate the patches.
+  Default is ``extend`` (most typical use case: square bbox of various sizes to be handled by preprocessing transforms).
+  Previously, the minimal rectangle bounding box fitted to contain the annotated feature were directly used to generate
+  non-squared patch crops. The dimensions are now adjusted to specification [GEOIM-238].
+* All ``Dataset`` now only contain one type of patch crop (``fixed``, ``extend``, ``fixed``, ``reduce``) according to
+  the parameters provided during ``BatchCreation`` request. Patches of ``fixed`` size are no longer added on top of the
+  ``raw`` crops in the same ``Dataset``.
 * Add support of model upload using Google Drive shared file link.
 
 Fixes

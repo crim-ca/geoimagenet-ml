@@ -67,6 +67,15 @@ DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
 DATASET_BACKGROUND_ID = 999                  # background class id
 DATASET_DATA_PATCH_DONTCARE = 255            # dontcare value in the test set
 DATASET_DATA_CHANNELS = "channels"           # channels information
+DATASET_CROP_MODES = {
+    -1: -1,
+    "reduce": -1,
+    0: 0,
+    "raw": 0,
+    1: 1,
+    "extend": 1,
+}
+DATASET_CROP_MODE_NAMES = {v: k for k, v in DATASET_CROP_MODES.items() if isinstance(k, str)}
 
 # see bottom for mapping definition
 MAPPING_TASK = "task"
@@ -270,7 +279,7 @@ class CallbackIterator(thelper.session.base.SessionRunner):
 
 
 def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset, start_percent, final_percent):
-    # type: (ProcessRunnerModelTester, CkptData, Model, Dataset, SettingsType, Number, Number) -> thelper.train.Trainer
+    # type: (ProcessRunnerModelTester, CkptData, Model, Dataset, Number, Number) -> thelper.train.Trainer
     """
     Obtains a trainer specialized for testing data predictions using the provided model checkpoint and dataset loader.
     """
@@ -444,6 +453,7 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
         self.sample_class_ids = sample_class_ids
+
 
 class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
     """
@@ -1006,6 +1016,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                          dataset_latest,        # type: Optional[Dataset]
                          dataset_update_count,  # type: int
                          crop_fixed_size,       # type: Optional[Number]
+                         crop_mode,             # type: Optional[Union[AnyStr, int]]
                          update_func,           # type: Callable[[AnyStr, Optional[Number]], None]
                          start_percent,         # type: Number
                          final_percent,         # type: Number
@@ -1019,8 +1030,13 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     Literal coordinate values as dimension limits of the patch are first applied.
     This creates patches of variable size, but corresponding to the original annotations.
-    If ``crop_fixed_size`` is provided, fixed sized patches are afterwards created by cropping accordingly with
-    dimensions of each patch's annotation coordinates. Both `raw` and `crop` patches are preserved in this case.
+    If ``crop_fixed_size`` is provided, `fixed` sized patches are afterwards created from the originals by cropping
+    accordingly with dimensions of each patch's annotation coordinates.
+    Otherwise, ``crop_mode`` indicates how to generate the crops dimensions from the original feature.
+
+    .. seealso::
+        - :func:`geoimagenet_ml.ml.utils.get_feature_bbox`
+        - :func:`geoimagenet_ml.ml.utils.process_feature_crop`
 
     Created patches for the batch are then split into train/test sets per corresponding ``taxonomy_class_id``.
 
@@ -1082,6 +1098,20 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
     if not isinstance(dataset_update_count, int) or dataset_update_count < 1:
         raise AssertionError("invalid dataset update count value: {!s}".format(dataset_update_count))
 
+    if isinstance(crop_fixed_size, (int, float)):
+        if crop_fixed_size <= 0:
+            raise ValueError(f"invalid crop fixed size value: {crop_fixed_size}, must be >0m")
+        crop_formats = [(crop_fixed_size, None, "fixed")]
+        update_func(f"validated dataset request for crop fixed size: {crop_fixed_size}m", start_percent)
+    else:
+        crop_mode = DATASET_CROP_MODES.get(crop_mode)
+        if not isinstance(crop_mode, int):
+            raise ValueError(f"invalid crop mode value: {crop_mode}, must be one of [{list(DATASET_CROP_MODES)}]")
+        crop_mode_name = DATASET_CROP_MODE_NAMES[crop_mode]
+        crop_formats = [(None, crop_mode, crop_mode_name)]
+        update_func(f"validated dataset request for crop mode: {crop_mode_name}", start_percent)
+
+    start_percent += 1
     update_func("updating taxonomy definition in dataset", start_percent)
     dataset_container.data["taxonomy"] = taxonomy_meta
 
@@ -1108,10 +1138,6 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
 
     train_counter, test_counter = category_counter.split(train_test_ratio)
     train_test_splits = [("train", train_counter), ("test", test_counter)]
-    patches_crop = [(None, 1, "raw")]
-    if isinstance(crop_fixed_size, (int, float)):
-        update_func("fixed sized crops [{}] also selected for creation".format(crop_fixed_size), start_percent)
-        patches_crop.append((crop_fixed_size, None, "fixed"))
 
     last_progress_offset, progress_scale = 0, float(patch_percent - start_percent) / len(features)
     dataset_container.data["patches"] = list()
@@ -1158,7 +1184,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                 DATASET_DATA_PATCH_FEATURE_KEY: feature.get("id"),
             })
 
-            for crop_size, crop_mode, crop_name in patches_crop:
+            for crop_size, crop_mode, crop_type in crop_formats:
                 crop, inv_crop, bbox = process_feature_crop(feature["geometry"], srs, raster_data, crop_size, crop_mode)
                 if crop is not None:
                     if crop.ndim < 3 or crop.shape[2] != raster_data["band_count"]:
@@ -1166,8 +1192,8 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     output_geotransform = list(raster_data["offset_geotransform"])
                     output_geotransform[0], output_geotransform[3] = bbox[0], bbox[1]
                     output_driver = gdal.GetDriverByName("GTiff")
-                    output_name = get_sane_name("{}_{}".format(feature["id"], crop_name), assert_invalid=False)
-                    output_path = os.path.join(dataset_container.path, "{}.tif".format(output_name))
+                    output_name = get_sane_name("{}_{}".format(feature["id"], crop_type), assert_invalid=False)
+                    output_path = os.path.join(dataset_container.path, "{}_crop.tif".format(output_name))
                     output_mask = os.path.join(dataset_container.path, "{}_mask.png".format(output_name))
                     crop_image = Image.fromarray((255 * inv_crop.mask).astype(np.uint8)).convert("RGB")  # remove alpha
                     crop_image.save(output_mask)
@@ -1186,7 +1212,7 @@ def create_batch_patches(annotations_meta,      # type: List[JSON]
                     dataset_container.files.append(output_path)
                     dataset_container.files.append(output_mask)
                     dataset_container.data[DATASET_DATA_PATCH_KEY][-1][DATASET_DATA_PATCH_CROPS_KEY].append({
-                        "type": crop_name,
+                        "type": crop_type,
                         DATASET_DATA_PATCH_PATH_KEY: output_path,
                         DATASET_DATA_PATCH_MASK_KEY: output_mask,
                         "shape": list(crop.shape),

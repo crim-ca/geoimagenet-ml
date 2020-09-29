@@ -428,14 +428,14 @@ def parse_rasters(rasterfile_paths, default_srs=None, normalize=False):
     return rasters_data, coverage
 
 
-def get_feature_bbox(geom, offsets=None, square_mode=0):
+def get_feature_bbox(geom, offsets=None, crop_mode=0):
     # type: (GeometryType, Optional[PointType], int) -> Tuple[PointType, PointType]
     """
     Obtains the bounding box top-left and bottom-right corners of the feature geometry.
 
     :param geom: feature's geometry for which to obtain the bounding box.
     :param offsets: offsets from the geometry's centroid to generate the bounding box (enforced dimensions).
-    :param square_mode:
+    :param crop_mode:
         Automated extraction method of dimensions for the generated bounding box (ignored if offsets given).
         When:
             - <0: Obtain the *square* that minimally fits inside the geometry (final dimensions are both min(w,h)).
@@ -452,7 +452,7 @@ def get_feature_bbox(geom, offsets=None, square_mode=0):
         centroid = geom.centroid
         roi_tl = (centroid.x - offsets[0], centroid.y + offsets[1])
         roi_br = (centroid.x + offsets[0], centroid.y - offsets[1])
-    elif square_mode == 0:
+    elif crop_mode == 0:
         roi_tl = (bounds[0], bounds[3])
         roi_br = (bounds[2], bounds[1])
     else:
@@ -460,7 +460,7 @@ def get_feature_bbox(geom, offsets=None, square_mode=0):
         roi_hh = abs(bounds[3] - bounds[1]) / 2.0
         roi_cx = bounds[0] + roi_hw
         roi_cy = bounds[1] + roi_hh
-        roi_half = min(roi_hw, roi_hh) if square_mode < 0 else max(roi_hw, roi_hh)
+        roi_half = min(roi_hw, roi_hh) if crop_mode < 0 else max(roi_hw, roi_hh)
         roi_tl = (roi_cx - roi_half, roi_cy + roi_half)
         roi_br = (roi_cx + roi_half, roi_cy - roi_half)
     return roi_tl, roi_br
@@ -470,7 +470,7 @@ def process_feature_crop(crop_geom,                 # type: GeometryType
                          crop_geom_srs,             # type: osr.SpatialReference
                          raster_data,               # type: RasterDataType
                          crop_fixed_size=None,      # type: Optional[Number]
-                         crop_square_mode=0,        # type: int
+                         crop_mode=0,               # type: int
                          ):
     # type: (...) -> Tuple[Optional[np.ma.MaskedArray], Optional[np.ma.MaskedArray], Optional[np.ndarray]]
     """
@@ -484,8 +484,10 @@ def process_feature_crop(crop_geom,                 # type: GeometryType
     of fixed size is obtained to be centered according to the feature's centroid location.
 
     Otherwise, the crop is extracted using original dimensions of the minimal rectangle bounding box that contains the
-    original feature. Using ``crop_square_mode``, the shape of that crop can be enforced to be square or not. See
-    :func:`get_feature_bbox` for mode details.
+    original feature. Using ``crop_mode``, the shape of that crop can be enforced to be square or not.
+
+    .. seealso::
+        :func:`get_feature_bbox` for mode details.
 
     If ``crop_geom_srs`` doesn't match the raster's SRS, ``crop_geom`` is updated using the appropriate transform.
 
@@ -502,7 +504,7 @@ def process_feature_crop(crop_geom,                 # type: GeometryType
         offset = float(crop_fixed_size) / 2
         roi_tl, roi_br = get_feature_bbox(crop_geom, (offset, offset))
     else:
-        roi_tl, roi_br = get_feature_bbox(crop_geom, None, crop_square_mode)
+        roi_tl, roi_br = get_feature_bbox(crop_geom, None, crop_mode)
 
     # round projected geometry bounds to nearest pixel in raster
     offset_geotransform = raster_data["offset_geotransform"]
