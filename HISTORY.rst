@@ -22,6 +22,7 @@ Changes
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
 * Fix creation of crop masks as UINT8 black/white PNG images [GEOIM-337].
+* Pin ``celery<5`` that breaks imports.
 
 2.1.0 (2020-09-28)
 ---------------------
