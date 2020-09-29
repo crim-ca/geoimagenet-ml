@@ -368,6 +368,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if mask_path is not None:
             mask = cv2.imread(mask_path)
             mask = mask if mask.ndim == 2 else mask[:, :, 0] # masks saved with PIL have three bands
+            mask[(mask > 0)] = sample[self.label_key]
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
@@ -458,6 +459,7 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
+        class_id_to_nodel_output = dataset[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING]
         sample_class_ids = set()
         samples = []
         channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
@@ -467,11 +469,12 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
                 # convert the dataset class ID into the model class ID using mapping, drop sample if not found
                 class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                nodel_output = class_id_to_nodel_output.get(class_name)
                 if class_name is not None:
                     sample_class_ids.add(class_name)
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = os.path.join(self.root, patch_path)
-                    samples[-1][self.label_key] = class_name
+                    samples[-1][self.label_key] = nodel_output
                     mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_PATH_KEY, None)
                     if mask_name is not None:
                         samples[-1][self.mask_path_key] = os.path.join(self.root, mask_name)
