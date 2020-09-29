@@ -202,8 +202,10 @@ def fix_str_model_task(model_task):
     try:
         if not isinstance(model_task, str):
             raise ValueError(f"Invalid input is not a literal string for model task parsing, got '{type(model_task)}'")
+        if not model_task.startswith("thelper.tasks."):
+            raise ValueError(f"Unknown task 'type' in task config not defined by thelper: '{model_task!s}'")
         params = model_task.split("(", 1)[-1].split(")", 1)[0]
-        params = re.sub(r"(\w+)\s*=", r"'\1': ", params)
+        params = re.sub(r"(\w+)\s*=", r"'\1': ", params)  # replace <key>=<val> by <key>: <val> for dict-like format
         return ast.literal_eval(f"{{{params}}}")
     except ValueError:
         raise   # failing ast converting raises ValueError
@@ -378,6 +380,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if self.transforms:
             sample = self.transforms(sample)
         return sample
+
 
 class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
     """
@@ -643,8 +646,6 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     if isinstance(test_config["task"], str):
         task_str = test_config["task"]
         task_class_str = task_str.split("(", 1)[0]
-        if "thelper.tasks" not in task_class_str:
-            raise AssertionError("Invalid task 'type' in task config")
         LOGGER.debug("Task type in the config:\n"
                      f"  task type: [{task_class_str}]")
         task_params = fix_str_model_task(task_str)
