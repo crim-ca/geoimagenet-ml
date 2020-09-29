@@ -61,7 +61,6 @@ DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
 DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
 DATASET_DATA_PATCH_PATH_KEY = "path"         # crop image path of the generated patch
 DATASET_DATA_PATCH_MASK_KEY = "mask"         # mask image path of the generated patch
-DATASET_DATA_PATCH_MASK_PATH_KEY = 'mask'    # original mask path that was used to generate the patch
 DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
 DATASET_BACKGROUND_ID = 999                  # background class id
@@ -306,7 +305,6 @@ def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset
 
 
 
-#FIXME: this class is the equivalent of thelper.data.ImageFolderDataset but for a segmentation task
 class ImageFolderSegDataset(thelper.data.SegmentationDataset):
     """Image folder dataset specialization interface for segmentation tasks.
 
@@ -319,7 +317,8 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         | :class:`thelper.data.parsers.SegmentationDataset`
     """
 
-    def __init__(self, root, transforms=None, channels= None, image_key="image", label_key="label", mask_key="mask", mask_path_key="mask_path", path_key="path", idx_key="idx"):
+    def __init__(self, root, transforms=None, channels= None,
+                 image_key="image", label_key="label", mask_key="mask", path_key="path", idx_key="idx"):
         """Image folder dataset parser constructor."""
         self.root = root
         if self.root is None or not os.path.isdir(self.root):
@@ -336,7 +335,6 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.idx_key = idx_key
         self.label_key = label_key
         self.mask_key = mask_key
-        self.mask_path_key = mask_path_key
         self.channels = channels if channels else [1, 2, 3]
         samples = []
         for class_name in class_map:
@@ -385,11 +383,11 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
             image.append(band_array)
         image = np.dstack(image)
         rasterfile = None  # close input fd
-        mask_path = sample[self.mask_path_key] if hasattr(self, 'mask_path_key') else None
+        mask_path = getattr(sample, self.mask_key, None)
         mask = None
         if mask_path is not None:
             mask = cv2.imread(mask_path)
-            mask = mask if mask.ndim == 2 else mask[:, :, 0] # masks saved with PIL have three bands
+            mask = mask if mask.ndim == 2 else mask[:, :, 0]  # masks saved with PIL have three bands
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
@@ -478,7 +476,6 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
         self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
         self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
-        self.mask_path_key = DATASET_DATA_PATCH_MASK_PATH_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -496,9 +493,9 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = os.path.join(self.root, patch_path)
                     samples[-1][self.label_key] = class_name
-                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(DATASET_DATA_PATCH_MASK_PATH_KEY, None)
+                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(self.mask_key, None)
                     if mask_name is not None:
-                        samples[-1][self.mask_path_key] = os.path.join(self.root, mask_name)
+                        samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
