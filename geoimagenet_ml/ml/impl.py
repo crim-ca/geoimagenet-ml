@@ -1,7 +1,9 @@
 from geoimagenet_ml.utils import get_sane_name, fully_qualified_name, isclass
 from geoimagenet_ml.ml.utils import parse_rasters, parse_geojson, parse_coordinate_system, process_feature_crop
+from google_drive_downloader import GoogleDriveDownloader as gdd
 from six.moves.urllib.parse import urlparse
 from six.moves.urllib.request import urlopen
+from tempfile import NamedTemporaryFile
 from copy import deepcopy
 from io import BytesIO
 from osgeo import gdal
@@ -96,12 +98,25 @@ def load_model(model_file):
     try:
         model_buffer = model_file
         if isinstance(model_file, six.string_types):
-            if urlparse(model_file).scheme:
-                no_ssl = ssl.create_default_context()
-                no_ssl.check_hostname = False
-                no_ssl.verify_mode = ssl.CERT_NONE
-                url_buffer = urlopen(model_file, context=no_ssl)
-                model_buffer = BytesIO(url_buffer.read())
+            url_spec = urlparse(model_file)
+            if url_spec.scheme:
+                if "drive.google" in model_file:
+                    with NamedTemporaryFile() as tmp_model:
+                        file_id = url_spec.path
+                        if any(file_id.endswith(path) for path in ["/view", "/edit"]):
+                            file_id = file_id.split("/")[-2]
+                        else:
+                            file_id = file_id.split("/")[-1]
+                        model_file = tmp_model.name
+                        gdd.download_file_from_google_drive(file_id=file_id, dest_path=model_file, overwrite=True)
+                        with open(model_file, 'rb') as f:
+                            model_buffer = BytesIO(f.read())
+                else:
+                    no_ssl = ssl.create_default_context()
+                    no_ssl.check_hostname = False
+                    no_ssl.verify_mode = ssl.CERT_NONE
+                    url_buffer = urlopen(model_file, context=no_ssl)
+                    model_buffer = BytesIO(url_buffer.read())
             else:
                 with open(model_file, 'rb') as f:
                     model_buffer = BytesIO(f.read())

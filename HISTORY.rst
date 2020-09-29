@@ -11,6 +11,7 @@ Changes
 * Enforce ``BatchCreation`` process to generate *raw* crops as squares that completely contain the minimal rectangle
   forming the bounding box around the annotated feature. Previously, the bounding box minimal rectangles were directly
   used to generate non-squared patch crops. The lower dimension is now extended to enforce squared shape [GEOIM-238].
+* Add support of model upload using Google Drive shared file link.
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~
