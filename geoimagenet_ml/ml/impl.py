@@ -25,18 +25,23 @@ from typing import TYPE_CHECKING
 import thelper  # noqa
 
 if TYPE_CHECKING:
-    from geoimagenet_ml.store.datatypes import Job, Model, Dataset  # noqa: F401
-    from geoimagenet_ml.store.interfaces import DatasetStore  # noqa: F401
-    from geoimagenet_ml.typedefs import (  # noqa: F401
+    from geoimagenet_ml.store.datatypes import Job, Model, Dataset
+    from geoimagenet_ml.store.interfaces import DatasetStore
+    from geoimagenet_ml.typedefs import (
         Any, AnyStr, Callable, Dict, List, Tuple, Union, JSON, SettingsType, Number,
         Optional, FeatureType, RasterDataType, ParamsType
     )
     from geoimagenet_ml.processes.runners import ProcessRunnerModelTester
-    from geoimagenet_ml.utils import ClassCounter  # noqa: F401
-    # FIXME: add other task definitions as needed + see MODEL_TASK_MAPPING
-    AnyTask = Union[thelper.tasks.classif.Classification]  # noqa: F401
-    CkptData = thelper.typedefs.CheckpointContentType  # noqa: F401
-    ClassMap = Dict[int, Optional[Union[int, AnyStr]]]  # noqa: F401
+    from geoimagenet_ml.utils import ClassCounter
+
+    # FIXME: detection, regression and super-resolution tasks not implemented
+    AnyTask = Union[thelper.tasks.classif.Classification,
+                    thelper.tasks.detect.Detection,
+                    thelper.tasks.regr.Regression,
+                    thelper.tasks.regr.SuperResolution,
+                    thelper.tasks.segm.Segmentation]
+    CkptData = thelper.typedefs.CheckpointContentType
+    ClassMap = Dict[int, Optional[Union[int, AnyStr]]]
 
 # enforce GDAL exceptions (otherwise functions return None)
 gdal.UseExceptions()
@@ -55,17 +60,17 @@ DATASET_DATA_MAPPING_KEY = "taxonomy_model_map"     # taxonomy ID -> model label
 DATASET_DATA_ORDERING_KEY = "model_class_order"     # model output classes (same indices)
 DATASET_DATA_MODEL_MAPPING = "model_output_mapping"    # model output classes (same indices)
 DATASET_DATA_PATCH_KEY = "patches"
-DATASET_DATA_PATCH_CLASS_KEY = "class"       # class id associated to the patch
-DATASET_DATA_PATCH_SPLIT_KEY = "split"       # group train/test of the patch
-DATASET_DATA_PATCH_CROPS_KEY = "crops"       # extra data such as coordinates
-DATASET_DATA_PATCH_IMAGE_KEY = "image"       # original image path that was used to generate the patch
-DATASET_DATA_PATCH_PATH_KEY = "path"         # crop image path of the generated patch
-DATASET_DATA_PATCH_MASK_KEY = "mask"         # mask image path of the generated patch
-DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
-DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
-DATASET_BACKGROUND_ID = 999                  # background class id
-DATASET_DATA_PATCH_DONTCARE = 255            # dontcare value in the test set
-DATASET_DATA_CHANNELS = "channels"           # channels information
+DATASET_DATA_PATCH_CLASS_KEY = "class"          # class id associated to the patch
+DATASET_DATA_PATCH_SPLIT_KEY = "split"          # group train/test of the patch
+DATASET_DATA_PATCH_CROPS_KEY = "crops"          # extra data such as coordinates
+DATASET_DATA_PATCH_IMAGE_KEY = "image"          # original image path that was used to generate the patch
+DATASET_DATA_PATCH_PATH_KEY = "path"            # crop image path of the generated patch
+DATASET_DATA_PATCH_MASK_KEY = "mask"            # mask image path of the generated patch
+DATASET_DATA_PATCH_INDEX_KEY = "index"          # data loader getter index reference
+DATASET_DATA_PATCH_FEATURE_KEY = "feature"      # annotation reference id
+DATASET_BACKGROUND_ID = 999                     # background class id
+DATASET_DATA_PATCH_DONTCARE = 255               # dontcare value in the test set
+DATASET_DATA_CHANNELS = "channels"              # channels information
 DATASET_CROP_MODES = {
     -1: -1,
     "reduce": -1,
@@ -176,6 +181,7 @@ def validate_model(model_data):
             return False, ConfigurationError(
                 f"Forbidden model checkpoint task defines unknown operation: [{model_type!s}]"
             )
+        model_classes = model_task.class_names  # noqa
     else:
         # thelper security risk, refuse literal string definition of task loaded by eval() unless it can be validated
         LOGGER.warning(f"Model task not defined as dictionary nor `thelper.task.Task` class: [{model_task!s}]")
@@ -196,12 +202,25 @@ def validate_model(model_data):
             )
         LOGGER.warning("Model task defined as string allowed after basic validation.")
         try:
-            fix_str_model_task(model_task)  # attempt update but don't actually apply it
-        except ValueError:
+            model_task = fix_str_model_task(model_task)  # attempt update but don't actually apply it
+            model_classes = model_task["class_names"]
+        except (KeyError, ValueError):
             return False, ConfigurationError(
                 "Forbidden model checkpoint task defined as string doesn't respect expected syntax."
             )
-        LOGGER.debug("Model task as string validated with successful parameter conversion")
+        LOGGER.debug("Model task as string validated with successful parameter conversion.")
+    # taxonomy class IDs employed as reference are all integers that will be converted to string for thelper compat
+    # ensure this is respected, otherwise user provided invalid task configuration for later use
+    try:
+        model_classes = [int(class_id) for class_id in model_classes]
+    except ValueError:
+        return False, ConfigurationError(
+            f"Model task is expecting integer-like class-id to map against taxonomy. "
+            f"Received invalid classes names: {model_classes!s}"
+        )
+    if not len(model_classes):
+        return False, ConfigurationError("Model task must define class IDs, but none provided to map with taxonomy.")
+    LOGGER.debug("Model task classes validated to be formatted as interger-like class IDs: %s", model_classes)
     return True, None
 
 
@@ -317,8 +336,14 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         | :class:`thelper.data.parsers.SegmentationDataset`
     """
 
-    def __init__(self, root, transforms=None, channels= None,
-                 image_key="image", label_key="label", mask_key="mask", path_key="path", idx_key="idx"):
+    def __init__(self, root, transforms=None, channels=None,
+                 image_key=DATASET_DATA_PATCH_IMAGE_KEY,
+                 label_key=IMAGE_LABEL_KEY,
+                 label_map_key=IMAGE_LABEL_KEY,
+                 mask_key=DATASET_DATA_PATCH_MASK_KEY,
+                 path_key=DATASET_DATA_PATCH_PATH_KEY,
+                 idx_key=DATASET_DATA_PATCH_INDEX_KEY
+                 ):
         """Image folder dataset parser constructor."""
         self.root = root
         if self.root is None or not os.path.isdir(self.root):
@@ -333,8 +358,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.image_key = image_key
         self.path_key = path_key
         self.idx_key = idx_key
-        self.label_key = label_key
-        self.mask_key = mask_key
+        self.label_key = label_key  # plain class-id of the sample
+        self.mask_key = mask_key    # mask where the segmented feature applies
+        self.label_map_key = label_map_key  # applied class-id to mask location
         self.channels = channels if channels else [1, 2, 3]
         samples = []
         for class_name in class_map:
@@ -358,8 +384,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
         meta_keys = [self.path_key, self.idx_key]
-        super(ImageFolderSegDataset, self).__init__(class_names=list(class_map.keys()), input_key=self.image_key,
-                                                 label_key=self.label_key, meta_keys=meta_keys, transforms=transforms)
+        super(ImageFolderSegDataset, self).__init__(class_names=list(class_map), input_key=self.image_key,
+                                                    label_map_key=self.label_map_key, label_key=self.label_key,
+                                                    meta_keys=meta_keys, transforms=transforms)
         self.samples = samples
 
     def __getitem__(self, idx):
@@ -388,12 +415,17 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if mask_path is not None:
             mask = cv2.imread(mask_path)
             mask = mask if mask.ndim == 2 else mask[:, :, 0]  # masks saved with PIL have three bands
+        else:
+            # consider the full patch image if no mask provided
+            mask = np.ones(image.shape[:2])
+        label_map = np.where(mask > 0, int(sample[self.label_key]), 0)
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
             self.image_key: np.array(image.data, copy=True, dtype='float32'),
             self.mask_key: mask,
             self.label_key: sample[self.label_key],
+            self.label_map_key: label_map,
             self.idx_key: idx,
             # **sample
         }
@@ -476,6 +508,7 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
         self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
         self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
+        self.label_map_key = DATASET_DATA_PATCH_LABEL_MAP_KEY
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -675,11 +708,14 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
                      f"  original task: [{task_str}]\n"
                      f"  modified task: [{task_params}]")
         test_config["task"] = {"params": task_params, "type": task_class_str}
+        # ensure strings are employed as names since taxonomy-ids are interpreted as integers
+        task_params["class_names"] = {str(name): index for name, index in task_params["class_names"].items()}
+        # FIXME: detection, regression and super-resolution tasks not validated
         if "Detection" in task_class_str:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})
         elif "Segmentation" in task_class_str:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_map_key": IMAGE_LABEL_KEY})
-        else:
+        else:  # note: default for classification, but others could work also...?
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY, "label_key": IMAGE_LABEL_KEY})
         test_model_task = thelper.tasks.create_task(test_config["task"])
     else:
