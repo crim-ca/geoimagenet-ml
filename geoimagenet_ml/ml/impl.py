@@ -371,7 +371,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
             mask = cv2.imread(mask_path)
             mask = mask if mask.ndim == 2 else mask[:, :, 0] # masks saved with PIL have three bands
             if self.dontcare is not None:
-                mask = mask.long()
+                mask = mask.astype(int)
                 mask[(mask <= 0)] = -1
             mask[(mask > 0)] = sample[self.label_key]
         if image is None:
