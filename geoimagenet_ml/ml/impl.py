@@ -64,8 +64,8 @@ DATASET_DATA_PATCH_MASK_PATH_KEY = 'mask'    # original mask path that was used 
 DATASET_DATA_PATCH_INDEX_KEY = "index"       # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"   # annotation reference id
 DATASET_BACKGROUND_ID = 999                  # background class id
-DATASET_DATA_PATCH_DONTCARE = 255            # dontcare value in the test set
 DATASET_DATA_CHANNELS = "channels"           # channels information
+DATASET_DONTCARE = 'dontcare'                # dontcare value
 
 # see bottom for mapping definition
 MAPPING_TASK = "task"
@@ -297,7 +297,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         | :class:`thelper.data.parsers.SegmentationDataset`
     """
 
-    def __init__(self, root, transforms=None, channels= None, image_key="image", label_key="label", mask_key="mask", mask_path_key="mask_path", path_key="path", idx_key="idx"):
+    def __init__(self, root, transforms=None, channels= None, image_key="image", label_key="label", mask_key="mask", mask_path_key="mask_path", path_key="path", idx_key="idx", dontcare = None):
         """Image folder dataset parser constructor."""
         self.root = root
         if self.root is None or not os.path.isdir(self.root):
@@ -315,7 +315,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.label_key = label_key
         self.mask_key = mask_key
         self.mask_path_key = mask_path_key
+        self.dontcare = dontcare
         self.channels = channels if channels else [1, 2, 3]
+        #FIXME: this code below is useless
         samples = []
         for class_name in class_map:
             class_folder = os.path.join(self.root, class_name)
@@ -368,6 +370,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if mask_path is not None:
             mask = cv2.imread(mask_path)
             mask = mask if mask.ndim == 2 else mask[:, :, 0] # masks saved with PIL have three bands
+            if self.dontcare is not None:
+                mask = mask.long()
+                mask[(mask <= 0)] = -1
             mask[(mask > 0)] = sample[self.label_key]
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
@@ -462,6 +467,7 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         class_id_to_nodel_output = dataset[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING]
         sample_class_ids = set()
         samples = []
+        self.dontcare = dataset.get(DATASET_DONTCARE, None)
         channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
         self.channels = channels if channels else [1, 2, 3]  # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
@@ -625,6 +631,23 @@ def adapt_dataset_for_model_task(model_task, dataset):
     except Exception as exc:
         raise RuntimeError("Failed dataset adaptation to model task classes for evaluation. [{!r}]".format(exc))
 
+def findkeys(node, kv):
+    """
+        Small function to get all the values for a specific key kv in a nested dict
+    """
+    if isinstance(node, list):
+        for i in node:
+            for x in findkeys(i, kv):
+               yield x
+    elif isinstance(node, dict):
+        if kv in node:
+            yield node[kv]
+        for j in node.values():
+            for x in findkeys(j, kv):
+                yield x
+
+
+
 
 def test_loader_from_configs(model_checkpoint_config, model_config_override, dataset_config_override, settings):
     # type: (CkptData, Model, Dataset, SettingsType) -> JSON
@@ -639,7 +662,8 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     test_config["name"] = model_config_override["name"]
     for key in ["epoch", "iter", "sha1", "outputs", "optimizer"]:
         test_config.pop(key, None)
-
+    channels = list(findkeys(test_config, 'channels')) # find all the occurences of channel key
+    channels = channels[0] if len(channels) else None # take the first one if not empty
     # override deployed model and dataset references
     #   - override model task defined as string to equivalent parameter dictionary representation
     #   - override model task input/label keys that could be modified by user to match definitions of dataset loader
@@ -675,6 +699,10 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     test_config["config"]["datasets"] = {
         test_dataset_name: adapt_dataset_for_model_task(test_model_task, dataset_config_override)
     }
+    # Set some values for the data loader
+    #FIXME: not super clean in terms of path (6 levels of dict!)
+    test_config["config"]["datasets"][test_dataset_name]["params"]['dataset']["channels"] = channels
+    test_config["config"]["datasets"][test_dataset_name]["params"]['dataset']["dontcare"] = test_config["task"]["params"].get("dontcare", None)
 
     # back-compatibility replacement
     test_config["config"]["loaders"] = test_config["config"].pop("data_config", test_config["config"].get("loaders"))
@@ -748,7 +776,6 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         #  that are expected by the data loader, those keys should not be specified by the user
         test_model_task.input_key = IMAGE_DATA_KEY
         test_model_task.gt_key = DATASET_DATA_PATCH_MASK_KEY
-        test_model_task.dontcare = DATASET_DATA_PATCH_DONTCARE
         # Metrics more appropriate for segmentation
         trainer["metrics"] = {
             # FIXME: segmentation results must be extracted specifically for this task type
