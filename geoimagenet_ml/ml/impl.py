@@ -422,10 +422,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if image is None:
             raise AssertionError("invalid image at '%s'" % image_path)
         sample = {
-            self.image_key: np.array(image.data, copy=True, dtype='float32'),
+            self.image_key: np.array(image.data, copy=True, dtype="float32"),
             self.mask_key: mask,
             self.label_key: sample[self.label_key],
-            self.label_map_key: label_map,
             self.idx_key: idx,
             # **sample
         }
@@ -508,7 +507,6 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
         self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
         self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
-        self.label_map_key = DATASET_DATA_PATCH_LABEL_MAP_KEY
         self.meta_keys = [self.path_key, self.idx_key, self.mask_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -549,7 +547,7 @@ class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoa
 class BatchTestPatchesSegmentationDatasetLoader(BatchTestPatchesBaseSegDatasetLoader):
     def __init__(self, dataset=None, transforms=None):
         super(BatchTestPatchesSegmentationDatasetLoader, self).__init__(dataset, transforms)
-        class_names = [str(c) for c in dataset.get('data').get('model_class_order', list(self.sample_class_ids))]
+        class_names = [str(c) for c in dataset.get("data").get("model_class_order", list(self.sample_class_ids))]
         self.task = thelper.tasks.Segmentation(
             class_names=class_names,
             input_key=self.image_key,
@@ -733,16 +731,22 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     if "loaders" not in test_config["config"]:
         raise ValueError("Missing 'loaders' configuration from model checkpoint.")
 
-    loaders = test_config["config"]["loaders"]  # type: JSON
+    test_config["config"].setdefault("trainer", {})  # trainer not actually needed here, bw-compat to avoid key-error
     trainer = test_config["config"]["trainer"]  # type: JSON
+    loaders = test_config["config"]["loaders"]  # type: JSON
 
     # remove additional unnecessary sub-parts or error-prone configurations
     for key in ["sampler", "train_augments", "train_split", "valid_split", "eval_augments"]:
         loaders.pop(key, None)
 
     # override image key to match loaded test data
+    #   - in case of classification, only the image data can be transformed
+    #   - other tasks can have more image-like fields such as a mask, label-map, etc.
+    #     in this case, apply 'generic' operations such as resizing globally
+    #     specific target-key are for data that needs is evaluated by the model (eg: normalization, grayscale, etc.)
     for transform in loaders.get("base_transforms", []):
-        transform["target_key"] = IMAGE_DATA_KEY
+        if "Classification" in task_class_str or "target_key" in transform:
+            transform["target_key"] = IMAGE_DATA_KEY
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
@@ -753,6 +757,7 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
     trainer["type"] = MODEL_TASK_MAPPING[test_model_task_name][MAPPING_TESTER]
     for key in ["device", "train_device", "optimization", "monitor"]:
         trainer.pop(key, None)
+    trainer["device"] = settings.get("geoimagenet_ml.ml.data_trainer_device", "cpu")
 
     # enforce multiprocessing workers count and batch size according to settings
     # note:
