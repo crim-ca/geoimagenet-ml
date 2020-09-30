@@ -689,8 +689,13 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
         loaders.pop(key, None)
 
     # override image key to match loaded test data
-    for transform in loaders.get("base_transforms", []):
-        transform["target_key"] = IMAGE_DATA_KEY
+    if "Classification" in task_class_str:
+        for transform in loaders.get("base_transforms", []):
+            transform["target_key"] = IMAGE_DATA_KEY
+    else:
+        for transform in loaders.get("base_transforms", []):
+            if "target_key" in transform:
+                transform["target_key"] = IMAGE_DATA_KEY
 
     # override required values with modified parameters and remove error-prone configurations
     loaders["test_split"] = {
