@@ -412,6 +412,7 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
         self.path_key = DATASET_DATA_PATCH_PATH_KEY  # actual file path of the patch
         self.idx_key = DATASET_DATA_PATCH_INDEX_KEY  # increment for __getitem__
         self.mask_key = DATASET_DATA_PATCH_MASK_KEY  # actual mask path of the patch
+        self.mask_path_key = DATASET_DATA_PATCH_MASK_PATH_KEY  # actual mask path of the patch
         self.meta_keys = [self.path_key, self.idx_key, DATASET_DATA_PATCH_CROPS_KEY,
                           DATASET_DATA_PATCH_IMAGE_KEY, DATASET_DATA_PATCH_FEATURE_KEY]
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
@@ -425,13 +426,14 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
                 # convert the dataset class ID into the model class ID using mapping, drop sample if not found
                 class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
-                class_model_id = model_class_to_id.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                class_model_id = model_class_to_id.get(class_name)
+
                 if class_name is not None:
                     sample_class_ids.add(class_name)
                     samples.append(deepcopy(patch_info))
                     samples[-1][self.path_key] = os.path.join(self.root, patch_path)
                     samples[-1][self.label_key] = class_model_id
-
+                    samples[-1][self.mask_path_key] = None
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
