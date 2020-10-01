@@ -27,7 +27,7 @@ Changes
 * Enforce ``geoimagenet_ml.ml.data_trainer_device`` configuration to use the explicit device available.
   Don't rely on possibly unavailable/invalid device inferred from model checkpoint uploaded by external user.
 * Update requirements to `crim-ca/gin-model-repo (1.0.1) <https://github.com/crim-ca/gin-model-repo/tree/1.0.1>`_
-  and `thelper (0.6.1) <https://github.com/plstcharles/thelper/tree/0.6.1>`_ to employ latest updates at this time.
+  and `thelper (v0.6.2) <https://github.com/plstcharles/thelper/tree/v0.6.2>`_ to employ latest updates at this time.
 
 Fixes
 ~~~~~~~~~~~~~~~~~~~~~

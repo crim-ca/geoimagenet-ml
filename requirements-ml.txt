@@ -1,4 +1,4 @@
-thelper==0.6.1
+thelper==0.6.2
 opencv-python
 scipy
 shapely
