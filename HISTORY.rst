@@ -6,6 +6,9 @@ History
 Unreleased
 ---------------------
 
+2.2.0 (2020-10-01)
+---------------------
+
 Changes
 ~~~~~~~~~~~~~~~~~~~~~
 * Provide ``crop_mode`` parameter to ``BatchCreation`` process that specifies whether to generate ``extend``
