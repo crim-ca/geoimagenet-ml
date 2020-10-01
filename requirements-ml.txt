@@ -1,7 +1,7 @@
-thelper>=0.5.0,<0.6
+thelper==0.6.1
 opencv-python
 scipy
 shapely
 affine
 apscheduler
-git+https://github.com/crim-ca/gin-model-repo.git@1.0.0#egg=ginmodelrepo
+git+https://github.com/crim-ca/gin-model-repo.git@1.0.1#egg=ginmodelrepo

@@ -49,8 +49,9 @@ gdal.UseExceptions()
 LOGGER = logging.getLogger(__name__)
 
 # keys used across methods to find matching configs, must be unique and non-conflicting with other sample keys
-IMAGE_DATA_KEY = "data"     # key used to store temporarily the loaded image data
-IMAGE_LABEL_KEY = "label"   # key used to store the class label used by the model
+IMAGE_DATA_KEY = "data"             # key used to store temporarily the loaded image data
+IMAGE_LABEL_KEY = "label"           # key used to store the class label used by the model
+IMAGE_LABEL_MAP_KEY = "label_map"   # key used to store image-map of class labels (per pixel) used by the model
 TEST_DATASET_KEY = "dataset"
 
 DATASET_FILES_KEY = "files"             # list of all files in the dataset batch
@@ -69,7 +70,7 @@ DATASET_DATA_PATCH_MASK_KEY = "mask"            # mask image path of the generat
 DATASET_DATA_PATCH_INDEX_KEY = "index"          # data loader getter index reference
 DATASET_DATA_PATCH_FEATURE_KEY = "feature"      # annotation reference id
 DATASET_BACKGROUND_ID = 999                     # background class id
-DATASET_DATA_PATCH_DONTCARE = 255               # dontcare value in the test set
+DATASET_DATA_PATCH_DONTCARE = "dontcare"        # dontcare value in the test set
 DATASET_DATA_CHANNELS = "channels"              # channels information
 DATASET_CROP_MODES = {
     -1: -1,
@@ -293,7 +294,8 @@ class CallbackIterator(thelper.session.base.SessionRunner):
         msg = "evaluating... [samples: {}/{}, batches: {}/{}]" \
             .format(eval_sample_count, total_sample_count, batch_index, max_iters)
         self._runner.update_job_status(self._runner.job.status, msg, progress)
-        self._runner.db.jobs_store.update_job(self._runner.job)
+        # allow unmodified jobs since message can be already logged by another metric
+        self._runner.db.jobs_store.update_job(self._runner.job, allow_unmodified=True)
 
 
 def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset, start_percent, final_percent):
@@ -323,7 +325,6 @@ def get_test_data_runner(process_runner, model_checkpoint_config, model, dataset
     return trainer
 
 
-
 class ImageFolderSegDataset(thelper.data.SegmentationDataset):
     """Image folder dataset specialization interface for segmentation tasks.
 
@@ -336,13 +337,13 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         | :class:`thelper.data.parsers.SegmentationDataset`
     """
 
-    def __init__(self, root, transforms=None, channels=None,
+    def __init__(self, root, transforms=None, channels=None, dontcare=None,
                  image_key=DATASET_DATA_PATCH_IMAGE_KEY,
                  label_key=IMAGE_LABEL_KEY,
-                 label_map_key=IMAGE_LABEL_KEY,
+                 label_map_key=IMAGE_LABEL_MAP_KEY,
                  mask_key=DATASET_DATA_PATCH_MASK_KEY,
                  path_key=DATASET_DATA_PATCH_PATH_KEY,
-                 idx_key=DATASET_DATA_PATCH_INDEX_KEY
+                 idx_key=DATASET_DATA_PATCH_INDEX_KEY,
                  ):
         """Image folder dataset parser constructor."""
         self.root = root
@@ -361,6 +362,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.label_key = label_key  # plain class-id of the sample
         self.mask_key = mask_key    # mask where the segmented feature applies
         self.label_map_key = label_map_key  # applied class-id to mask location
+        self.dontcare = dontcare
         self.channels = channels if channels else [1, 2, 3]
         samples = []
         for class_name in class_map:
@@ -379,7 +381,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if old_unsorted_class_names != list(class_map.keys()):
             # new as of v0.4.4; this may only be an issue for old models trained on windows and ported to linux
             # (this is caused by the way os.walk returns folders in an arbitrary order on some platforms)
-            logger.warning("class name ordering changed due to folder name sorting; this may impact the "
+            LOGGER.warning("class name ordering changed due to folder name sorting; this may impact the "
                            "behavior of previously-trained models as task class indices may be swapped!")
         if not class_map:
             raise AssertionError("could not locate any subdir in '%s' with images to load" % self.root)
@@ -415,6 +417,9 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         if mask_path is not None:
             mask = cv2.imread(mask_path)
             mask = mask if mask.ndim == 2 else mask[:, :, 0]  # masks saved with PIL have three bands
+            if self.dontcare is not None:
+                mask = mask.long()
+                mask[(mask <= 0)] = -1
         else:
             # consider the full patch image if no mask provided
             mask = np.ones(image.shape[:2])
@@ -425,6 +430,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
             self.image_key: np.array(image.data, copy=True, dtype="float32"),
             self.mask_key: mask,
             self.label_key: sample[self.label_key],
+            self.label_map_key: label_map,
             self.idx_key: idx,
             # **sample
         }
@@ -435,7 +441,7 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         return sample
 
 
-class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
+class BatchTestPatchesBaseClassifDatasetLoader(thelper.data.ImageFolderDataset):
     """
     Batch dataset parser that loads only patches from 'test' split and matching
     class IDs (or their parents) known by the model as defined in its ``task``.
@@ -466,17 +472,18 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
         samples = []
         channels = dataset.get(DATASET_DATA_CHANNELS, None) #FIXME: the user needs to specified the channels used by the model
         self.channels = channels if channels else [1, 2, 3] # by default we take the first 3 channels
-        for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
-                                          dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
+        for patch_info in dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]:
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
                 # convert the dataset class ID into the model class ID using mapping, drop sample if not found
                 class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
-                class_model_id = model_class_to_id.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
+                class_model_id = model_class_to_id.get(str(patch_info[DATASET_DATA_PATCH_CLASS_KEY]))
                 if class_name is not None:
-                    sample_class_ids.add(class_name)
-                    samples.append(deepcopy(patch_info))
-                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
-                    samples[-1][self.label_key] = class_model_id
+                    for crop in patch_info.get(DATASET_DATA_PATCH_CROPS_KEY, []):
+                        sample_class_ids.add(class_name)
+                        samples.append(deepcopy(patch_info))
+                        samples[-1].pop(DATASET_DATA_PATCH_CROPS_KEY)
+                        samples[-1][self.path_key] = os.path.join(self.root, crop[DATASET_DATA_PATCH_PATH_KEY])
+                        samples[-1][self.label_key] = class_model_id
 
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
@@ -512,28 +519,30 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         model_class_map = dataset[DATASET_DATA_KEY][DATASET_DATA_MAPPING_KEY]
         sample_class_ids = set()
         samples = []
+        self.dontcare = dataset.get(DATASET_DATA_PATCH_DONTCARE, None)
         channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
         self.channels = channels if channels else [1, 2, 3]  # by default we take the first 3 channels
-        for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
-                                          dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
+        for patch_info in dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]:
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
                 # convert the dataset class ID into the model class ID using mapping, drop sample if not found
                 class_name = model_class_map.get(patch_info[DATASET_DATA_PATCH_CLASS_KEY])
                 if class_name is not None:
                     sample_class_ids.add(class_name)
-                    samples.append(deepcopy(patch_info))
-                    samples[-1][self.path_key] = os.path.join(self.root, patch_path)
-                    samples[-1][self.label_key] = class_name
-                    mask_name = patch_info.get(DATASET_DATA_PATCH_CROPS_KEY)[0].get(self.mask_key, None)
-                    if mask_name is not None:
-                        samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
+                    for crop in patch_info.get(DATASET_DATA_PATCH_CROPS_KEY, []):
+                        samples.append(deepcopy(patch_info))
+                        samples[-1].pop(DATASET_DATA_PATCH_CROPS_KEY)
+                        samples[-1][self.path_key] = os.path.join(self.root, crop[DATASET_DATA_PATCH_PATH_KEY])
+                        samples[-1][self.label_key] = class_name
+                        mask_name = crop.get(self.mask_key, None)
+                        if mask_name is not None:
+                            samples[-1][self.mask_key] = os.path.join(self.root, mask_name)
         if not len(sample_class_ids):
             raise ValueError("No patch/class could be retrieved from batch loading for specific model task.")
         self.samples = samples
         self.sample_class_ids = sample_class_ids
 
 
-class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseDatasetLoader):
+class BatchTestPatchesClassificationDatasetLoader(BatchTestPatchesBaseClassifDatasetLoader):
     def __init__(self, dataset=None, transforms=None):
         super(BatchTestPatchesClassificationDatasetLoader, self).__init__(dataset, transforms)
         self.task = thelper.tasks.Classification(
@@ -658,13 +667,10 @@ def adapt_dataset_for_model_task(model_task, dataset):
         classes_with_files = sorted(set([s["class"] for s in samples_mapped if s["split"] == "test"]))
         if len(classes_with_files) == 0:
             raise ValueError("No test patches for the classes of interest!")
-        all_test_patch_files = [s[DATASET_DATA_PATCH_CROPS_KEY][0]["path"] for s in samples_mapped]
+        all_test_patch_files = []
+        for sample in samples_mapped:
+            all_test_patch_files.extend([crop["path"] for crop in sample[DATASET_DATA_PATCH_CROPS_KEY]])
         dataset_params[DATASET_FILES_KEY] = all_test_patch_files
-
-        # test_samples = [
-        #    {"class_id": s[DATASET_DATA_PATCH_CLASS_KEY],
-        #     "sample_id": s[DATASET_DATA_PATCH_FEATURE_KEY]} for s in samples_all
-        # ]
 
         model_task_name = fully_qualified_name(model_task)
         return {
@@ -706,8 +712,13 @@ def test_loader_from_configs(model_checkpoint_config, model_config_override, dat
                      f"  original task: [{task_str}]\n"
                      f"  modified task: [{task_params}]")
         test_config["task"] = {"params": task_params, "type": task_class_str}
+
         # ensure strings are employed as names since taxonomy-ids are interpreted as integers
-        task_params["class_names"] = {str(name): index for name, index in task_params["class_names"].items()}
+        if isinstance(task_params["class_names"], dict):
+            task_params["class_names"] = {str(name): index for name, index in task_params["class_names"].items()}
+        else:
+            task_params["class_names"] = [str(name) for name in task_params["class_names"]]
+
         # FIXME: detection, regression and super-resolution tasks not validated
         if "Detection" in task_class_str:
             test_config["task"]["params"].update({"input_key": IMAGE_DATA_KEY})

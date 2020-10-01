@@ -421,10 +421,10 @@ class MongodbJobStore(JobStore, MongodbStore):
             raise ex.JobRegistrationError("Job '{}' could not be registered.".format(job.uuid))
         return self.fetch_by_uuid(job.uuid)
 
-    def update_job(self, job, request=None):
+    def update_job(self, job, allow_unmodified=False, request=None):
         try:
             result = self.collection.update_one({"uuid": job.uuid}, {"$set": job.params})
-            if result.acknowledged and result.modified_count == 1:
+            if result.acknowledged and (allow_unmodified or result.modified_count == 1):
                 return self.fetch_by_uuid(job.uuid)
         except Exception as exc:
             raise ex.JobUpdateError("Error occurred during job update: [{}]".format(repr(exc)))
