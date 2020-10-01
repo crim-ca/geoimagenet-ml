@@ -316,7 +316,6 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         self.mask_key = mask_key
         self.mask_path_key = mask_path_key
         self.dontcare = dontcare
-        self.channels = channels if channels else [1, 2, 3]
         #FIXME: this code below is useless
         samples = []
         for class_name in class_map:
@@ -357,8 +356,8 @@ class ImageFolderSegDataset(thelper.data.SegmentationDataset):
         rasterfile = gdal.Open(image_path, gdal.GA_ReadOnly)
         # image = cv2.imread(image_path)
         image = []
-        for raster_band_idx in self.channels:
-            curr_band = rasterfile.GetRasterBand(raster_band_idx)  # offset, starts at 1
+        for raster_band_idx in range(rasterfile.RasterCount):
+            curr_band = rasterfile.GetRasterBand(raster_band_idx + 1)
             band_array = curr_band.ReadAsArray()
             band_nodataval = curr_band.GetNoDataValue()
             # band_ma = np.ma.array(band_array.astype(np.float32))
@@ -419,8 +418,6 @@ class BatchTestPatchesBaseDatasetLoader(ImageFolderSegDataset):
         model_class_to_id = dataset[DATASET_DATA_KEY][DATASET_DATA_MODEL_MAPPING]
         sample_class_ids = set()
         samples = []
-        channels = dataset.get(DATASET_DATA_CHANNELS, None) #FIXME: the user needs to specified the channels used by the model
-        self.channels = channels if channels else [1, 2, 3] # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
                                           dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
@@ -470,8 +467,6 @@ class BatchTestPatchesBaseSegDatasetLoader(ImageFolderSegDataset):
         sample_class_ids = set()
         samples = []
         self.dontcare = dataset.get(DATASET_DONTCARE, None)
-        channels = dataset.get(DATASET_DATA_CHANNELS, None)  # FIXME: the user needs to specified the channels used by the model
-        self.channels = channels if channels else [1, 2, 3]  # by default we take the first 3 channels
         for patch_path, patch_info in zip(dataset[DATASET_FILES_KEY],
                                           dataset[DATASET_DATA_KEY][DATASET_DATA_PATCH_KEY]):
             if patch_info[DATASET_DATA_PATCH_SPLIT_KEY] == "test":
