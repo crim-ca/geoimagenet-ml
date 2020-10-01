@@ -111,7 +111,7 @@ class MemoryJobStore(JobStore):
             raise db_exc.JobConflictError("Job '{}' already exists.".format(job.uuid))
         self.memory[job.uuid] = job
 
-    def update_job(self, job, request=None):
+    def update_job(self, job, allow_unmodified=False, request=None):
         self.memory[job.uuid] = job
         return job
 

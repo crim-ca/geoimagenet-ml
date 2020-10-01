@@ -221,8 +221,8 @@ class JobStore(object):
         """
         raise NotImplementedError
 
-    def update_job(self, job, request=None):
-        # type: (Job, Optional[Request]) -> Job
+    def update_job(self, job, allow_unmodified=False, request=None):
+        # type: (Job, bool, Optional[Request]) -> Job
         """
         Updates a job parameters in storage.
         """
