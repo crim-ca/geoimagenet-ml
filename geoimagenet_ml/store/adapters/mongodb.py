@@ -105,10 +105,12 @@ class MongodbDatasetStore(DatasetStore, MongodbStore):
     def find_datasets(self, name=None, type=None, status=None, sort=None, order=None, limit=None, request=None):
         search_filters = {}
 
+        # search by name and value for back compatibility
         if isinstance(status, STATUS):
-            search_filters["status"] = {"$in": [status.value]}
+            search_filters["status"] = {"$in": [status.name, status.value]}
         elif isinstance(status, CATEGORY):
-            search_filters["status"] = {"$in": [s.value for s in job_status_categories[status]]}
+            cat_status = job_status_categories[status]
+            search_filters["status"] = {"$in": [s.value for s in cat_status] + [s.name for s in cat_status]}
 
         if name is not None:
             search_filters["name"] = name
