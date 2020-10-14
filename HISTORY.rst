@@ -6,6 +6,18 @@ History
 Unreleased
 ---------------------
 
+2.2.1 (2020-10-14)
+---------------------
+
+Changes
+~~~~~~~~~~~~~~~~~~~~~
+* N/A
+
+Fixes
+~~~~~~~~~~~~~~~~~~~~~
+* Fix incorrect retrieval of *latest* ``Dataset`` due to invalid search criteria of ``FINISHED`` status.
+  Both lower and upper naming variants will be employed for backward compatibility of existing ``Dataset`` entries.
+
 2.2.0 (2020-10-01)
 ---------------------
 
